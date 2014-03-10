@@ -1,5 +1,7 @@
 # Conditional building of X11 related things
 %bcond_with X11
+# Conditional building of CUPS print support plugin
+%bcond_with cups
 
 # libQtPlatformSupport is not built as a shared library, only as a
 # static .a lib-archive. By default the OBS build removes all discovered
@@ -39,7 +41,6 @@ BuildRequires:  pkgconfig(zlib)
 BuildRequires:  pkgconfig(udev)
 BuildRequires:  pkgconfig(mtdev)
 BuildRequires:  pkgconfig(libsystemd-journal)
-BuildRequires:  cups-devel
 BuildRequires:  fdupes
 BuildRequires:  flex
 # Package not available but installed in OBS?
@@ -52,6 +53,11 @@ BuildRequires:  sharutils
 #BuildRequires:  gdb
 BuildRequires:  python
 BuildRequires:  pkgconfig(fontconfig)
+
+# Conditional building of CUPS print support plugin
+%if %{with cups}
+BuildRequires:  cups-devel
+%endif
 
 %if %{with X11}
 BuildRequires:  pkgconfig(ice)
@@ -260,6 +266,8 @@ Requires:   %{name}-qtcore = %{version}-%{release}
 %description plugin-platform-linuxfb
 This package contains the linuxfb platform plugin for Qt
 
+# Conditional building of CUPS print support plugin
+%if %{with cups}
 %package plugin-printsupport-cups
 Summary:    CUPS print support plugin
 Group:      Qt/Qt
@@ -267,6 +275,7 @@ Requires:   %{name}-qtcore = %{version}-%{release}
 
 %description plugin-printsupport-cups
 This package contains the CUPS print support plugin
+%endif
 
 %package plugin-accessible-widgets
 Summary:     Accessible widgets plugin
@@ -601,6 +610,9 @@ MAKEFLAGS=%{?_smp_mflags} \
     -nomake demos \
 %if %{with X11}
     -xcb \
+%endif
+%if %{with cups}
+    -cups
 %endif
     -no-xinput2
 #
@@ -973,9 +985,12 @@ ln -s %{_sysconfdir}/xdg/qtchooser/5.conf %{buildroot}%{_sysconfdir}/xdg/qtchoos
 %defattr(-,root,root,-)
 %{_libdir}/qt5/plugins/platforms/libqlinuxfb.so
 
+# Conditional building of CUPS print support plugin
+%if %{with cups}
 %files plugin-printsupport-cups
 %defattr(-,root,root,-)
 %{_libdir}/qt5/plugins/printsupport/libcupsprintersupport.so
+%endif
 
 %files plugin-accessible-widgets
 %defattr(-,root,root,-)
