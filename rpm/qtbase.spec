@@ -599,6 +599,8 @@ MAKEFLAGS=%{?_smp_mflags} \
     -nomake demos \
 %if %{with X11}
     -xcb \
+%else
+    -no-xcb \
 %endif
     -no-xinput2
 #
