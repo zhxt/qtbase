@@ -1,53 +1,41 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qglobal.h"
-
-#if defined(Q_CC_BOR)
-// needed for qsort() because of a std namespace problem on Borland
-#include "qplatformdefs.h"
-#endif
-
 #include "qrgb.h"
 #include "qstringlist.h"
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -79,7 +67,8 @@ bool qt_get_hex_rgb(const char *name, QRgb *rgb)
         return false;
     name++;
     int len = qstrlen(name);
-    int r, g, b;
+    int a, r, g, b;
+    a = 255;
     if (len == 12) {
         r = hex2int(name);
         g = hex2int(name + 4);
@@ -87,6 +76,11 @@ bool qt_get_hex_rgb(const char *name, QRgb *rgb)
     } else if (len == 9) {
         r = hex2int(name);
         g = hex2int(name + 3);
+        b = hex2int(name + 6);
+    } else if (len == 8) {
+        a = hex2int(name);
+        r = hex2int(name + 2);
+        g = hex2int(name + 4);
         b = hex2int(name + 6);
     } else if (len == 6) {
         r = hex2int(name);
@@ -99,11 +93,11 @@ bool qt_get_hex_rgb(const char *name, QRgb *rgb)
     } else {
         r = g = b = -1;
     }
-    if ((uint)r > 255 || (uint)g > 255 || (uint)b > 255) {
+    if ((uint)r > 255 || (uint)g > 255 || (uint)b > 255 || (uint)a > 255) {
         *rgb = 0;
         return false;
     }
-    *rgb = qRgb(r, g ,b);
+    *rgb = qRgba(r, g ,b, a);
     return true;
 }
 
@@ -287,6 +281,11 @@ static const int rgbTblSize = sizeof(rgbTbl) / sizeof(RGBData);
 
 #undef rgb
 
+#if defined(Q_CC_MSVC) && _MSC_VER < 1600
+inline bool operator<(const RGBData &data1, const RGBData &data2)
+{ return qstrcmp(data1.name, data2.name) < 0; }
+#endif
+
 inline bool operator<(const char *name, const RGBData &data)
 { return qstrcmp(name, data.name) < 0; }
 inline bool operator<(const RGBData &data, const char *name)
@@ -294,9 +293,8 @@ inline bool operator<(const RGBData &data, const char *name)
 
 static bool get_named_rgb(const char *name_no_space, QRgb *rgb)
 {
-    QByteArray name = QByteArray(name_no_space).toLower();
-    const RGBData *r = qBinaryFind(rgbTbl, rgbTbl + rgbTblSize, name.constData());
-    if (r != rgbTbl + rgbTblSize) {
+    const RGBData *r = std::lower_bound(rgbTbl, rgbTbl + rgbTblSize, name_no_space);
+    if ((r != rgbTbl + rgbTblSize) && !(name_no_space < *r)) {
         *rgb = r->value;
         return true;
     }
@@ -312,7 +310,7 @@ bool qt_get_named_rgb(const char *name, QRgb* rgb)
     int pos = 0;
     for(int i = 0; i < len; i++) {
         if(name[i] != '\t' && name[i] != ' ')
-            name_no_space[pos++] = name[i];
+            name_no_space[pos++] = QChar::toLower(name[i]);
     }
     name_no_space[pos] = 0;
 
@@ -327,7 +325,7 @@ bool qt_get_named_rgb(const QChar *name, int len, QRgb *rgb)
     int pos = 0;
     for(int i = 0; i < len; i++) {
         if(name[i] != QLatin1Char('\t') && name[i] != QLatin1Char(' '))
-            name_no_space[pos++] = name[i].toLatin1();
+            name_no_space[pos++] = name[i].toLower().toLatin1();
     }
     name_no_space[pos] = 0;
     return get_named_rgb(name_no_space, rgb);
@@ -345,6 +343,7 @@ QStringList qt_get_colornames()
 {
     int i = 0;
     QStringList lst;
+    lst.reserve(rgbTblSize);
     for (i = 0; i < rgbTblSize; i++)
         lst << QLatin1String(rgbTbl[i].name);
     return lst;

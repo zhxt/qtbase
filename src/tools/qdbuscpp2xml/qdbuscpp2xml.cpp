@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +39,7 @@
 #include <qbuffer.h>
 #include <qregexp.h>
 #include <qvector.h>
+#include <qdebug.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,7 +67,7 @@ static const char docTypeHeader[] =
 
 #define PROGRAMNAME     "qdbuscpp2xml"
 #define PROGRAMVERSION  "0.2"
-#define PROGRAMCOPYRIGHT "Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies)."
+#define PROGRAMCOPYRIGHT "Copyright (C) 2015 The Qt Company Ltd."
 
 static QString outputFile;
 static int flags;
@@ -95,14 +88,14 @@ static const char help[] =
     "\n";
 
 
-int qDBusParametersForMethod(const FunctionDef &mm, QVector<int>& metaTypes)
+int qDBusParametersForMethod(const FunctionDef &mm, QVector<int>& metaTypes, QString &errorMsg)
 {
     QList<QByteArray> parameterTypes;
 
     foreach (const ArgumentDef &arg, mm.arguments)
         parameterTypes.append(arg.normalizedType);
 
-    return qDBusParametersForMethod(parameterTypes, metaTypes);
+    return qDBusParametersForMethod(parameterTypes, metaTypes, errorMsg);
 }
 
 
@@ -140,9 +133,12 @@ static QString addFunction(const FunctionDef &mm, bool isSignal = false) {
     }
     QList<ArgumentDef> names = mm.arguments;
     QVector<int> types;
-    int inputCount = qDBusParametersForMethod(mm, types);
-    if (inputCount == -1)
+    QString errorMsg;
+    int inputCount = qDBusParametersForMethod(mm, types, errorMsg);
+    if (inputCount == -1) {
+        qWarning() << qPrintable(errorMsg);
         return QString();           // invalid form
+    }
     if (isSignal && inputCount + 1 != types.count())
         return QString();           // signal with output arguments?
     if (isSignal && types.at(inputCount) == QDBusMetaTypeId::message())
@@ -247,6 +243,8 @@ static QString generateInterfaceXml(const ClassDef *mo)
         foreach (const FunctionDef &mm, mo->signalList) {
             if (mm.wasCloned)
                 continue;
+            if (!mm.isScriptable && !(flags & QDBusConnection::ExportNonScriptableSignals))
+                continue;
 
             retval += addFunction(mm, true);
         }
@@ -254,10 +252,14 @@ static QString generateInterfaceXml(const ClassDef *mo)
 
     if (flags & (QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportNonScriptableSlots)) {
         foreach (const FunctionDef &slot, mo->slotList) {
+            if (!slot.isScriptable && !(flags & QDBusConnection::ExportNonScriptableSlots))
+                continue;
             if (slot.access == FunctionDef::Public)
               retval += addFunction(slot);
         }
         foreach (const FunctionDef &method, mo->methodList) {
+            if (!method.isScriptable && !(flags & QDBusConnection::ExportNonScriptableSlots))
+                continue;
             if (method.access == FunctionDef::Public)
               retval += addFunction(method);
         }

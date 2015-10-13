@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -169,10 +161,10 @@ int QUndoCommand::id() const
 }
 
 /*!
-    Attempts to merge this command with \a command. Returns true on
-    success; otherwise returns false.
+    Attempts to merge this command with \a command. Returns \c true on
+    success; otherwise returns \c false.
 
-    If this function returns true, calling this command's redo() must have the same
+    If this function returns \c true, calling this command's redo() must have the same
     effect as redoing both this command and \a command.
     Similarly, calling this command's undo() must have the same effect as undoing
     \a command and this command.
@@ -180,7 +172,7 @@ int QUndoCommand::id() const
     QUndoStack will only try to merge two commands if they have the same id, and
     the id is not -1.
 
-    The default implementation returns false.
+    The default implementation returns \c false.
 
     \snippet code/src_gui_util_qundostack.cpp 3
 
@@ -461,7 +453,7 @@ void QUndoStackPrivate::setIndex(int idx, bool clean)
     If the number of commands on the stack exceedes the undo limit, deletes commands from
     the bottom of the stack.
 
-    Returns true if commands were deleted.
+    Returns \c true if commands were deleted.
 */
 
 bool QUndoStackPrivate::checkUndoLimit()
@@ -565,7 +557,7 @@ void QUndoStack::clear()
     If \a cmd's id is not -1, and if the id is the same as that of the
     most recently executed command, QUndoStack will attempt to merge the two
     commands by calling QUndoCommand::mergeWith() on the most recently executed
-    command. If QUndoCommand::mergeWith() returns true, \a cmd is deleted.
+    command. If QUndoCommand::mergeWith() returns \c true, \a cmd is deleted.
 
     In all other cases \a cmd is simply pushed on the stack.
 
@@ -650,7 +642,7 @@ void QUndoStack::setClean()
 }
 
 /*!
-    If the stack is in the clean state, returns true; otherwise returns false.
+    If the stack is in the clean state, returns \c true; otherwise returns \c false.
 
     \sa setClean(), cleanIndex()
 */
@@ -789,9 +781,9 @@ void QUndoStack::setIndex(int idx)
 }
 
 /*!
-    Returns true if there is a command available for undo; otherwise returns false.
+    Returns \c true if there is a command available for undo; otherwise returns \c false.
 
-    This function returns false if the stack is empty, or if the bottom command
+    This function returns \c false if the stack is empty, or if the bottom command
     on the stack has already been undone.
 
     Synonymous with index() == 0.
@@ -808,9 +800,9 @@ bool QUndoStack::canUndo() const
 }
 
 /*!
-    Returns true if there is a command available for redo; otherwise returns false.
+    Returns \c true if there is a command available for redo; otherwise returns \c false.
 
-    This function returns false if the stack is empty or if the top command
+    This function returns \c false if the stack is empty or if the top command
     on the stack has already been redone.
 
     Synonymous with index() == count().

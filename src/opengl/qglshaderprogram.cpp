@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +39,7 @@
 #include <QtCore/qfile.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/qvector.h>
+#include <QDebug>
 
 QT_BEGIN_NAMESPACE
 
@@ -73,7 +66,7 @@ QT_BEGIN_NAMESPACE
 
     \snippet code/src_opengl_qglshaderprogram.cpp 0
 
-    \section1 Writing portable shaders
+    \section1 Writing Portable Shaders
 
     Shader programs can be difficult to reuse across OpenGL implementations
     because of varying levels of support for standard vertex attributes and
@@ -97,7 +90,7 @@ QT_BEGIN_NAMESPACE
     to just features that are present in GLSL/ES, and avoid
     standard variable names that only work on the desktop.
 
-    \section1 Simple shader example
+    \section1 Simple Shader Example
 
     \snippet code/src_opengl_qglshaderprogram.cpp 1
 
@@ -106,7 +99,7 @@ QT_BEGIN_NAMESPACE
 
     \snippet code/src_opengl_qglshaderprogram.cpp 2
 
-    \section1 Binary shaders and programs
+    \section1 Binary Shaders and Programs
 
     Binary shaders may be specified using \c{glShaderBinary()} on
     the return value from QGLShader::shaderId().  The QGLShader instance
@@ -246,7 +239,8 @@ bool QGLShaderPrivate::create()
         if (shaderType == QGLShader::Vertex)
             shader = glfuncs->glCreateShader(GL_VERTEX_SHADER);
 #if !defined(QT_OPENGL_ES_2)
-        else if (shaderType == QGLShader::Geometry)
+        else if (shaderType == QGLShader::Geometry
+                 && !context->contextHandle()->isOpenGLES())
             shader = glfuncs->glCreateShader(GL_GEOMETRY_SHADER_EXT);
 #endif
         else
@@ -399,7 +393,7 @@ static const char redefineHighp[] =
 
 /*!
     Sets the \a source code for this shader and compiles it.
-    Returns true if the source was successfully compiled, false otherwise.
+    Returns \c true if the source was successfully compiled, false otherwise.
 
     \sa compileSourceFile()
 */
@@ -428,11 +422,14 @@ bool QGLShader::compileSourceCode(const char *source)
             srclen.append(GLint(headerLen));
         }
 #ifdef QGL_DEFINE_QUALIFIERS
-        src.append(qualifierDefines);
-        srclen.append(GLint(sizeof(qualifierDefines) - 1));
+        if (!QOpenGLContext::currentContext()->isOpenGLES()) {
+            src.append(qualifierDefines);
+            srclen.append(GLint(sizeof(qualifierDefines) - 1));
+        }
 #endif
 #ifdef QGL_REDEFINE_HIGHP
-        if (d->shaderType == Fragment) {
+        if (d->shaderType == Fragment
+            && QOpenGLContext::currentContext()->isOpenGLES()) {
             src.append(redefineHighp);
             srclen.append(GLint(sizeof(redefineHighp) - 1));
         }
@@ -450,7 +447,7 @@ bool QGLShader::compileSourceCode(const char *source)
     \overload
 
     Sets the \a source code for this shader and compiles it.
-    Returns true if the source was successfully compiled, false otherwise.
+    Returns \c true if the source was successfully compiled, false otherwise.
 
     \sa compileSourceFile()
 */
@@ -463,7 +460,7 @@ bool QGLShader::compileSourceCode(const QByteArray& source)
     \overload
 
     Sets the \a source code for this shader and compiles it.
-    Returns true if the source was successfully compiled, false otherwise.
+    Returns \c true if the source was successfully compiled, false otherwise.
 
     \sa compileSourceFile()
 */
@@ -474,7 +471,7 @@ bool QGLShader::compileSourceCode(const QString& source)
 
 /*!
     Sets the source code for this shader to the contents of \a fileName
-    and compiles it.  Returns true if the file could be opened and the
+    and compiles it.  Returns \c true if the file could be opened and the
     source compiled, false otherwise.
 
     \sa compileSourceCode()
@@ -515,7 +512,7 @@ QByteArray QGLShader::sourceCode() const
 }
 
 /*!
-    Returns true if this shader has been compiled; false otherwise.
+    Returns \c true if this shader has been compiled; false otherwise.
 
     \sa compileSourceCode(), compileSourceFile()
 */
@@ -563,12 +560,14 @@ public:
     void initializeGeometryShaderFunctions()
     {
         QOpenGLContext *context = QOpenGLContext::currentContext();
-        glProgramParameteri = (type_glProgramParameteri)
-            context->getProcAddress("glProgramParameteri");
-
-        if (!glProgramParameteri) {
+        if (!context->isOpenGLES()) {
             glProgramParameteri = (type_glProgramParameteri)
-                context->getProcAddress("glProgramParameteriEXT");
+                context->getProcAddress("glProgramParameteri");
+
+            if (!glProgramParameteri) {
+                glProgramParameteri = (type_glProgramParameteri)
+                    context->getProcAddress("glProgramParameteriEXT");
+            }
         }
     }
 
@@ -698,7 +697,7 @@ bool QGLShaderProgram::init()
 }
 
 /*!
-    Adds a compiled \a shader to this shader program.  Returns true
+    Adds a compiled \a shader to this shader program.  Returns \c true
     if the shader could be added, or false otherwise.
 
     Ownership of the \a shader object remains with the caller.
@@ -735,7 +734,7 @@ bool QGLShaderProgram::addShader(QGLShader *shader)
 
 /*!
     Compiles \a source as a shader of the specified \a type and
-    adds it to this shader program.  Returns true if compilation
+    adds it to this shader program.  Returns \c true if compilation
     was successful, false otherwise.  The compilation errors
     and warnings will be made available via log().
 
@@ -765,7 +764,7 @@ bool QGLShaderProgram::addShaderFromSourceCode(QGLShader::ShaderType type, const
     \overload
 
     Compiles \a source as a shader of the specified \a type and
-    adds it to this shader program.  Returns true if compilation
+    adds it to this shader program.  Returns \c true if compilation
     was successful, false otherwise.  The compilation errors
     and warnings will be made available via log().
 
@@ -785,7 +784,7 @@ bool QGLShaderProgram::addShaderFromSourceCode(QGLShader::ShaderType type, const
     \overload
 
     Compiles \a source as a shader of the specified \a type and
-    adds it to this shader program.  Returns true if compilation
+    adds it to this shader program.  Returns \c true if compilation
     was successful, false otherwise.  The compilation errors
     and warnings will be made available via log().
 
@@ -803,7 +802,7 @@ bool QGLShaderProgram::addShaderFromSourceCode(QGLShader::ShaderType type, const
 
 /*!
     Compiles the contents of \a fileName as a shader of the specified
-    \a type and adds it to this shader program.  Returns true if
+    \a type and adds it to this shader program.  Returns \c true if
     compilation was successful, false otherwise.  The compilation errors
     and warnings will be made available via log().
 
@@ -895,7 +894,7 @@ void QGLShaderProgram::removeAllShaders()
 
 /*!
     Links together the shaders that were added to this program with
-    addShader().  Returns true if the link was successful or
+    addShader().  Returns \c true if the link was successful or
     false otherwise.  If the link failed, the error messages can
     be retrieved with log().
 
@@ -929,7 +928,8 @@ bool QGLShaderProgram::link()
 
 #if !defined(QT_OPENGL_ES_2)
     // Set up the geometry shader parameters
-    if (d->glfuncs->glProgramParameteri) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()
+        && d->glfuncs->glProgramParameteri) {
         foreach (QGLShader *shader, d->shaders) {
             if (shader->shaderType() & QGLShader::Geometry) {
                 d->glfuncs->glProgramParameteri(program, GL_GEOMETRY_INPUT_TYPE_EXT,
@@ -969,7 +969,7 @@ bool QGLShaderProgram::link()
 }
 
 /*!
-    Returns true if this shader program has been linked; false otherwise.
+    Returns \c true if this shader program has been linked; false otherwise.
 
     \sa link()
 */
@@ -995,7 +995,7 @@ QString QGLShaderProgram::log() const
     Binds this shader program to the active QGLContext and makes
     it the current shader program.  Any previously bound shader program
     is released.  This is equivalent to calling \c{glUseProgram()} on
-    programId().  Returns true if the program was successfully bound;
+    programId().  Returns \c true if the program was successfully bound;
     false otherwise.  If the shader program has not yet been linked,
     or it needs to be re-linked, this function will call link().
 
@@ -1545,6 +1545,9 @@ void QGLShaderProgram::setAttributeArray
     The setAttributeBuffer() function can be used to set the attribute
     array to an offset within a vertex buffer.
 
+    \note Normalization will be enabled. If this is not desired, call
+    glVertexAttribPointer directly through QGLFunctions.
+
     \sa setAttributeValue(), setUniformValue(), enableAttributeArray()
     \sa disableAttributeArray(), setAttributeBuffer()
     \since 4.7
@@ -1689,6 +1692,9 @@ void QGLShaderProgram::setAttributeArray
     The array will become active when enableAttributeArray() is called
     on the \a location.  Otherwise the value specified with
     setAttributeValue() for \a location will be used.
+
+    \note Normalization will be enabled. If this is not desired, call
+    glVertexAttribPointer directly though QGLFunctions.
 
     \sa setAttributeArray()
     \since 4.7
@@ -3060,7 +3066,9 @@ int QGLShaderProgram::maxGeometryOutputVertices() const
 {
     GLint n = 0;
 #if !defined(QT_OPENGL_ES_2)
-    glGetIntegerv(GL_MAX_GEOMETRY_OUTPUT_VERTICES_EXT, &n);
+    Q_D(const QGLShaderProgram);
+    if (!QOpenGLContext::currentContext()->isOpenGLES())
+        d->glfuncs->glGetIntegerv(GL_MAX_GEOMETRY_OUTPUT_VERTICES_EXT, &n);
 #endif
     return n;
 }
@@ -3153,7 +3161,7 @@ GLenum QGLShaderProgram::geometryOutputType() const
 
 
 /*!
-    Returns true if shader programs written in the OpenGL Shading
+    Returns \c true if shader programs written in the OpenGL Shading
     Language (GLSL) are supported on this system; false otherwise.
 
     The \a context is used to resolve the GLSL extensions.
@@ -3191,7 +3199,7 @@ void QGLShaderProgram::shaderDestroyed()
 #undef context
 
 /*!
-    Returns true if shader programs of type \a type are supported on
+    Returns \c true if shader programs of type \a type are supported on
     this system; false otherwise.
 
     The \a context is used to resolve the GLSL extensions.
@@ -3214,7 +3222,7 @@ bool QGLShader::hasOpenGLShaders(ShaderType type, const QGLContext *context)
     if (!resolved)
         return false;
 
-    if ((type & Geometry) && !QByteArray((const char *) glGetString(GL_EXTENSIONS)).contains("GL_EXT_geometry_shader4"))
+    if ((type & Geometry) && !QByteArray((const char *) functions.glGetString(GL_EXTENSIONS)).contains("GL_EXT_geometry_shader4"))
         return false;
 
     return true;

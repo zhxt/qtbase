@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -52,6 +44,8 @@
 #include "qwhatsthis.h"
 #include "qmenu.h"
 #include "qcursor.h"
+#include "qmessagebox.h"
+#include "qerrormessage.h"
 #include <qpa/qplatformtheme.h>
 #include "private/qdialog_p.h"
 #include "private/qguiapplication_p.h"
@@ -74,6 +68,14 @@ static inline int themeDialogType(const QDialog *dialog)
 #ifndef QT_NO_FONTDIALOG
     if (qobject_cast<const QFontDialog *>(dialog))
         return QPlatformTheme::FontDialog;
+#endif
+#ifndef QT_NO_MESSAGEBOX
+    if (qobject_cast<const QMessageBox *>(dialog))
+        return QPlatformTheme::MessageDialog;
+#endif
+#ifndef QT_NO_ERRORMESSAGE
+    if (qobject_cast<const QErrorMessage *>(dialog))
+        return QPlatformTheme::MessageDialog;
 #endif
     return -1;
 }
@@ -100,6 +102,17 @@ QPlatformDialogHelper *QDialogPrivate::platformHelper() const
     return m_platformHelper;
 }
 
+bool QDialogPrivate::canBeNativeDialog() const
+{
+    QDialogPrivate *ncThis = const_cast<QDialogPrivate *>(this);
+    QDialog *dialog = ncThis->q_func();
+    const int type = themeDialogType(dialog);
+    if (type >= 0)
+        return QGuiApplicationPrivate::platformTheme()
+                ->usePlatformNativeDialog(static_cast<QPlatformTheme::DialogType>(type));
+    return false;
+}
+
 QWindow *QDialogPrivate::parentWindow() const
 {
     if (const QWidget *parent = q_func()->nativeParentWidget())
@@ -114,7 +127,7 @@ bool QDialogPrivate::setNativeDialogVisible(bool visible)
             Q_Q(QDialog);
             helperPrepareShow(helper);
             nativeDialogInUse = helper->show(q->windowFlags(), q->windowModality(), parentWindow());
-        } else {
+        } else if (nativeDialogInUse) {
             helper->hide();
         }
     }
@@ -697,17 +710,13 @@ void QDialog::closeEvent(QCloseEvent *e)
 void QDialog::setVisible(bool visible)
 {
     Q_D(QDialog);
+    if (!testAttribute(Qt::WA_DontShowOnScreen) && d->canBeNativeDialog() && d->setNativeDialogVisible(visible))
+        return;
+
     if (visible) {
         if (testAttribute(Qt::WA_WState_ExplicitShowHide) && !testAttribute(Qt::WA_WState_Hidden))
             return;
 
-        if (!testAttribute(Qt::WA_Moved)) {
-            Qt::WindowStates state = windowState();
-            adjustPosition(parentWidget());
-            setAttribute(Qt::WA_Moved, false); // not really an explicit position
-            if (state != windowState())
-                setWindowState(state);
-        }
         QWidget::setVisible(visible);
         showExtension(d->doShowExtension);
         QWidget *fw = window()->focusWidget();
@@ -767,8 +776,10 @@ void QDialog::setVisible(bool visible)
         if (d->eventLoop)
             d->eventLoop->exit();
     }
+
+    const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme();
     if (d->mainDef && isActiveWindow()
-        && d->styleHint(QPlatformDialogHelper::SnapToDefaultButton).toBool())
+        && theme->themeHint(QPlatformTheme::DialogSnapToDefaultButton).toBool())
         QCursor::setPos(d->mainDef->mapToGlobal(d->mainDef->rect().center()));
 }
 
@@ -1039,7 +1050,7 @@ QSize QDialog::minimumSizeHint() const
     \property QDialog::modal
     \brief whether show() should pop up the dialog as modal or modeless
 
-    By default, this property is false and show() pops up the dialog
+    By default, this property is \c false and show() pops up the dialog
     as modeless. Setting his property to true is equivalent to setting
     QWidget::windowModality to Qt::ApplicationModal.
 

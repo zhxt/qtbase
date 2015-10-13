@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -134,8 +134,8 @@
 
 /*! \fn bool QCache::isEmpty() const
 
-    Returns true if the cache contains no objects; otherwise
-    returns false.
+    Returns \c true if the cache contains no objects; otherwise
+    returns \c false.
 
     \sa size()
 */
@@ -163,8 +163,8 @@
     deleted at any time. In particular, if \a cost is greater than
     maxCost(), the object will be deleted immediately.
 
-    The function returns true if the object was inserted into the
-    cache; otherwise it returns false.
+    The function returns \c true if the object was inserted into the
+    cache; otherwise it returns \c false.
 
     \sa take(), remove()
 */
@@ -182,8 +182,8 @@
 
 /*! \fn bool QCache::contains(const Key &key) const
 
-    Returns true if the cache contains an object associated with key \a
-    key; otherwise returns false.
+    Returns \c true if the cache contains an object associated with key \a
+    key; otherwise returns \c false.
 
     \sa take(), remove()
 */
@@ -201,8 +201,8 @@
 
 /*! \fn bool QCache::remove(const Key &key)
 
-    Deletes the object associated with key \a key. Returns true if the
-    object was found in the cache; otherwise returns false.
+    Deletes the object associated with key \a key. Returns \c true if the
+    object was found in the cache; otherwise returns \c false.
 
     \sa take(), clear()
 */

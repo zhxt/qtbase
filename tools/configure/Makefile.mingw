@@ -4,8 +4,7 @@ CONFSRC = $(TOOLSRC)/configure
 
 RAW_PCH       = configure_pch.h
 PCH           = $(RAW_PCH).gch/c++
-CXX           = g++
-DEFINES       = -DUNICODE -DQT_NO_DATASTREAM -DQT_NO_CODECS -DQT_NO_TEXTCODEC -DQT_NO_UNICODETABLES -DQT_LITE_COMPONENT -DQT_NO_COMPRESS -DQT_NO_THREAD -DQT_NO_QOBJECT -DQT_NO_GEOM_VARIANT -D_CRT_SECURE_NO_DEPRECATE -DQT_BOOTSTRAPPED -DQT_BUILD_CONFIGURE -DCOMMERCIAL_VERSION
+DEFINES       = -DUNICODE -DQT_NO_DATASTREAM -DQT_NO_CODECS -DQT_NO_TEXTCODEC -DQT_NO_UNICODETABLES -DQT_LITE_COMPONENT -DQT_NO_COMPRESS -DQT_NO_THREAD -DQT_NO_QOBJECT -DQT_NO_GEOM_VARIANT -D_CRT_SECURE_NO_DEPRECATE -DQT_BOOTSTRAPPED -DQT_BUILD_CONFIGURE
 INCPATH       = -I"../../include" -I"../../include/QtCore" -I"../../include/QtCore/$(QTVERSION)" -I"../../include/QtCore/$(QTVERSION)/QtCore" -I"$(TOOLSRC)/shared" -I"$(QTSRC)mkspecs/win32-g++"
 CXXFLAGS_BARE = -fno-rtti -fno-exceptions -mthreads -Wall -Wextra $(DEFINES) $(INCPATH)
 CXXFLAGS      = -include $(RAW_PCH) $(CXXFLAGS_BARE)
@@ -49,6 +48,7 @@ OBJECTS = \
     qfsfileengine_win.o \
     qfsfileengine_iterator.o \
     qiodevice.o \
+    qdebug.o \
     qtextstream.o \
     qlogging.o \
     qtemporaryfile.o \
@@ -60,6 +60,7 @@ OBJECTS = \
     qmap.o \
     qregexp.o \
     qstring.o \
+    qstring_compat.o \
     qstringlist.o \
     qvsnprintf.o \
     qvariant.o \
@@ -69,7 +70,6 @@ OBJECTS = \
     qxmlstream.o \
     qxmlutils.o \
     quuid.o \
-    qcryptographichash.o \
     registry.o
 
 $(TARGET): $(OBJECTS)
@@ -117,6 +117,10 @@ main.o: $(CONFSRC)/configureapp.h
 configureapp.o: $(CONFSRC)/configureapp.h $(CONFSRC)/environment.h $(CONFSRC)/tools.h
 environment.o: $(CONFSRC)/environment.h
 tools.o: $(CONFSRC)/tools.h
+
+# Make sure qstring_compat.obj isn't compiled with PCH enabled
+qstring_compat.o: $(CORESRC)/tools/qstring_compat.cpp
+	$(CXX) -c $(CXXFLAGS_BARE) -o $@ $<
 
 clean:
 	-rm -f *.o

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -145,6 +137,9 @@ private slots:
     void taskQTBUG_6670_selectAllWithPrefix();
     void taskQTBUG_6496_fiddlingWithPrecision();
 
+    void setGroupSeparatorShown_data();
+    void setGroupSeparatorShown();
+
 public slots:
     void valueChangedHelper(const QString &);
     void valueChangedHelper(double);
@@ -155,6 +150,9 @@ private:
 };
 
 typedef QList<double> DoubleList;
+
+Q_DECLARE_METATYPE(QLocale::Language)
+Q_DECLARE_METATYPE(QLocale::Country)
 
 tst_QDoubleSpinBox::tst_QDoubleSpinBox()
 
@@ -634,7 +632,7 @@ void tst_QDoubleSpinBox::setDecimals()
         QTest::keyClick(&spin, Qt::Key_1);
         QTest::keyClick(&spin, Qt::Key_1);
         QTest::keyClick(&spin, Qt::Key_1);
-	if (sizeof(qreal) == sizeof(float))
+        if (sizeof(qreal) == sizeof(float))
             QCOMPARE(spin.text().left(17), expected.left(17));
         else
             QCOMPARE(spin.text(), expected);
@@ -819,6 +817,8 @@ void tst_QDoubleSpinBox::editingFinished()
     QCOMPARE(editingFinishedSpy1.count(), 4);
     QCOMPARE(editingFinishedSpy2.count(), 4);
 
+    testFocusWidget->show(); // On BlackBerry this is our root window we need to show it again
+                             // otherwise subsequent tests will fail
 }
 
 void tst_QDoubleSpinBox::removeAll()
@@ -1097,6 +1097,46 @@ void tst_QDoubleSpinBox::taskQTBUG_6496_fiddlingWithPrecision()
     QCOMPARE(dsb.maximum(), 0.99);
     dsb.setDecimals(3);
     QCOMPARE(dsb.maximum(), 0.991);
+}
+
+void tst_QDoubleSpinBox::setGroupSeparatorShown_data()
+{
+    QTest::addColumn<QLocale::Language>("lang");
+    QTest::addColumn<QLocale::Country>("country");
+
+    QTest::newRow("data0") << QLocale::English << QLocale::UnitedStates;
+    QTest::newRow("data1") << QLocale::Swedish << QLocale::Sweden;
+    QTest::newRow("data2") << QLocale::German << QLocale::Germany;
+    QTest::newRow("data3") << QLocale::Georgian << QLocale::Georgia;
+    QTest::newRow("data3") << QLocale::Macedonian << QLocale::Macedonia;
+}
+
+void tst_QDoubleSpinBox::setGroupSeparatorShown()
+{
+    QFETCH(QLocale::Language, lang);
+    QFETCH(QLocale::Country, country);
+
+    QLocale loc(lang, country);
+    QLocale::setDefault(loc);
+    DoubleSpinBox spinBox;
+    spinBox.setMaximum(99999999);
+    spinBox.setValue(1300000.00);
+    spinBox.setGroupSeparatorShown(true);
+    QCOMPARE(spinBox.lineEdit()->text(), spinBox.locale().toString(1300000.00, 'f', 2));
+    QCOMPARE(spinBox.isGroupSeparatorShown(), true);
+    QCOMPARE(spinBox.textFromValue(23421),spinBox.locale().toString(23421.00, 'f', 2));
+
+    spinBox.setGroupSeparatorShown(false);
+    QCOMPARE(spinBox.lineEdit()->text(), spinBox.locale().toString(1300000.00, 'f', 2).remove(
+                 spinBox.locale().groupSeparator()));
+    QCOMPARE(spinBox.isGroupSeparatorShown(), false);
+
+    spinBox.setMaximum(72000);
+    spinBox.lineEdit()->setText(spinBox.locale().toString(32000.64, 'f', 2));
+    QCOMPARE(spinBox.value()+1000, 33000.64);
+
+    spinBox.lineEdit()->setText(spinBox.locale().toString(32000.44, 'f', 2));
+    QCOMPARE(spinBox.value()+1000, 33000.44);
 }
 
 QTEST_MAIN(tst_QDoubleSpinBox)

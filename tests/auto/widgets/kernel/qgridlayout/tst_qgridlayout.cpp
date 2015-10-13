@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -101,6 +93,10 @@ private slots:
     void distributeMultiCell();
 
     void taskQTBUG_27420_takeAtShouldUnparentLayout();
+    void taskQTBUG_40609_addingWidgetToItsOwnLayout();
+    void taskQTBUG_40609_addingLayoutToItself();
+    void replaceWidget();
+    void dontCrashWhenExtendsToEnd();
 
 private:
     QWidget *testWidget;
@@ -712,7 +708,7 @@ void tst_QGridLayout::spacingsAndMargins()
 
     grid1.setColumnStretch(columns-1, 1);
     grid1.setRowStretch(rows-1, 1);
-    toplevel.show();
+    toplevel.showNormal();
     toplevel.adjustSize();
     QApplication::processEvents();
     QVERIFY(QTest::qWaitForWindowExposed(&toplevel));
@@ -973,8 +969,8 @@ QRect CustomLayoutStyle::subElementRect(SubElement sr, const QStyleOption *opt,
         case SE_GroupBoxLayoutItem:
             rect = opt->rect.adjusted(0, +10, 0, 0);
             break;
-	default:
-	    break;
+        default:
+            break;
         }
     }
     if (rect.isNull())
@@ -1229,6 +1225,9 @@ void tst_QGridLayout::layoutSpacing_data()
         style->reimplementSubelementRect = true;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        QFont font;
+        font.setPixelSize(10);
+        w->setFont(font);
         setFrameless(w);
         QGridLayout *layout = new QGridLayout();
         QPushButton *pb1 = new QPushButton(QLatin1String("Push 1"), w);
@@ -1654,6 +1653,97 @@ void tst_QGridLayout::taskQTBUG_27420_takeAtShouldUnparentLayout()
         delete item; // success: a taken item/layout should not be deleted when the old parent is deleted
     else
         QVERIFY(!inner.isNull());
+}
+
+void tst_QGridLayout::taskQTBUG_40609_addingWidgetToItsOwnLayout(){
+    QWidget widget;
+    widget.setObjectName("9bb37ca762aeb7269b8");
+    QGridLayout layout(&widget);
+    layout.setObjectName("d631e91a35f2b66a6dff35");
+
+    QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add a null widget to QGridLayout/d631e91a35f2b66a6dff35");
+    layout.addWidget(Q_NULLPTR, 0, 0);
+    QCOMPARE(layout.count(), 0);
+
+    QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add parent widget QWidget/9bb37ca762aeb7269b8 to its child layout QGridLayout/d631e91a35f2b66a6dff35");
+    layout.addWidget(&widget, 0, 0);
+    QCOMPARE(layout.count(), 0);
+}
+
+void tst_QGridLayout::taskQTBUG_40609_addingLayoutToItself(){
+    QWidget widget;
+    widget.setObjectName("0373d417fffe2c59c6fe543");
+    QGridLayout layout(&widget);
+    layout.setObjectName("5d79e1b0aed83f100e3c2");
+
+    QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add a null layout to QGridLayout/5d79e1b0aed83f100e3c2");
+    layout.addLayout(Q_NULLPTR, 0, 0);
+    QCOMPARE(layout.count(), 0);
+
+    QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add layout QGridLayout/5d79e1b0aed83f100e3c2 to itself");
+    layout.addLayout(&layout, 0, 0);
+    QCOMPARE(layout.count(), 0);
+}
+
+void tst_QGridLayout::replaceWidget()
+{
+    QWidget wdg;
+    QGridLayout *l = new QGridLayout();
+    const int itemCount = 9;
+    QLabel *labels[itemCount];
+
+    // setup layout
+    for (int n = 0; n < itemCount; ++n) {
+        int x = n % 3;
+        int y = n / 3;
+        labels[n] = new QLabel(QString("label %1").arg(n));
+        Qt::Alignment align = (n % 3 ? Qt::AlignLeft : Qt::AlignRight);
+        l->addWidget(labels[n], x * 3, y * 3, (n % 2) + 1, (n + 1) % 2 + 1, align);
+    }
+    wdg.setLayout(l);
+
+    // iterate and replace
+    for (int n = 0; n < itemCount; n += 2) {
+        int i = l->indexOf(labels[n]);
+        int fromRow, fromCol, fromRowSpan, fromColSpan;
+        l->getItemPosition(i, &fromRow, &fromCol, &fromRowSpan, &fromColSpan);
+        Qt::Alignment fromAlign = l->itemAt(i)->alignment();
+        // do replace
+        QPushButton *pb = new QPushButton("replaced");
+        QLayoutItem *olditem = l->replaceWidget(labels[n], pb);
+        // verify
+        QCOMPARE(i, l->indexOf(pb));
+        QVERIFY(olditem != 0);
+        QCOMPARE(l->indexOf(labels[n]), -1);
+        int toRow, toCol, toRowSpan, toColSpan;
+        l->getItemPosition(i, &toRow, &toCol, &toRowSpan, &toColSpan);
+        QCOMPARE(fromRow, toRow);
+        QCOMPARE(fromCol, toCol);
+        QCOMPARE(fromRowSpan, toRowSpan);
+        QCOMPARE(fromColSpan, toColSpan);
+        Qt::Alignment toAlign = l->itemAt(i)->alignment();
+        QCOMPARE(fromAlign, toAlign);
+        // clean up
+        olditem->widget()->deleteLater();
+        delete olditem;
+    }
+}
+
+void tst_QGridLayout::dontCrashWhenExtendsToEnd()
+{
+    QWidget window;
+    window.resize(320,200);
+    QWidget parent(&window);
+    QLabel *lbl0 = new QLabel(QLatin1String("lbl0:"));
+    QLabel *lbl1 = new QLabel(QLatin1String("lbl1:"));
+    QPushButton *pb = new QPushButton(QLatin1String("pb1"));
+    QGridLayout *l = new QGridLayout(&parent);
+    l->addWidget(lbl0, 0, 0);
+    l->addWidget(lbl1, 1, 0);
+    // adding an item in the bottom right corner than spans to the end (!)...
+    l->addWidget(pb, 1, 1, -1, -1);
+    // ...should not cause a crash when the items are distributed....
+    l->setGeometry(QRect(0, 0, 200, 50));    // DONT CRASH HERE
 }
 
 QTEST_MAIN(tst_QGridLayout)

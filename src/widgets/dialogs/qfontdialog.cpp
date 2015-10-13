@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -88,7 +80,7 @@ public:
         int row = QListView::currentIndex().row();
         return row < 0 ? QString() : model()->stringList().at(row);
     }
-    void currentChanged(const QModelIndex &current, const QModelIndex &previous) {
+    void currentChanged(const QModelIndex &current, const QModelIndex &previous) Q_DECL_OVERRIDE {
         QListView::currentChanged(current, previous);
         if (current.isValid())
             emit highlighted(current.row());
@@ -256,8 +248,10 @@ void QFontDialogPrivate::init()
     }
 
     updateFamilies();
-    if (familyList->count() != 0)
+    if (familyList->count() != 0) {
         familyList->setCurrentItem(0);
+        sizeList->setCurrentItem(0);
+    }
 
     // grid layout
     QGridLayout *mainGrid = new QGridLayout(q);
@@ -324,6 +318,7 @@ void QFontDialogPrivate::init()
 
     familyList->setFocus();
     retranslateStrings();
+    sampleEdit->setObjectName(QLatin1String("qt_fontDialog_sampleEdit"));
 }
 
 /*!
@@ -479,7 +474,27 @@ void QFontDialogPrivate::updateFamilies()
 
     enum match_t { MATCH_NONE = 0, MATCH_LAST_RESORT = 1, MATCH_APP = 2, MATCH_FAMILY = 3 };
 
-    QStringList familyNames = fdb.families(writingSystem);
+    const QFontDialog::FontDialogOptions scalableMask = (QFontDialog::ScalableFonts | QFontDialog::NonScalableFonts);
+    const QFontDialog::FontDialogOptions spacingMask = (QFontDialog::ProportionalFonts | QFontDialog::MonospacedFonts);
+    const QFontDialog::FontDialogOptions options = q->options();
+
+    QFontDatabase fdb;
+
+    QStringList familyNames;
+    foreach (const QString &family, fdb.families(writingSystem)) {
+        if (fdb.isPrivateFamily(family))
+            continue;
+
+        if ((options & scalableMask) && (options & scalableMask) != scalableMask) {
+            if (bool(options & QFontDialog::ScalableFonts) != fdb.isSmoothlyScalable(family))
+                continue;
+        }
+        if ((options & spacingMask) && (options & spacingMask) != spacingMask) {
+            if (bool(options & QFontDialog::MonospacedFonts) != fdb.isFixedPitch(family))
+                continue;
+        }
+        familyNames << family;
+    }
 
     familyList->model()->setStringList(familyNames);
 
@@ -606,23 +621,19 @@ void QFontDialogPrivate::updateSizes()
         QStringList str_sizes;
         for(QList<int>::const_iterator it = sizes.constBegin(); it != sizes.constEnd(); ++it) {
             str_sizes.append(QString::number(*it));
-            if (current == -1 && *it >= size)
+            if (current == -1 && *it == size)
                 current = i;
             ++i;
         }
         sizeList->model()->setStringList(str_sizes);
-        if (current == -1) {
-            // we request a size bigger than the ones in the list, select the biggest one
-            current = sizeList->count() - 1;
-        }
-        sizeList->setCurrentItem(current);
+        if (current != -1)
+            sizeList->setCurrentItem(current);
 
-        sizeEdit->blockSignals(true);
+        const QSignalBlocker blocker(sizeEdit);
         sizeEdit->setText((smoothScalable ? QString::number(size) : sizeList->currentText()));
         if (q->style()->styleHint(QStyle::SH_FontDialog_SelectAssociatedText, 0, q)
                 && sizeList->hasFocus())
             sizeEdit->selectAll();
-        sizeEdit->blockSignals(false);
     } else {
         sizeEdit->clear();
     }
@@ -735,9 +746,11 @@ void QFontDialogPrivate::_q_sizeChanged(const QString &s)
             if (sizeList->text(i).toInt() >= this->size)
                 break;
         }
-        sizeList->blockSignals(true);
-        sizeList->setCurrentItem(i);
-        sizeList->blockSignals(false);
+        const QSignalBlocker blocker(sizeList);
+        if (sizeList->text(i).toInt() == this->size)
+            sizeList->setCurrentItem(i);
+        else
+            sizeList->clearSelection();
     }
     _q_updateSample();
 }
@@ -837,10 +850,21 @@ QFont QFontDialog::selectedFont() const
     This enum specifies various options that affect the look and feel
     of a font dialog.
 
+    For instance, it allows to specify which type of font should be
+    displayed. If none are specified all fonts available will be listed.
+
+    Note that the font filtering options might not be supported on some
+    platforms (e.g. Mac). They are always supported by the non native
+    dialog (used on Windows or Linux).
+
     \value NoButtons Don't display \uicontrol{OK} and \uicontrol{Cancel} buttons. (Useful for "live dialogs".)
     \value DontUseNativeDialog Use Qt's standard font dialog on the Mac instead of Apple's
                                native font panel. (Currently, the native dialog is never used,
                                but this is likely to change in future Qt releases.)
+    \value ScalableFonts Show scalable fonts
+    \value NonScalableFonts Show non scalable fonts
+    \value MonospacedFonts Show monospaced fonts
+    \value ProportionalFonts Show proportional fonts
 
     \sa options, setOption(), testOption()
 */
@@ -859,7 +883,7 @@ void QFontDialog::setOption(FontDialogOption option, bool on)
 }
 
 /*!
-    Returns true if the given \a option is enabled; otherwise, returns
+    Returns \c true if the given \a option is enabled; otherwise, returns
     false.
 
     \sa options, setOption()

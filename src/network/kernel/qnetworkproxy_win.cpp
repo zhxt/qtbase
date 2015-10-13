@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -53,6 +45,7 @@
 #include <string.h>
 #include <qt_windows.h>
 #include <wininet.h>
+#include <lmcons.h>
 #include "qnetworkfunctions_wince.h"
 
 /*
@@ -115,48 +108,45 @@ typedef HINTERNET (WINAPI * PtrWinHttpOpen)(LPCWSTR, DWORD, LPCWSTR, LPCWSTR,DWO
 typedef BOOL (WINAPI * PtrWinHttpGetDefaultProxyConfiguration)(WINHTTP_PROXY_INFO*);
 typedef BOOL (WINAPI * PtrWinHttpGetIEProxyConfigForCurrentUser)(WINHTTP_CURRENT_USER_IE_PROXY_CONFIG*);
 typedef BOOL (WINAPI * PtrWinHttpCloseHandle)(HINTERNET);
-typedef SC_HANDLE (WINAPI * PtrOpenSCManager)(LPCWSTR lpMachineName, LPCWSTR lpDatabaseName, DWORD dwDesiredAccess);
-typedef BOOL (WINAPI * PtrEnumServicesStatusEx)(SC_HANDLE hSCManager, SC_ENUM_TYPE InfoLevel, DWORD dwServiceType, DWORD dwServiceState, LPBYTE lpServices, DWORD cbBufSize, LPDWORD pcbBytesNeeded,
-    LPDWORD lpServicesReturned, LPDWORD lpResumeHandle, LPCWSTR pszGroupName);
 typedef BOOL (WINAPI * PtrCloseServiceHandle)(SC_HANDLE hSCObject);
 static PtrWinHttpGetProxyForUrl ptrWinHttpGetProxyForUrl = 0;
 static PtrWinHttpOpen ptrWinHttpOpen = 0;
 static PtrWinHttpGetDefaultProxyConfiguration ptrWinHttpGetDefaultProxyConfiguration = 0;
 static PtrWinHttpGetIEProxyConfigForCurrentUser ptrWinHttpGetIEProxyConfigForCurrentUser = 0;
 static PtrWinHttpCloseHandle ptrWinHttpCloseHandle = 0;
-static PtrOpenSCManager ptrOpenSCManager = 0;
-static PtrEnumServicesStatusEx ptrEnumServicesStatusEx = 0;
-static PtrCloseServiceHandle ptrCloseServiceHandle = 0;
 
 
+#ifndef Q_OS_WINCE
 static bool currentProcessIsService()
 {
-    if (!ptrOpenSCManager || !ptrEnumServicesStatusEx|| !ptrCloseServiceHandle)
-        return false;
+    typedef BOOL (WINAPI *PtrGetUserName)(LPTSTR lpBuffer, LPDWORD lpnSize);
+    typedef BOOL (WINAPI *PtrLookupAccountName)(LPCTSTR lpSystemName, LPCTSTR lpAccountName, PSID Sid,
+                                  LPDWORD cbSid, LPTSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
+    static PtrGetUserName ptrGetUserName = (PtrGetUserName)QSystemLibrary::resolve(QLatin1String("Advapi32"), "GetUserNameW");
+    static PtrLookupAccountName ptrLookupAccountName = (PtrLookupAccountName)QSystemLibrary::resolve(QLatin1String("Advapi32"), "LookupAccountNameW");
 
-    SC_HANDLE hSCM = ptrOpenSCManager(0, 0, SC_MANAGER_ENUMERATE_SERVICE | SC_MANAGER_CONNECT);
-    if (!hSCM)
-        return false;
-
-    ULONG bufSize = 0;
-    ULONG nbServices = 0;
-    if (ptrEnumServicesStatusEx(hSCM, SC_ENUM_PROCESS_INFO, SERVICE_WIN32, SERVICE_ACTIVE, 0, bufSize, &bufSize, &nbServices, 0, 0))
-        return false; //error case
-
-    LPENUM_SERVICE_STATUS_PROCESS info = reinterpret_cast<LPENUM_SERVICE_STATUS_PROCESS>(malloc(bufSize));
-    bool foundService = false;
-    if (ptrEnumServicesStatusEx(hSCM, SC_ENUM_PROCESS_INFO, SERVICE_WIN32, SERVICE_ACTIVE, (LPBYTE)info, bufSize, &bufSize, &nbServices, 0, 0)) {
-        DWORD currProcId = GetCurrentProcessId();
-        for (ULONG i = 0; i < nbServices && !foundService; i++) {
-            if (info[i].ServiceStatusProcess.dwProcessId == currProcId)
-                foundService = true;
+    if (ptrGetUserName && ptrLookupAccountName) {
+        wchar_t userName[UNLEN + 1] = L"";
+        DWORD size = UNLEN;
+        if (ptrGetUserName(userName, &size)) {
+            SID_NAME_USE type = SidTypeUser;
+            DWORD sidSize = 0;
+            DWORD domainSize = 0;
+            // first call is to get the correct size
+            bool bRet = ptrLookupAccountName(NULL, userName, NULL, &sidSize, NULL, &domainSize, &type);
+            if (bRet == FALSE && ERROR_INSUFFICIENT_BUFFER != GetLastError())
+                return false;
+            QVarLengthArray<BYTE, 68> buff(sidSize);
+            QVarLengthArray<wchar_t, MAX_PATH> domainName(domainSize);
+            // second call to LookupAccountNameW actually gets the SID
+            // both the pointer to the buffer and the pointer to the domain name should not be NULL
+            if (ptrLookupAccountName(NULL, userName, buff.data(), &sidSize, domainName.data(), &domainSize, &type))
+                return type != SidTypeUser; //returns true if the current user is not a user
         }
     }
-
-    ptrCloseServiceHandle(hSCM);
-    free(info);
-    return foundService;
+    return false;
 }
+#endif // ! Q_OS_WINCE
 
 static QStringList splitSpaceSemicolon(const QString &source)
 {
@@ -362,12 +352,66 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
     return removeDuplicateProxies(result);
 }
 
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+namespace {
+class QRegistryWatcher {
+public:
+    void addLocation(HKEY hive, const QString& path)
+    {
+        HKEY openedKey;
+        if (RegOpenKeyEx(hive, reinterpret_cast<const wchar_t*>(path.utf16()), 0, KEY_READ, &openedKey) != ERROR_SUCCESS)
+            return;
+
+        const DWORD filter = REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_ATTRIBUTES |
+                REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_CHANGE_SECURITY;
+
+        // Watch the registry key for a change of value.
+        HANDLE handle = CreateEvent(NULL, true, false, NULL);
+        if (RegNotifyChangeKeyValue(openedKey, true, filter, handle, true) != ERROR_SUCCESS) {
+            CloseHandle(handle);
+            return;
+        }
+        m_watchEvents.append(handle);
+        m_registryHandles.append(openedKey);
+    }
+
+    bool hasChanged() const {
+        return !isEmpty() &&
+               WaitForMultipleObjects(m_watchEvents.size(), m_watchEvents.data(), false, 0) < WAIT_OBJECT_0 + m_watchEvents.size();
+    }
+
+    bool isEmpty() const {
+        return m_watchEvents.isEmpty();
+    }
+
+    void clear() {
+        foreach (HANDLE event, m_watchEvents)
+            CloseHandle(event);
+        foreach (HKEY key, m_registryHandles)
+            RegCloseKey(key);
+
+        m_watchEvents.clear();
+        m_registryHandles.clear();
+    }
+
+    ~QRegistryWatcher() {
+        clear();
+    }
+
+private:
+    QVector<HANDLE> m_watchEvents;
+    QVector<HKEY> m_registryHandles;
+};
+} // namespace
+#endif // !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+
 class QWindowsSystemProxy
 {
 public:
     QWindowsSystemProxy();
     ~QWindowsSystemProxy();
     void init();
+    void reset();
 
     QMutex mutex;
 
@@ -378,7 +422,9 @@ public:
     QStringList proxyServerList;
     QStringList proxyBypass;
     QList<QNetworkProxy> defaultResult;
-
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    QRegistryWatcher proxySettingsWatcher;
+#endif
     bool initialized;
     bool functional;
     bool isAutoConfig;
@@ -398,16 +444,42 @@ QWindowsSystemProxy::~QWindowsSystemProxy()
         ptrWinHttpCloseHandle(hHttpSession);
 }
 
+void QWindowsSystemProxy::reset()
+{
+    autoConfigUrl.clear();
+    proxyServerList.clear();
+    proxyBypass.clear();
+    defaultResult.clear();
+    defaultResult << QNetworkProxy::NoProxy;
+    functional = false;
+    isAutoConfig = false;
+}
+
 void QWindowsSystemProxy::init()
 {
-    if (initialized)
+    bool proxySettingsChanged = false;
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    proxySettingsChanged = proxySettingsWatcher.hasChanged();
+#endif
+
+    if (initialized && !proxySettingsChanged)
         return;
     initialized = true;
+
+    reset();
 
 #ifdef Q_OS_WINCE
     // Windows CE does not have any of the following API
     return;
 #else
+
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    proxySettingsWatcher.clear(); // needs reset to trigger a new detection
+    proxySettingsWatcher.addLocation(HKEY_CURRENT_USER,  QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
+    proxySettingsWatcher.addLocation(HKEY_LOCAL_MACHINE, QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
+    proxySettingsWatcher.addLocation(HKEY_LOCAL_MACHINE, QStringLiteral("Software\\Policies\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
+#endif
+
     // load the winhttp.dll library
     QSystemLibrary lib(L"winhttp");
     if (!lib.load())
@@ -418,9 +490,6 @@ void QWindowsSystemProxy::init()
     ptrWinHttpGetProxyForUrl = (PtrWinHttpGetProxyForUrl)lib.resolve("WinHttpGetProxyForUrl");
     ptrWinHttpGetDefaultProxyConfiguration = (PtrWinHttpGetDefaultProxyConfiguration)lib.resolve("WinHttpGetDefaultProxyConfiguration");
     ptrWinHttpGetIEProxyConfigForCurrentUser = (PtrWinHttpGetIEProxyConfigForCurrentUser)lib.resolve("WinHttpGetIEProxyConfigForCurrentUser");
-    ptrOpenSCManager = (PtrOpenSCManager) QSystemLibrary(L"advapi32").resolve("OpenSCManagerW");
-    ptrEnumServicesStatusEx = (PtrEnumServicesStatusEx) QSystemLibrary(L"advapi32").resolve("EnumServicesStatusExW");
-    ptrCloseServiceHandle = (PtrCloseServiceHandle) QSystemLibrary(L"advapi32").resolve("CloseServiceHandle");
 
     // Try to obtain the Internet Explorer configuration.
     WINHTTP_CURRENT_USER_IE_PROXY_CONFIG ieProxyConfig;

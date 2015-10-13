@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -167,15 +159,15 @@ QSqlRecord::~QSqlRecord()
 /*!
     \fn bool QSqlRecord::operator!=(const QSqlRecord &other) const
 
-    Returns true if this object is not identical to \a other;
-    otherwise returns false.
+    Returns \c true if this object is not identical to \a other;
+    otherwise returns \c false.
 
     \sa operator==()
 */
 
 /*!
-    Returns true if this object is identical to \a other (i.e., has
-    the same fields in the same order); otherwise returns false.
+    Returns \c true if this object is identical to \a other (i.e., has
+    the same fields in the same order); otherwise returns \c false.
 
     \sa operator!=()
 */
@@ -329,8 +321,8 @@ void QSqlRecord::clear()
 }
 
 /*!
-    Returns true if there are no fields in the record; otherwise
-    returns false.
+    Returns \c true if there are no fields in the record; otherwise
+    returns \c false.
 
     \sa append(), insert(), clear()
 */
@@ -342,8 +334,8 @@ bool QSqlRecord::isEmpty() const
 
 
 /*!
-    Returns true if there is a field in the record called \a name;
-    otherwise returns false.
+    Returns \c true if there is a field in the record called \a name;
+    otherwise returns \c false.
 */
 
 bool QSqlRecord::contains(const QString& name) const
@@ -399,8 +391,8 @@ void QSqlRecord::setGenerated(int index, bool generated)
 /*!
     \overload
 
-    Returns true if the field \a index is null or if there is no field at
-    position \a index; otherwise returns false.
+    Returns \c true if the field \a index is null or if there is no field at
+    position \a index; otherwise returns \c false.
 */
 bool QSqlRecord::isNull(int index) const
 {
@@ -408,8 +400,8 @@ bool QSqlRecord::isNull(int index) const
 }
 
 /*!
-    Returns true if the field called \a name is null or if there is no
-    field called \a name; otherwise returns false.
+    Returns \c true if the field called \a name is null or if there is no
+    field called \a name; otherwise returns \c false.
 
     \sa setNull()
 */
@@ -445,8 +437,8 @@ void QSqlRecord::setNull(const QString& name)
 
 
 /*!
-    Returns true if the record has a field called \a name and this
-    field is to be generated (the default); otherwise returns false.
+    Returns \c true if the record has a field called \a name and this
+    field is to be generated (the default); otherwise returns \c false.
 
     \sa setGenerated()
 */
@@ -457,8 +449,8 @@ bool QSqlRecord::isGenerated(const QString& name) const
 
 /*! \overload
 
-    Returns true if the record has a field at position \a index and this
-    field is to be generated (the default); otherwise returns false.
+    Returns \c true if the record has a field at position \a index and this
+    field is to be generated (the default); otherwise returns \c false.
 
     \sa setGenerated()
 */
@@ -517,9 +509,16 @@ void QSqlRecord::detach()
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QSqlRecord &r)
 {
-    dbg << "QSqlRecord(" << r.count() << ')';
-    for (int i = 0; i < r.count(); ++i)
-        dbg << '\n' << QString::fromLatin1("%1:").arg(i, 2) << r.field(i) << r.value(i).toString();
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    const int count = r.count();
+    dbg << "QSqlRecord(" << count << ')';
+    for (int i = 0; i < count; ++i) {
+        dbg.nospace();
+        dbg << '\n' << qSetFieldWidth(2) << right << i << left << qSetFieldWidth(0) << ':';
+        dbg.space();
+        dbg << r.field(i) << r.value(i).toString();
+    }
     return dbg;
 }
 #endif

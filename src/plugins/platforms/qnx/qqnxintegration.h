@@ -1,39 +1,31 @@
 /***************************************************************************
 **
-** Copyright (C) 2011 - 2012 Research In Motion
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2011 - 2013 BlackBerry Limited. All rights reserved.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -51,7 +43,9 @@
 QT_BEGIN_NAMESPACE
 
 class QQnxBpsEventFilter;
+#if defined(QQNX_SCREENEVENTTHREAD)
 class QQnxScreenEventThread;
+#endif
 class QQnxFileDialogHelper;
 class QQnxNativeInterface;
 class QQnxWindow;
@@ -80,7 +74,14 @@ typedef QHash<screen_window_t, QWindow *> QQnxWindowMapper;
 class QQnxIntegration : public QPlatformIntegration
 {
 public:
-    QQnxIntegration();
+    enum Option { // Options to be passed on command line.
+        NoOptions = 0x0,
+        FullScreenApplication = 0x1,
+        RootWindow = 0x2,
+        AlwaysFlushScreenContext = 0x4
+    };
+    Q_DECLARE_FLAGS(Options, Option)
+    explicit QQnxIntegration(const QStringList &paramList);
     ~QQnxIntegration();
 
     bool hasCapability(QPlatformIntegration::Capability cap) const;
@@ -100,7 +101,7 @@ public:
 
     bool supportsNavigatorEvents() const;
 
-    QAbstractEventDispatcher *guiThreadEventDispatcher() const;
+    QAbstractEventDispatcher *createEventDispatcher() const;
 
     QPlatformFontDatabase *fontDatabase() const { return m_fontDatabase; }
 
@@ -129,6 +130,11 @@ public:
     void createDisplay(screen_display_t display, bool isPrimary);
     void removeDisplay(QQnxScreen *screen);
     QQnxScreen *primaryDisplay() const;
+    static Options options();
+    static screen_context_t screenContext();
+
+    QQnxNavigatorEventHandler *navigatorEventHandler();
+
 private:
     void createDisplays();
     void destroyDisplays();
@@ -136,8 +142,10 @@ private:
     static void addWindow(screen_window_t qnxWindow, QWindow *window);
     static void removeWindow(screen_window_t qnxWindow);
 
-    screen_context_t m_screenContext;
+    static screen_context_t ms_screenContext;
+#if defined(QQNX_SCREENEVENTTHREAD)
     QQnxScreenEventThread *m_screenEventThread;
+#endif
     QQnxNavigatorEventHandler *m_navigatorEventHandler;
     QQnxAbstractVirtualKeyboard *m_virtualKeyboard;
 #if defined(QQNX_PPS)
@@ -147,7 +155,7 @@ private:
 #endif
     QQnxServices *m_services;
     QPlatformFontDatabase *m_fontDatabase;
-    QAbstractEventDispatcher *m_eventDispatcher;
+    mutable QAbstractEventDispatcher *m_eventDispatcher;
 #if defined(Q_OS_BLACKBERRY)
     QQnxBpsEventFilter *m_bpsEventFilter;
 #endif
@@ -163,6 +171,8 @@ private:
 #endif
     static QQnxWindowMapper ms_windowMapper;
     static QMutex ms_windowMapperMutex;
+
+    static Options ms_options;
 
     friend class QQnxWindow;
 };

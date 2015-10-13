@@ -1,3 +1,9 @@
+!force_bootstrap {
+    load(qfeatures)
+    requires(!contains(QT_DISABLED_FEATURES, xmlstreamwriter))
+    requires(!contains(QT_DISABLED_FEATURES, dom))
+}
+
 option(host_build)
 QT = core xml
 
@@ -20,7 +26,6 @@ HEADERS += atom.h \
            config.h \
            cppcodemarker.h \
            cppcodeparser.h \
-           ditaxmlgenerator.h \
            doc.h \
            editdistance.h \
            generator.h \
@@ -38,7 +43,6 @@ HEADERS += atom.h \
            separator.h \
            text.h \
            tokenizer.h \
-           tr.h \
            tree.h
 SOURCES += atom.cpp \
            codechunk.cpp \
@@ -47,7 +51,6 @@ SOURCES += atom.cpp \
            config.cpp \
            cppcodemarker.cpp \
            cppcodeparser.cpp \
-           ditaxmlgenerator.cpp \
            doc.cpp \
            editdistance.cpp \
            generator.cpp \

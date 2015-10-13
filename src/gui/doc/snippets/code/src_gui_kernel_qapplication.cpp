@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -107,79 +107,20 @@ void updateAllWidgets()
 
 
 //! [6]
-int main(int argc, char *argv[])
-{
-    QApplication::setDesktopSettingsAware(false);
-    QApplication app(argc, argv);
-    ...
-    return app.exec();
-}
-//! [6]
-
-
-//! [7]
 if ((startPos - currentPos).manhattanLength() >=
         QApplication::startDragDistance())
     startTheDrag();
+//! [6]
+
+//! [7]
+QWidget *widget = qApp->widgetAt(x, y);
+if (widget)
+    widget = widget->window();
 //! [7]
 
 
 //! [8]
-void MyApplication::commitData(QSessionManager& manager)
-{
-    if (manager.allowsInteraction()) {
-        int ret = QMessageBox::warning(
-                    mainWindow,
-                    tr("My Application"),
-                    tr("Save changes to document?"),
-                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-
-        switch (ret) {
-        case QMessageBox::Save:
-            manager.release();
-            if (!saveDocument())
-                manager.cancel();
-            break;
-        case QMessageBox::Discard:
-            break;
-        case QMessageBox::Cancel:
-        default:
-            manager.cancel();
-        }
-    } else {
-        // we did not get permission to interact, then
-        // do something reasonable instead
-    }
-}
-//! [8]
-
-
-//! [9]
-appname -session id
-//! [9]
-
-
-//! [10]
-foreach (const QString &command, mySession.restartCommand())
-    do_something(command);
-//! [10]
-
-
-//! [11]
-foreach (const QString &command, mySession.discardCommand())
-    do_something(command);
-//! [11]
-
-
-//! [12]
-QWidget *widget = qApp->widgetAt(x, y);
-if (widget)
-    widget = widget->window();
-//! [12]
-
-
-//! [13]
 QWidget *widget = qApp->widgetAt(point);
 if (widget)
     widget = widget->window();
-//! [13]
+//! [8]

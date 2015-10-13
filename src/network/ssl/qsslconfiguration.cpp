@@ -1,47 +1,42 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#include "qssl_p.h"
 #include "qsslconfiguration.h"
 #include "qsslconfiguration_p.h"
 #include "qsslsocket.h"
+#include "qsslsocket_p.h"
 #include "qmutex.h"
 #include "qdebug.h"
 
@@ -49,7 +44,11 @@ QT_BEGIN_NAMESPACE
 
 const QSsl::SslOptions QSslConfigurationPrivate::defaultSslOptions = QSsl::SslOptionDisableEmptyFragments
                                                                     |QSsl::SslOptionDisableLegacyRenegotiation
-                                                                    |QSsl::SslOptionDisableCompression;
+                                                                    |QSsl::SslOptionDisableCompression
+                                                                    |QSsl::SslOptionDisableSessionPersistence;
+
+const char QSslConfiguration::NextProtocolSpdy3_0[] = "spdy/3";
+const char QSslConfiguration::NextProtocolHttp1_1[] = "http/1.1";
 
 /*!
     \class QSslConfiguration
@@ -112,6 +111,33 @@ const QSsl::SslOptions QSslConfigurationPrivate::defaultSslOptions = QSsl::SslOp
 */
 
 /*!
+    \enum QSslConfiguration::NextProtocolNegotiationStatus
+
+    Describes the status of the Next Protocol Negotiation (NPN).
+
+    \value NextProtocolNegotiationNone No application protocol
+    has been negotiated (yet).
+
+    \value NextProtocolNegotiationNegotiated A next protocol
+    has been negotiated (see nextNegotiatedProtocol()).
+
+    \value NextProtocolNegotiationUnsupported The client and
+    server could not agree on a common next application protocol.
+*/
+
+/*!
+    \variable QSslConfiguration::NextProtocolSpdy3_0
+    \brief The value used for negotiating SPDY 3.0 during the Next
+    Protocol Negotiation.
+*/
+
+/*!
+    \variable QSslConfiguration::NextProtocolHttp1_1
+    \brief The value used for negotiating HTTP 1.1 during the Next
+    Protocol Negotiation.
+*/
+
+/*!
     Constructs an empty SSL configuration. This configuration contains
     no valid settings and the state will be empty. isNull() will
     return true after this constructor is called.
@@ -159,7 +185,7 @@ QSslConfiguration &QSslConfiguration::operator=(const QSslConfiguration &other)
 */
 
 /*!
-    Returns true if this QSslConfiguration object is equal to \a
+    Returns \c true if this QSslConfiguration object is equal to \a
     other.
 
     Two QSslConfiguration objects are considered equal if they have
@@ -176,19 +202,26 @@ bool QSslConfiguration::operator==(const QSslConfiguration &other) const
         d->localCertificateChain == other.d->localCertificateChain &&
         d->privateKey == other.d->privateKey &&
         d->sessionCipher == other.d->sessionCipher &&
+        d->sessionProtocol == other.d->sessionProtocol &&
         d->ciphers == other.d->ciphers &&
+        d->ellipticCurves == other.d->ellipticCurves &&
         d->caCertificates == other.d->caCertificates &&
         d->protocol == other.d->protocol &&
         d->peerVerifyMode == other.d->peerVerifyMode &&
         d->peerVerifyDepth == other.d->peerVerifyDepth &&
         d->allowRootCertOnDemandLoading == other.d->allowRootCertOnDemandLoading &&
-        d->sslOptions == other.d->sslOptions;
+        d->sslOptions == other.d->sslOptions &&
+        d->sslSession == other.d->sslSession &&
+        d->sslSessionTicketLifeTimeHint == other.d->sslSessionTicketLifeTimeHint &&
+        d->nextAllowedProtocols == other.d->nextAllowedProtocols &&
+        d->nextNegotiatedProtocol == other.d->nextNegotiatedProtocol &&
+        d->nextProtocolNegotiationStatus == other.d->nextProtocolNegotiationStatus;
 }
 
 /*!
     \fn QSslConfiguration::operator!=(const QSslConfiguration &other) const
 
-    Returns true if this QSslConfiguration differs from \a other. Two
+    Returns \c true if this QSslConfiguration differs from \a other. Two
     QSslConfiguration objects are considered different if any state or
     setting is different.
 
@@ -196,7 +229,7 @@ bool QSslConfiguration::operator==(const QSslConfiguration &other) const
 */
 
 /*!
-    Returns true if this is a null QSslConfiguration object.
+    Returns \c true if this is a null QSslConfiguration object.
 
     A QSslConfiguration object is null if it has been
     default-constructed and no setter methods have been called.
@@ -212,11 +245,17 @@ bool QSslConfiguration::isNull() const
             d->allowRootCertOnDemandLoading == true &&
             d->caCertificates.count() == 0 &&
             d->ciphers.count() == 0 &&
+            d->ellipticCurves.isEmpty() &&
             d->localCertificateChain.isEmpty() &&
             d->privateKey.isNull() &&
             d->peerCertificate.isNull() &&
             d->peerCertificateChain.count() == 0 &&
-            d->sslOptions == QSslConfigurationPrivate::defaultSslOptions);
+            d->sslOptions == QSslConfigurationPrivate::defaultSslOptions &&
+            d->sslSession.isNull() &&
+            d->sslSessionTicketLifeTimeHint == -1 &&
+            d->nextAllowedProtocols.isEmpty() &&
+            d->nextNegotiatedProtocol.isNull() &&
+            d->nextProtocolNegotiationStatus == QSslConfiguration::NextProtocolNegotiationNone);
 }
 
 /*!
@@ -306,7 +345,8 @@ int QSslConfiguration::peerVerifyDepth() const
 void QSslConfiguration::setPeerVerifyDepth(int depth)
 {
     if (depth < 0) {
-        qWarning("QSslConfiguration::setPeerVerifyDepth: cannot set negative depth of %d", depth);
+        qCWarning(lcSsl,
+                 "QSslConfiguration::setPeerVerifyDepth: cannot set negative depth of %d", depth);
         return;
     }
     d->peerVerifyDepth = depth;
@@ -470,6 +510,19 @@ QSslCipher QSslConfiguration::sessionCipher() const
 }
 
 /*!
+    Returns the socket's SSL/TLS protocol or UnknownProtocol if the
+    connection isn't encrypted. The socket's protocol for the session
+    is set during the handshake phase.
+
+    \sa protocol(), setProtocol()
+    \since 5.4
+*/
+QSsl::SslProtocol QSslConfiguration::sessionProtocol() const
+{
+    return d->sessionProtocol;
+}
+
+/*!
     Returns the \l {QSslKey} {SSL key} assigned to this connection or
     a null key if none has been assigned yet.
 
@@ -538,6 +591,20 @@ void QSslConfiguration::setCiphers(const QList<QSslCipher> &ciphers)
 }
 
 /*!
+    \since 5.5
+
+    Returns the list of cryptographic ciphers supported by this
+    system. This list is set by the system's SSL libraries and may
+    vary from system to system.
+
+    \sa ciphers(), setCiphers()
+*/
+QList<QSslCipher> QSslConfiguration::supportedCiphers()
+{
+    return QSslSocketPrivate::supportedCiphers();
+}
+
+/*!
   Returns this connection's CA certificate database. The CA certificate
   database is used by the socket during the handshake phase to
   validate the peer's certificate. It can be modified prior to the
@@ -567,6 +634,22 @@ void QSslConfiguration::setCaCertificates(const QList<QSslCertificate> &certific
 }
 
 /*!
+    \since 5.5
+
+    This function provides the CA certificate database
+    provided by the operating system. The CA certificate database
+    returned by this function is used to initialize the database
+    returned by caCertificates() on the default QSslConfiguration.
+
+    \sa caCertificates(), setCaCertificates(), defaultConfiguration()
+*/
+QList<QSslCertificate> QSslConfiguration::systemCaCertificates()
+{
+    // we are calling ensureInitialized() in the method below
+    return QSslSocketPrivate::systemCaCertificates();
+}
+
+/*!
   Enables or disables an SSL compatibility \a option. If \a on
   is true, the \a option is enabled. If \a on is false, the
   \a option is disabled.
@@ -584,13 +667,194 @@ void QSslConfiguration::setSslOption(QSsl::SslOption option, bool on)
 /*!
   \since 4.8
 
-  Returns true if the specified SSL compatibility \a option is enabled.
+  Returns \c true if the specified SSL compatibility \a option is enabled.
 
   \sa setSslOption()
 */
 bool QSslConfiguration::testSslOption(QSsl::SslOption option) const
 {
     return d->sslOptions & option;
+}
+
+/*!
+  \since 5.2
+
+  If QSsl::SslOptionDisableSessionPersistence was turned off, this
+  function returns the session ticket used in the SSL handshake in ASN.1
+  format, suitable to e.g. be persisted to disk. If no session ticket was
+  used or QSsl::SslOptionDisableSessionPersistence was not turned off,
+  this function returns an empty QByteArray.
+
+  \note When persisting the session ticket to disk or similar, be
+  careful not to expose the session to a potential attacker, as
+  knowledge of the session allows for eavesdropping on data
+  encrypted with the session parameters.
+
+  \sa setSessionTicket(), QSsl::SslOptionDisableSessionPersistence, setSslOption()
+ */
+QByteArray QSslConfiguration::sessionTicket() const
+{
+    return d->sslSession;
+}
+
+/*!
+  \since 5.2
+
+  Sets the session ticket to be used in an SSL handshake.
+  QSsl::SslOptionDisableSessionPersistence must be turned off
+  for this to work, and \a sessionTicket must be in ASN.1 format
+  as returned by sessionTicket().
+
+  \sa sessionTicket(), QSsl::SslOptionDisableSessionPersistence, setSslOption()
+ */
+void QSslConfiguration::setSessionTicket(const QByteArray &sessionTicket)
+{
+    d->sslSession = sessionTicket;
+}
+
+/*!
+  \since 5.2
+
+  If QSsl::SslOptionDisableSessionPersistence was turned off, this
+  function returns the session ticket life time hint sent by the
+  server (which might be 0).
+  If the server did not send a session ticket (e.g. when
+  resuming a session or when the server does not support it) or
+  QSsl::SslOptionDisableSessionPersistence was not turned off,
+  this function returns -1.
+
+  \sa sessionTicket(), QSsl::SslOptionDisableSessionPersistence, setSslOption()
+ */
+int QSslConfiguration::sessionTicketLifeTimeHint() const
+{
+    return d->sslSessionTicketLifeTimeHint;
+}
+
+/*!
+    \since 5.5
+
+    Returns this connection's current list of elliptic curves. This
+    list is used during the handshake phase for choosing an
+    elliptic curve (when using an elliptic curve cipher).
+    The returned list of curves is ordered by descending preference
+    (i.e., the first curve in the list is the most preferred one).
+
+    By default, the handshake phase can choose any of the curves
+    supported by this system's SSL libraries, which may vary from
+    system to system. The list of curves supported by this system's
+    SSL libraries is returned by QSslSocket::supportedEllipticCurves().
+
+    You can restrict the list of curves used for choosing the session cipher
+    for this socket by calling setEllipticCurves() with a subset of the
+    supported ciphers. You can revert to using the entire set by calling
+    setEllipticCurves() with the list returned by
+    QSslSocket::supportedEllipticCurves().
+
+    \sa setEllipticCurves
+ */
+QVector<QSslEllipticCurve> QSslConfiguration::ellipticCurves() const
+{
+    return d->ellipticCurves;
+}
+
+/*!
+    \since 5.5
+
+    Sets the list of elliptic curves to be used by this socket to \a curves,
+    which must contain a subset of the curves in the list returned by
+    supportedEllipticCurves().
+
+    Restricting the elliptic curves must be done before the handshake
+    phase, where the session cipher is chosen.
+
+    \sa ellipticCurves
+ */
+void QSslConfiguration::setEllipticCurves(const QVector<QSslEllipticCurve> &curves)
+{
+    d->ellipticCurves = curves;
+}
+
+/*!
+    \since 5.5
+
+    Returns the list of elliptic curves supported by this
+    system. This list is set by the system's SSL libraries and may
+    vary from system to system.
+
+    \sa ellipticCurves(), setEllipticCurves()
+*/
+QVector<QSslEllipticCurve> QSslConfiguration::supportedEllipticCurves()
+{
+    return QSslSocketPrivate::supportedEllipticCurves();
+}
+
+/*!
+  \since 5.3
+
+  This function returns the protocol negotiated with the server
+  if the Next Protocol Negotiation (NPN) TLS extension was enabled.
+  In order for the NPN extension to be enabled, setAllowedNextProtocols()
+  needs to be called explicitly before connecting to the server.
+
+  If no protocol could be negotiated or the extension was not enabled,
+  this function returns a QByteArray which is null.
+
+  \sa setAllowedNextProtocols(), nextProtocolNegotiationStatus()
+ */
+QByteArray QSslConfiguration::nextNegotiatedProtocol() const
+{
+    return d->nextNegotiatedProtocol;
+}
+
+/*!
+  \since 5.3
+
+  This function sets the allowed \a protocols to be negotiated with the
+  server through the Next Protocol Negotiation (NPN) TLS extension; each
+  element in \a protocols must define one allowed protocol.
+  The function must be called explicitly before connecting to send the NPN
+  extension in the SSL handshake.
+  Whether or not the negotiation succeeded can be queried through
+  nextProtocolNegotiationStatus().
+
+  \sa nextNegotiatedProtocol(), nextProtocolNegotiationStatus(), allowedNextProtocols(), QSslConfiguration::NextProtocolSpdy3_0, QSslConfiguration::NextProtocolHttp1_1
+ */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+void QSslConfiguration::setAllowedNextProtocols(const QList<QByteArray> &protocols)
+#else
+void QSslConfiguration::setAllowedNextProtocols(QList<QByteArray> protocols)
+#endif
+{
+    d->nextAllowedProtocols = protocols;
+}
+
+/*!
+  \since 5.3
+
+  This function returns the allowed protocols to be negotiated with the
+  server through the Next Protocol Negotiation (NPN) TLS extension, as set
+  by setAllowedNextProtocols().
+
+  \sa nextNegotiatedProtocol(), nextProtocolNegotiationStatus(), setAllowedNextProtocols(), QSslConfiguration::NextProtocolSpdy3_0, QSslConfiguration::NextProtocolHttp1_1
+ */
+QList<QByteArray> QSslConfiguration::allowedNextProtocols() const
+{
+    return d->nextAllowedProtocols;
+}
+
+/*!
+  \since 5.3
+
+  This function returns the status of the Next Protocol Negotiation (NPN).
+  If the feature has not been enabled through setAllowedNextProtocols(),
+  this function returns NextProtocolNegotiationNone.
+  The status will be set before emitting the encrypted() signal.
+
+  \sa setAllowedNextProtocols(), allowedNextProtocols(), nextNegotiatedProtocol(), QSslConfiguration::NextProtocolNegotiationStatus
+ */
+QSslConfiguration::NextProtocolNegotiationStatus QSslConfiguration::nextProtocolNegotiationStatus() const
+{
+    return d->nextProtocolNegotiationStatus;
 }
 
 /*!
@@ -604,7 +868,7 @@ bool QSslConfiguration::testSslOption(QSsl::SslOption option) const
       \li protocol SecureProtocols (meaning either TLS 1.0 or SSL 3 will be used)
       \li the system's default CA certificate list
       \li the cipher list equal to the list of the SSL libraries'
-         supported SSL ciphers
+         supported SSL ciphers that are 128 bits or more
     \endlist
 
     \sa QSslSocket::supportedCiphers(), setDefaultConfiguration()

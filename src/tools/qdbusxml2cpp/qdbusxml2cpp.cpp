@@ -1,48 +1,40 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include <qbytearray.h>
-#include <qdatetime.h>
 #include <qdebug.h>
 #include <qfile.h>
+#include <qfileinfo.h>
 #include <qstring.h>
 #include <qstringlist.h>
 #include <qtextstream.h>
@@ -56,7 +48,7 @@
 
 #define PROGRAMNAME     "qdbusxml2cpp"
 #define PROGRAMVERSION  "0.8"
-#define PROGRAMCOPYRIGHT "Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies)."
+#define PROGRAMCOPYRIGHT "Copyright (C) 2015 The Qt Company Ltd."
 
 #define ANNOTATION_NO_WAIT      "org.freedesktop.DBus.Method.NoReply"
 
@@ -216,10 +208,11 @@ static void parseCmdLine(QStringList args)
 static QDBusIntrospection::Interfaces readInput()
 {
     QFile input(inputFile);
-    if (inputFile.isEmpty() || inputFile == QLatin1String("-"))
+    if (inputFile.isEmpty() || inputFile == QLatin1String("-")) {
         input.open(stdin, QIODevice::ReadOnly);
-    else
+    } else {
         input.open(QIODevice::ReadOnly);
+    }
 
     QByteArray data = input.readAll();
 
@@ -401,6 +394,8 @@ static QStringList makeArgNames(const QDBusIntrospection::Arguments &inputArgs,
         QString name = arg.name;
         if (name.isEmpty())
             name = QString( QLatin1String("in%1") ).arg(i);
+        else
+            name.replace(QLatin1Char('-'), QLatin1Char('_'));
         while (retval.contains(name))
             name += QLatin1String("_");
         retval << name;
@@ -410,6 +405,8 @@ static QStringList makeArgNames(const QDBusIntrospection::Arguments &inputArgs,
         QString name = arg.name;
         if (name.isEmpty())
             name = QString( QLatin1String("out%1") ).arg(i);
+        else
+            name.replace(QLatin1Char('-'), QLatin1Char('_'));
         while (retval.contains(name))
             name += QLatin1String("_");
         retval << name;
@@ -487,6 +484,15 @@ static QString propertySetter(const QDBusIntrospection::Property &property)
     return setter;
 }
 
+static QString methodName(const QDBusIntrospection::Method &method)
+{
+    QString name = method.annotations.value(QStringLiteral("org.qtproject.QtDBus.MethodName"));
+    if (!name.isEmpty())
+        return name;
+
+    return method.name;
+}
+
 static QString stringify(const QString &data)
 {
     QString retval;
@@ -505,10 +511,10 @@ static QString stringify(const QString &data)
     return retval;
 }
 
-static void openFile(const QString &fileName, QFile &file)
+static bool openFile(const QString &fileName, QFile &file)
 {
     if (fileName.isEmpty())
-        return;
+        return false;
 
     bool isOk = false;
     if (fileName == QLatin1String("-")) {
@@ -521,6 +527,7 @@ static void openFile(const QString &fileName, QFile &file)
     if (!isOk)
         fprintf(stderr, "Unable to open '%s': %s\n", qPrintable(fileName),
                 qPrintable(file.errorString()));
+    return isOk;
 }
 
 static void writeProxy(const QString &filename, const QDBusIntrospection::Interfaces &interfaces)
@@ -549,9 +556,8 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
     } else {
         includeGuard = QLatin1String("QDBUSXML2CPP_PROXY");
     }
-    includeGuard = QString(QLatin1String("%1_%2"))
-                   .arg(includeGuard)
-                   .arg(QDateTime::currentDateTime().toTime_t());
+    includeGuard = QString(QLatin1String("%1"))
+                   .arg(includeGuard);
     hs << "#ifndef " << includeGuard << endl
        << "#define " << includeGuard << endl
        << endl;
@@ -677,7 +683,7 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
                 hs << "> ";
             }
 
-            hs << method.name << "(";
+            hs << methodName(method) << "(";
 
             QStringList argNames = makeArgNames(method.inputArgs);
             writeArgList(hs, argNames, method.annotations, method.inputArgs);
@@ -695,9 +701,9 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
 
             if (isNoReply)
                 hs << "        callWithArgumentList(QDBus::NoBlock, "
-                   <<  "QLatin1String(\"" << method.name << "\"), argumentList);" << endl;
+                   <<  "QStringLiteral(\"" << method.name << "\"), argumentList);" << endl;
             else
-                hs << "        return asyncCallWithArgumentList(QLatin1String(\""
+                hs << "        return asyncCallWithArgumentList(QStringLiteral(\""
                    << method.name << "\"), argumentList);" << endl;
 
             // close the function:
@@ -727,7 +733,7 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
                 }
 
                 hs << "        QDBusMessage reply = callWithArgumentList(QDBus::Block, "
-                   <<  "QLatin1String(\"" << method.name << "\"), argumentList);" << endl;
+                   <<  "QStringLiteral(\"" << method.name << "\"), argumentList);" << endl;
 
                 argPos++;
                 hs << "        if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().count() == "
@@ -817,15 +823,17 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
     hs.flush();
 
     QFile file;
-    openFile(headerName, file);
-    file.write(headerData);
+    const bool headerOpen = openFile(headerName, file);
+    if (headerOpen)
+        file.write(headerData);
 
     if (headerName == cppName) {
-        file.write(cppData);
+        if (headerOpen)
+            file.write(cppData);
     } else {
         QFile cppFile;
-        openFile(cppName, cppFile);
-        cppFile.write(cppData);
+        if (openFile(cppName, cppFile))
+            cppFile.write(cppData);
     }
 }
 
@@ -855,9 +863,8 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
     } else {
         includeGuard = QLatin1String("QDBUSXML2CPP_ADAPTOR");
     }
-    includeGuard = QString(QLatin1String("%1_%2"))
-                   .arg(includeGuard)
-                   .arg(QDateTime::currentDateTime().toTime_t());
+    includeGuard = QString(QLatin1String("%1"))
+                   .arg(includeGuard);
     hs << "#ifndef " << includeGuard << endl
        << "#define " << includeGuard << endl
        << endl;
@@ -1008,7 +1015,7 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
                 cs << returnType << " ";
             }
 
-            QString name = method.name;
+            QString name = methodName(method);
             hs << name << "(";
             cs << className << "::" << name << "(";
 
@@ -1019,7 +1026,7 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
             hs << ");" << endl; // finished for header
             cs << ")" << endl
                << "{" << endl
-               << "    // handle method call " << interface->name << "." << method.name << endl;
+               << "    // handle method call " << interface->name << "." << methodName(method) << endl;
 
             // make the call
             bool usingInvokeMethod = false;
@@ -1121,15 +1128,17 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
     hs.flush();
 
     QFile file;
-    openFile(headerName, file);
-    file.write(headerData);
+    const bool headerOpen = openFile(headerName, file);
+    if (headerOpen)
+        file.write(headerData);
 
     if (headerName == cppName) {
-        file.write(cppData);
+        if (headerOpen)
+            file.write(cppData);
     } else {
         QFile cppFile;
-        openFile(cppName, cppFile);
-        cppFile.write(cppData);
+        if (openFile(cppName, cppFile))
+            cppFile.write(cppData);
     }
 }
 

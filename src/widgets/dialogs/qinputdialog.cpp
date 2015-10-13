@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,6 +41,7 @@
 #include "qlabel.h"
 #include "qlayout.h"
 #include "qlineedit.h"
+#include "qplaintextedit.h"
 #include "qlistwidget.h"
 #include "qpushbutton.h"
 #include "qspinbox.h"
@@ -59,25 +52,37 @@
 
 QT_USE_NAMESPACE
 
+enum CandidateSignal {
+    TextValueSelectedSignal,
+    IntValueSelectedSignal,
+    DoubleValueSelectedSignal,
+
+    NumCandidateSignals
+};
+
+static const char *candidateSignal(int which)
+{
+    switch (CandidateSignal(which)) {
+    case TextValueSelectedSignal:   return SIGNAL(textValueSelected(QString));
+    case IntValueSelectedSignal:    return SIGNAL(intValueSelected(int));
+    case DoubleValueSelectedSignal: return SIGNAL(doubleValueSelected(double));
+
+    case NumCandidateSignals:       ; // fall through
+    };
+    Q_UNREACHABLE();
+    return Q_NULLPTR;
+}
+
 static const char *signalForMember(const char *member)
 {
-    static const int NumCandidates = 4;
-    static const char * const candidateSignals[NumCandidates] = {
-        SIGNAL(textValueSelected(QString)),
-        SIGNAL(intValueSelected(int)),
-        SIGNAL(doubleValueSelected(double)),
-        SIGNAL(accepted())
-    };
-
     QByteArray normalizedMember(QMetaObject::normalizedSignature(member));
 
-    int i = 0;
-    while (i < NumCandidates - 1) { // sic
-        if (QMetaObject::checkConnectArgs(candidateSignals[i], normalizedMember))
-            break;
-        ++i;
-    }
-    return candidateSignals[i];
+    for (int i = 0; i < NumCandidateSignals; ++i)
+        if (QMetaObject::checkConnectArgs(candidateSignal(i), normalizedMember))
+            return candidateSignal(i);
+
+    // otherwise, use fit-all accepted signal:
+    return SIGNAL(accepted());
 }
 
 QT_BEGIN_NAMESPACE
@@ -106,7 +111,7 @@ private slots:
     void notifyTextChanged() { emit textChanged(hasAcceptableInput()); }
 
 private:
-    void keyPressEvent(QKeyEvent *event) {
+    void keyPressEvent(QKeyEvent *event) Q_DECL_OVERRIDE {
         if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) && !hasAcceptableInput()) {
 #ifndef QT_NO_PROPERTIES
             setProperty("value", property("value"));
@@ -117,7 +122,7 @@ private:
         notifyTextChanged();
     }
 
-    void mousePressEvent(QMouseEvent *event) {
+    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE {
         QSpinBox::mousePressEvent(event);
         notifyTextChanged();
     }
@@ -141,7 +146,7 @@ private slots:
     void notifyTextChanged() { emit textChanged(hasAcceptableInput()); }
 
 private:
-    void keyPressEvent(QKeyEvent *event) {
+    void keyPressEvent(QKeyEvent *event) Q_DECL_OVERRIDE {
         if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) && !hasAcceptableInput()) {
 #ifndef QT_NO_PROPERTIES
             setProperty("value", property("value"));
@@ -152,7 +157,7 @@ private:
         notifyTextChanged();
     }
 
-    void mousePressEvent(QMouseEvent *event) {
+    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE {
         QDoubleSpinBox::mousePressEvent(event);
         notifyTextChanged();
     }
@@ -167,6 +172,7 @@ public:
 
     void ensureLayout();
     void ensureLineEdit();
+    void ensurePlainTextEdit();
     void ensureComboBox();
     void ensureListView();
     void ensureIntSpinBox();
@@ -180,11 +186,13 @@ public:
     void ensureLayout() const { const_cast<QInputDialogPrivate *>(this)->ensureLayout(); }
     bool useComboBoxOrListView() const { return comboBox && comboBox->count() > 0; }
     void _q_textChanged(const QString &text);
+    void _q_plainTextEditTextChanged();
     void _q_currentRowChanged(const QModelIndex &newIndex, const QModelIndex &oldIndex);
 
     mutable QLabel *label;
     mutable QDialogButtonBox *buttonBox;
     mutable QLineEdit *lineEdit;
+    mutable QPlainTextEdit *plainTextEdit;
     mutable QSpinBox *intSpinBox;
     mutable QDoubleSpinBox *doubleSpinBox;
     mutable QComboBox *comboBox;
@@ -198,8 +206,8 @@ public:
 };
 
 QInputDialogPrivate::QInputDialogPrivate()
-    : label(0), buttonBox(0), lineEdit(0), intSpinBox(0), doubleSpinBox(0), comboBox(0), listView(0),
-      inputWidget(0), mainLayout(0)
+    : label(0), buttonBox(0), lineEdit(0), plainTextEdit(0), intSpinBox(0), doubleSpinBox(0),
+      comboBox(0), listView(0), inputWidget(0), mainLayout(0)
 {
 }
 
@@ -247,6 +255,21 @@ void QInputDialogPrivate::ensureLineEdit()
         lineEdit->hide();
         QObject::connect(lineEdit, SIGNAL(textChanged(QString)),
                          q, SLOT(_q_textChanged(QString)));
+    }
+}
+
+void QInputDialogPrivate::ensurePlainTextEdit()
+{
+    Q_Q(QInputDialog);
+    if (!plainTextEdit) {
+        plainTextEdit = new QPlainTextEdit(q);
+        plainTextEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+#ifndef QT_NO_IM
+        qt_widget_private(plainTextEdit)->inheritsInputMethodHints = 1;
+#endif
+        plainTextEdit->hide();
+        QObject::connect(plainTextEdit, SIGNAL(textChanged()),
+                         q, SLOT(_q_plainTextEditTextChanged()));
     }
 }
 
@@ -344,6 +367,8 @@ void QInputDialogPrivate::setInputWidget(QWidget *widget)
     // textValue
     if (widget == lineEdit) {
         lineEdit->setText(textValue);
+    } else if (widget == plainTextEdit) {
+        plainTextEdit->setPlainText(textValue);
     } else if (widget == comboBox) {
         setComboBoxText(textValue);
     } else if (widget == listView) {
@@ -364,6 +389,9 @@ void QInputDialogPrivate::chooseRightTextInputWidget()
         } else {
             widget = comboBox;
         }
+    } else if (opts & QInputDialog::UsePlainTextEditForTextInput) {
+        ensurePlainTextEdit();
+        widget = plainTextEdit;
     } else {
         ensureLineEdit();
         widget = lineEdit;
@@ -417,6 +445,16 @@ void QInputDialogPrivate::_q_textChanged(const QString &text)
     }
 }
 
+void QInputDialogPrivate::_q_plainTextEditTextChanged()
+{
+    Q_Q(QInputDialog);
+    QString text = plainTextEdit->toPlainText();
+    if (textValue != text) {
+        textValue = text;
+        emit q->textValueChanged(text);
+    }
+}
+
 void QInputDialogPrivate::_q_currentRowChanged(const QModelIndex &newIndex,
                                                const QModelIndex & /* oldIndex */)
 {
@@ -434,8 +472,8 @@ void QInputDialogPrivate::_q_currentRowChanged(const QModelIndex &newIndex,
     The input value can be a string, a number or an item from a list. A label
     must be set to tell the user what they should enter.
 
-    Four static convenience functions are provided: getText(), getInt(),
-    getDouble(), and getItem(). All the functions can be used in a similar way,
+    Five static convenience functions are provided: getText(), getMultiLineText(),
+    getInt(), getDouble(), and getItem(). All the functions can be used in a similar way,
     for example:
 
     \snippet dialogs/standarddialogs/dialog.cpp 3
@@ -575,6 +613,8 @@ QString QInputDialog::labelText() const
     \value NoButtons Don't display \uicontrol{OK} and \uicontrol{Cancel} buttons (useful for "live dialogs").
     \value UseListViewForComboBoxItems Use a QListView rather than a non-editable QComboBox for
                                        displaying the items set with setComboBoxItems().
+    \value UsePlainTextEditForTextInput Use a QPlainTextEdit for multiline text input. This value was
+                                       introduced in 5.2.
 
     \sa options, setOption(), testOption()
 */
@@ -593,7 +633,7 @@ void QInputDialog::setOption(InputDialogOption option, bool on)
 }
 
 /*!
-    Returns true if the given \a option is enabled; otherwise, returns
+    Returns \c true if the given \a option is enabled; otherwise, returns
     false.
 
     \sa options, setOption()
@@ -628,6 +668,8 @@ void QInputDialog::setOptions(InputDialogOptions options)
         d->buttonBox->setVisible(!(options & NoButtons));
     if ((changed & UseListViewForComboBoxItems) && inputMode() == TextInput)
         d->chooseRightTextInputWidget();
+    if ((changed & UsePlainTextEditForTextInput) && inputMode() == TextInput)
+        d->chooseRightTextInputWidget();
 }
 
 QInputDialog::InputDialogOptions QInputDialog::options() const
@@ -653,6 +695,8 @@ void QInputDialog::setTextValue(const QString &text)
     setInputMode(TextInput);
     if (d->inputWidget == d->lineEdit) {
         d->lineEdit->setText(text);
+    } else if (d->inputWidget == d->plainTextEdit) {
+        d->plainTextEdit->setPlainText(text);
     } else if (d->inputWidget == d->comboBox) {
         d->setComboBoxText(text);
     } else {
@@ -731,10 +775,11 @@ void QInputDialog::setComboBoxItems(const QStringList &items)
     Q_D(QInputDialog);
 
     d->ensureComboBox();
-    d->comboBox->blockSignals(true);
-    d->comboBox->clear();
-    d->comboBox->addItems(items);
-    d->comboBox->blockSignals(false);
+    {
+        const QSignalBlocker blocker(d->comboBox);
+        d->comboBox->clear();
+        d->comboBox->addItems(items);
+    }
 
     if (inputMode() == TextInput)
         d->chooseRightTextInputWidget();
@@ -1075,6 +1120,8 @@ void QInputDialog::setVisible(bool visible)
         d->inputWidget->setFocus();
         if (d->inputWidget == d->lineEdit) {
             d->lineEdit->selectAll();
+        } else if (d->inputWidget == d->plainTextEdit) {
+            d->plainTextEdit->selectAll();
         } else if (d->inputWidget == d->intSpinBox) {
             d->intSpinBox->selectAll();
         } else if (d->inputWidget == d->doubleSpinBox) {
@@ -1144,7 +1191,7 @@ void QInputDialog::done(int result)
     want to do this, you should create the dialog yourself using one of the
     QInputDialog constructors.
 
-    \sa getInt(), getDouble(), getItem()
+    \sa getInt(), getDouble(), getItem(), getMultiLineText()
 */
 
 QString QInputDialog::getText(QWidget *parent, const QString &title, const QString &label,
@@ -1156,6 +1203,58 @@ QString QInputDialog::getText(QWidget *parent, const QString &title, const QStri
     dialog.setLabelText(label);
     dialog.setTextValue(text);
     dialog.setTextEchoMode(mode);
+    dialog.setInputMethodHints(inputMethodHints);
+
+    int ret = dialog.exec();
+    if (ok)
+        *ok = !!ret;
+    if (ret) {
+        return dialog.textValue();
+    } else {
+        return QString();
+    }
+}
+
+/*!
+    \since 5.2
+
+    Static convenience function to get a multiline string from the user.
+
+    \a title is the text which is displayed in the title bar of the dialog.
+    \a label is the text which is shown to the user (it should say what should
+    be entered).
+    \a text is the default text which is placed in the plain text edit.
+    \a inputMethodHints is the input method hints that will be used in the
+    edit widget if an input method is active.
+
+    If \a ok is nonnull \e *\a ok will be set to true if the user pressed
+    \uicontrol OK and to false if the user pressed \uicontrol Cancel. The dialog's parent
+    is \a parent. The dialog will be modal and uses the specified widget
+    \a flags.
+
+    If the dialog is accepted, this function returns the text in the dialog's
+    plain text edit. If the dialog is rejected, a null QString is returned.
+
+    Use this static function like this:
+
+    \snippet dialogs/standarddialogs/dialog.cpp 4
+
+    \warning Do not delete \a parent during the execution of the dialog. If you
+    want to do this, you should create the dialog yourself using one of the
+    QInputDialog constructors.
+
+    \sa getInt(), getDouble(), getItem(), getText()
+*/
+
+QString QInputDialog::getMultiLineText(QWidget *parent, const QString &title, const QString &label,
+                                       const QString &text, bool *ok, Qt::WindowFlags flags,
+                                       Qt::InputMethodHints inputMethodHints)
+{
+    QInputDialog dialog(parent, flags);
+    dialog.setOptions(QInputDialog::UsePlainTextEditForTextInput);
+    dialog.setWindowTitle(title);
+    dialog.setLabelText(label);
+    dialog.setTextValue(text);
     dialog.setInputMethodHints(inputMethodHints);
 
     int ret = dialog.exec();
@@ -1196,7 +1295,7 @@ QString QInputDialog::getText(QWidget *parent, const QString &title, const QStri
     want to do this, you should create the dialog yourself using one of the
     QInputDialog constructors.
 
-    \sa getText(), getDouble(), getItem()
+    \sa getText(), getDouble(), getItem(), getMultiLineText()
 */
 
 int QInputDialog::getInt(QWidget *parent, const QString &title, const QString &label, int value,
@@ -1248,7 +1347,7 @@ int QInputDialog::getInt(QWidget *parent, const QString &title, const QString &l
     want to do this, you should create the dialog yourself using one of the
     QInputDialog constructors.
 
-    \sa getText(), getDouble(), getItem()
+    \sa getText(), getDouble(), getItem(), getMultiLineText()
 */
 
 /*!
@@ -1277,7 +1376,7 @@ int QInputDialog::getInt(QWidget *parent, const QString &title, const QString &l
     want to do this, you should create the dialog yourself using one of the
     QInputDialog constructors.
 
-    \sa getText(), getInt(), getItem()
+    \sa getText(), getInt(), getItem(), getMultiLineText()
 */
 
 double QInputDialog::getDouble(QWidget *parent, const QString &title, const QString &label,
@@ -1331,7 +1430,7 @@ double QInputDialog::getDouble(QWidget *parent, const QString &title, const QStr
     want to do this, you should create the dialog yourself using one of the
     QInputDialog constructors.
 
-    \sa getText(), getInt(), getDouble()
+    \sa getText(), getInt(), getDouble(), getMultiLineText()
 */
 
 QString QInputDialog::getItem(QWidget *parent, const QString &title, const QString &label,

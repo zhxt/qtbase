@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -299,6 +291,7 @@ QGraphicsScenePrivate::QGraphicsScenePrivate()
       painterStateProtection(true),
       sortCacheEnabled(false),
       allItemsIgnoreTouchEvents(true),
+      minimumRenderSize(0.0),
       selectionChanging(0),
       rectAdjust(2),
       focusItem(0),
@@ -399,7 +392,7 @@ void QGraphicsScenePrivate::_q_emitUpdated()
 */
 void QGraphicsScenePrivate::registerTopLevelItem(QGraphicsItem *item)
 {
-    item->d_ptr->ensureSequentialSiblingIndex();
+    ensureSequentialTopLevelSiblingIndexes();
     needSortTopLevelItems = true; // ### maybe false
     item->d_ptr->siblingIndex = topLevelItems.size();
     topLevelItems.append(item);
@@ -854,7 +847,7 @@ void QGraphicsScenePrivate::setFocusItemHelper(QGraphicsItem *item,
             // the views, but if we are changing focus, we have to
             // do it ourselves.
             if (qApp)
-                qApp->inputMethod()->commit();
+                QGuiApplication::inputMethod()->commit();
         }
 #endif //QT_NO_IM
 
@@ -1215,9 +1208,9 @@ bool QGraphicsScenePrivate::filterEvent(QGraphicsItem *item, QEvent *event)
     \internal
 
     This is the final dispatch point for any events from the scene to the
-    item. It filters the event first - if the filter returns true, the event
+    item. It filters the event first - if the filter returns \c true, the event
     is considered to have been eaten by the filter, and is therefore stopped
-    (the default filter returns false). Then/otherwise, if the item is
+    (the default filter returns \c false). Then/otherwise, if the item is
     enabled, the event is sent; otherwise it is stopped.
 */
 bool QGraphicsScenePrivate::sendEvent(QGraphicsItem *item, QEvent *event)
@@ -1475,6 +1468,8 @@ void QGraphicsScenePrivate::mousePressEventHandler(QGraphicsSceneMouseEvent *mou
 
         QGraphicsView *view = mouseEvent->widget() ? qobject_cast<QGraphicsView *>(mouseEvent->widget()->parentWidget()) : 0;
         bool dontClearSelection = view && view->dragMode() == QGraphicsView::ScrollHandDrag;
+        bool extendSelection = (mouseEvent->modifiers() & Qt::ControlModifier) != 0;
+        dontClearSelection |= extendSelection;
         if (!dontClearSelection) {
             // Clear the selection if the originating view isn't in scroll
             // hand drag mode. The view will clear the selection if no drag
@@ -1607,9 +1602,9 @@ void QGraphicsScenePrivate::updatePalette(const QPalette &palette)
     // whose parent is not a widget.
     foreach (QGraphicsItem *item, q->items()) {
         if (!item->parentItem()) {
-            // Resolvefont for an item is a noop operation, but
+            // ResolvePalette for an item is a noop operation, but
             // every item can be a widget, or can have a widget
-            // childre.
+            // children.
             item->d_ptr->resolvePalette(palette.resolve());
         }
     }
@@ -1810,10 +1805,6 @@ void QGraphicsScene::render(QPainter *painter, const QRectF &target, const QRect
                         .translate(-sourceRect.left(), -sourceRect.top());
     painter->setWorldTransform(painterTransform, true);
 
-    // Two unit vectors.
-    QLineF v1(0, 0, 1, 0);
-    QLineF v2(0, 0, 0, 1);
-
     // Generate the style options
     QStyleOptionGraphicsItem *styleOptionArray = new QStyleOptionGraphicsItem[numItems];
     for (int i = 0; i < numItems; ++i)
@@ -1992,7 +1983,7 @@ QList<QGraphicsItem *> QGraphicsScene::items(Qt::SortOrder order) const
     \brief Returns all visible items that, depending on \a mode, are
     either inside or intersect with the rectangle defined by \a x, \a y,
     \a w and \a h, in a list sorted using \a order. In this case, "visible" defines items for which:
-    isVisible() returns true, effectiveOpacity() returns a value greater than 0.0
+    isVisible() returns \c true, effectiveOpacity() returns a value greater than 0.0
     (which is fully transparent) and the parent item does not clip it.
 
     \a deviceTransform is the transformation that applies to the view, and needs to
@@ -2005,7 +1996,7 @@ QList<QGraphicsItem *> QGraphicsScene::items(Qt::SortOrder order) const
 
     \brief Returns all visible items that, depending on \a mode, are at
     the specified \a pos in a list sorted using \a order. In this case, "visible" defines items for which:
-    isVisible() returns true, effectiveOpacity() returns a value greater than 0.0
+    isVisible() returns \c true, effectiveOpacity() returns a value greater than 0.0
     (which is fully transparent) and the parent item does not clip it.
 
     The default value for \a mode is Qt::IntersectsItemShape; all items whose
@@ -2031,7 +2022,7 @@ QList<QGraphicsItem *> QGraphicsScene::items(const QPointF &pos, Qt::ItemSelecti
     \brief Returns all visible items that, depending on \a mode, are
     either inside or intersect with the specified \a rect, in a
     list sorted using \a order. In this case, "visible" defines items for which:
-    isVisible() returns true, effectiveOpacity() returns a value greater than 0.0
+    isVisible() returns \c true, effectiveOpacity() returns a value greater than 0.0
     (which is fully transparent) and the parent item does not clip it.
 
     The default value for \a mode is Qt::IntersectsItemShape; all items whose
@@ -2057,7 +2048,7 @@ QList<QGraphicsItem *> QGraphicsScene::items(const QRectF &rect, Qt::ItemSelecti
     \brief Returns all visible items that, depending on \a mode, are
     either inside or intersect with the specified \a polygon, in
     a list sorted using \a order. In this case, "visible" defines items for which:
-    isVisible() returns true, effectiveOpacity() returns a value greater than 0.0
+    isVisible() returns \c true, effectiveOpacity() returns a value greater than 0.0
     (which is fully transparent) and the parent item does not clip it.
 
     The default value for \a mode is Qt::IntersectsItemShape; all items whose
@@ -2083,7 +2074,7 @@ QList<QGraphicsItem *> QGraphicsScene::items(const QPolygonF &polygon, Qt::ItemS
     \brief Returns all visible items that, depending on \a mode, are
     either inside or intersect with the specified \a path, in a
     list sorted using \a order. In this case, "visible" defines items for which:
-    isVisible() returns true, effectiveOpacity() returns a value greater than 0.0
+    isVisible() returns \c true, effectiveOpacity() returns a value greater than 0.0
     (which is fully transparent) and the parent item does not clip it.
 
     The default value for \a mode is Qt::IntersectsItemShape; all items whose
@@ -2274,6 +2265,28 @@ void QGraphicsScene::setSelectionArea(const QPainterPath &path, const QTransform
 void QGraphicsScene::setSelectionArea(const QPainterPath &path, Qt::ItemSelectionMode mode,
                                       const QTransform &deviceTransform)
 {
+    setSelectionArea(path, Qt::ReplaceSelection, mode, deviceTransform);
+}
+
+/*!
+    \overload
+    \since 5.5
+
+    Sets the selection area to \a path using \a mode to determine if items are
+    included in the selection area.
+
+    \a deviceTransform is the transformation that applies to the view, and needs to
+    be provided if the scene contains items that ignore transformations.
+
+    \a selectionOperation determines what to do with the currently selected items.
+
+    \sa clearSelection(), selectionArea()
+*/
+void QGraphicsScene::setSelectionArea(const QPainterPath &path,
+                                      Qt::ItemSelectionOperation selectionOperation,
+                                      Qt::ItemSelectionMode mode,
+                                      const QTransform &deviceTransform)
+{
     Q_D(QGraphicsScene);
 
     // Note: with boolean path operations, we can improve performance here
@@ -2298,10 +2311,16 @@ void QGraphicsScene::setSelectionArea(const QPainterPath &path, Qt::ItemSelectio
         }
     }
 
-    // Unselect all items outside path.
-    foreach (QGraphicsItem *item, unselectItems) {
-        item->setSelected(false);
-        changed = true;
+    switch (selectionOperation) {
+    case Qt::ReplaceSelection:
+        // Deselect all items outside path.
+        foreach (QGraphicsItem *item, unselectItems) {
+            item->setSelected(false);
+            changed = true;
+        }
+        break;
+    default:
+        break;
     }
 
     // Reenable emitting selectionChanged() for individual items.
@@ -2630,7 +2649,7 @@ void QGraphicsScene::addItem(QGraphicsItem *item)
     Note that the item's geometry is provided in item coordinates, and its
     position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2662,7 +2681,7 @@ QGraphicsEllipseItem *QGraphicsScene::addEllipse(const QRectF &rect, const QPen 
     Note that the item's geometry is provided in item coordinates, and its
     position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2693,7 +2712,7 @@ QGraphicsLineItem *QGraphicsScene::addLine(const QLineF &line, const QPen &pen)
     Note that the item's geometry is provided in item coordinates, and its
     position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2716,7 +2735,7 @@ QGraphicsPathItem *QGraphicsScene::addPath(const QPainterPath &path, const QPen 
     Note that the item's geometry is provided in item coordinates, and its
     position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2738,7 +2757,7 @@ QGraphicsPixmapItem *QGraphicsScene::addPixmap(const QPixmap &pixmap)
     Note that the item's geometry is provided in item coordinates, and its
     position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2765,7 +2784,7 @@ QGraphicsPolygonItem *QGraphicsScene::addPolygon(const QPolygonF &polygon,
     100) is added, its top-left corner will be at (50, 50) relative to the
     origin in the items coordinate system.
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2796,7 +2815,7 @@ QGraphicsRectItem *QGraphicsScene::addRect(const QRectF &rect, const QPen &pen, 
 
     The item's position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2818,7 +2837,7 @@ QGraphicsTextItem *QGraphicsScene::addText(const QString &text, const QFont &fon
 
     The item's position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2840,7 +2859,7 @@ QGraphicsSimpleTextItem *QGraphicsScene::addSimpleText(const QString &text, cons
 
     The item's position is initialized to (0, 0).
 
-    If the item is visible (i.e., QGraphicsItem::isVisible() returns true),
+    If the item is visible (i.e., QGraphicsItem::isVisible() returns \c true),
     QGraphicsScene will emit changed() once control goes back to the event
     loop.
 
@@ -2927,7 +2946,7 @@ QGraphicsItem *QGraphicsScene::focusItem() const
     focusitem.
 
     If item is not 0, and the scene does not currently have focus (i.e.,
-    hasFocus() returns false), this function will call setFocus()
+    hasFocus() returns \c false), this function will call setFocus()
     automatically.
 
     \sa focusItem(), hasFocus(), setFocus()
@@ -2942,7 +2961,7 @@ void QGraphicsScene::setFocusItem(QGraphicsItem *item, Qt::FocusReason focusReas
 }
 
 /*!
-    Returns true if the scene has focus; otherwise returns false. If the scene
+    Returns \c true if the scene has focus; otherwise returns \c false. If the scene
     has focus, it will will forward key events from QKeyEvent to any item that
     has focus.
 
@@ -3002,7 +3021,7 @@ void QGraphicsScene::clearFocus()
     unchanged when the user clicks into the scene background or on an item
     that does not accept focus. Otherwise, focus will be cleared.
 
-    By default, this property is false.
+    By default, this property is \c false.
 
     Focus changes in response to a mouse press. You can reimplement
     mousePressEvent() in a subclass of QGraphicsScene to toggle this property
@@ -4117,7 +4136,7 @@ void QGraphicsScene::wheelEvent(QGraphicsSceneWheelEvent *wheelEvent)
                                                                 wheelEvent->scenePos(),
                                                                 wheelEvent->widget());
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // On Mac, ignore the event if the first item under the mouse is not the last opened
     // popup (or one of its descendant)
     if (!d->popupWidgets.isEmpty() && !wheelCandidates.isEmpty() && wheelCandidates.first() != d->popupWidgets.back() && !d->popupWidgets.back()->isAncestorOf(wheelCandidates.first())) {
@@ -4151,8 +4170,9 @@ void QGraphicsScene::wheelEvent(QGraphicsSceneWheelEvent *wheelEvent)
                                                             wheelEvent->widget()));
         wheelEvent->accept();
         bool isPanel = item->isPanel();
-        d->sendEvent(item, wheelEvent);
-        if (isPanel || wheelEvent->isAccepted())
+        bool ret = d->sendEvent(item, wheelEvent);
+
+        if (ret && (isPanel || wheelEvent->isAccepted()))
             break;
     }
 }
@@ -4315,7 +4335,7 @@ static void _q_paintIntoCache(QPixmap *pix, QGraphicsItem *item, const QRegion &
 }
 
 // Copied from qpaintengine_vg.cpp
-// Returns true for 90, 180, and 270 degree rotations.
+// Returns \c true for 90, 180, and 270 degree rotations.
 static inline bool transformIsSimple(const QTransform& transform)
 {
     QTransform::TransformationType type = transform.type();
@@ -4355,7 +4375,7 @@ void QGraphicsScenePrivate::drawItemHelper(QGraphicsItem *item, QPainter *painte
 
     // Render directly, using no cache.
     if (cacheMode == QGraphicsItem::NoCache
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
         || !X11->use_xrender
 #endif
         ) {
@@ -4719,19 +4739,40 @@ void QGraphicsScenePrivate::drawSubtreeRecursive(QGraphicsItem *item, QPainter *
         wasDirtyParentSceneTransform = true;
     }
 
-    const bool itemClipsChildrenToShape = (item->d_ptr->flags & QGraphicsItem::ItemClipsChildrenToShape);
+    const bool itemClipsChildrenToShape = (item->d_ptr->flags & QGraphicsItem::ItemClipsChildrenToShape
+                                           || item->d_ptr->flags & QGraphicsItem::ItemContainsChildrenInShape);
     bool drawItem = itemHasContents && !itemIsFullyTransparent;
-    if (drawItem) {
+    if (drawItem || minimumRenderSize > 0.0) {
         const QRectF brect = adjustedItemEffectiveBoundingRect(item);
         ENSURE_TRANSFORM_PTR
-        QRect viewBoundingRect = translateOnlyTransform ? brect.translated(transformPtr->dx(), transformPtr->dy()).toAlignedRect()
-                                                        : transformPtr->mapRect(brect).toAlignedRect();
-        viewBoundingRect.adjust(-int(rectAdjust), -int(rectAdjust), rectAdjust, rectAdjust);
-        if (widget)
-            item->d_ptr->paintedViewBoundingRects.insert(widget, viewBoundingRect);
-        drawItem = exposedRegion ? exposedRegion->intersects(viewBoundingRect)
-                                 : !viewBoundingRect.normalized().isEmpty();
-        if (!drawItem) {
+        QRectF preciseViewBoundingRect = translateOnlyTransform ? brect.translated(transformPtr->dx(), transformPtr->dy())
+                                                                : transformPtr->mapRect(brect);
+
+        bool itemIsTooSmallToRender = false;
+        if (minimumRenderSize > 0.0
+            && (preciseViewBoundingRect.width() < minimumRenderSize
+                || preciseViewBoundingRect.height() < minimumRenderSize)) {
+           itemIsTooSmallToRender = true;
+           drawItem = false;
+        }
+
+        bool itemIsOutsideVisibleRect = false;
+        if (drawItem) {
+            QRect viewBoundingRect = preciseViewBoundingRect.toAlignedRect();
+            viewBoundingRect.adjust(-int(rectAdjust), -int(rectAdjust), rectAdjust, rectAdjust);
+            if (widget)
+                item->d_ptr->paintedViewBoundingRects.insert(widget, viewBoundingRect);
+            drawItem = exposedRegion ? exposedRegion->intersects(viewBoundingRect)
+                                     : !viewBoundingRect.normalized().isEmpty();
+            itemIsOutsideVisibleRect = !drawItem;
+        }
+
+        if (itemIsTooSmallToRender || itemIsOutsideVisibleRect) {
+            // We cannot simply use !drawItem here. If we did it is possible
+            // to enter the outter if statement with drawItem == false and minimumRenderSize > 0
+            // and finally end up inside this inner if, even though none of the above two
+            // conditions are met. In that case we should not return from this function
+            // but call draw() instead.
             if (!itemHasChildren)
                 return;
             if (itemClipsChildrenToShape) {
@@ -4899,7 +4940,7 @@ void QGraphicsScenePrivate::draw(QGraphicsItem *item, QPainter *painter, const Q
         if (painterStateProtection || restorePainterClip)
             painter->restore();
 
-        static int drawRect = qgetenv("QT_DRAW_SCENE_ITEM_RECTS").toInt();
+        static int drawRect = qEnvironmentVariableIntValue("QT_DRAW_SCENE_ITEM_RECTS");
         if (drawRect) {
             QPen oldPen = painter->pen();
             QBrush oldBrush = painter->brush();
@@ -5203,7 +5244,8 @@ void QGraphicsScenePrivate::processDirtyItemsRecursive(QGraphicsItem *item, bool
 
     // Process children.
     if (itemHasChildren && item->d_ptr->dirtyChildren) {
-        const bool itemClipsChildrenToShape = item->d_ptr->flags & QGraphicsItem::ItemClipsChildrenToShape;
+        const bool itemClipsChildrenToShape = item->d_ptr->flags & QGraphicsItem::ItemClipsChildrenToShape
+                                              || item->d_ptr->flags & QGraphicsItem::ItemContainsChildrenInShape;
         // Items with no content are threated as 'dummy' items which means they are never drawn and
         // 'processed', so the painted view bounding rect is never up-to-date. This means that whenever
         // such an item changes geometry, its children have to take care of the update regardless
@@ -5334,7 +5376,7 @@ void QGraphicsScene::drawItems(QPainter *painter,
     \since 4.4
 
     Finds a new widget to give the keyboard focus to, as appropriate for Tab
-    and Shift+Tab, and returns true if it can find a new widget, or false if
+    and Shift+Tab, and returns \c true if it can find a new widget, or false if
     it cannot. If \a next is true, this function searches forward; if \a next
     is false, it searches backward.
 
@@ -5454,13 +5496,13 @@ bool QGraphicsScene::focusNextPrevChild(bool next)
 */
 
 /*!
-    \fn QGraphicsScene::focusChanged(QGraphicsItem *newFocusItem, QGraphicsItem *oldFocusItem, Qt::FocusReason reason)
+    \fn QGraphicsScene::focusItemChanged(QGraphicsItem *newFocusItem, QGraphicsItem *oldFocusItem, Qt::FocusReason reason)
 
     This signal is emitted by QGraphicsScene whenever focus changes in the
     scene (i.e., when an item gains or loses input focus, or when focus
     passes from one item to another). You can connect to this signal if you
     need to keep track of when other items gain input focus. It is
-    particularily useful for implementing virtual keyboards, input methods,
+    particularly useful for implementing virtual keyboards, input methods,
     and cursor items.
 
     \a oldFocusItem is a pointer to the item that previously had focus, or
@@ -5607,8 +5649,8 @@ void QGraphicsScene::setPalette(const QPalette &palette)
 /*!
     \since 4.6
 
-    Returns true if the scene is active (e.g., it's viewed by
-    at least one QGraphicsView that is active); otherwise returns false.
+    Returns \c true if the scene is active (e.g., it's viewed by
+    at least one QGraphicsView that is active); otherwise returns \c false.
 
     \sa QGraphicsItem::isActive(), QWidget::isActiveWindow()
 */
@@ -5730,6 +5772,49 @@ bool QGraphicsScene::sendEvent(QGraphicsItem *item, QEvent *event)
         return false;
     }
     return d->sendEvent(item, event);
+}
+
+/*!
+    \property QGraphicsScene::minimumRenderSize
+    \since 5.4
+    \brief the minimal view-transformed size an item must have to be drawn
+
+    When the scene is rendered, any item whose width or height, transformed
+    to the target view, is smaller that minimumRenderSize(), will not be
+    rendered. If an item is not rendered and it clips its children items
+    they will also not be rendered. Set this value to speed up rendering
+    of scenes with many objects rendered on a zoomed out view.
+
+    The default value is 0. If unset, or if set to 0 or a negative value,
+    all items will always be rendered.
+
+    For example, setting this property can be especially useful if a scene
+    is rendered by multiple views, one of which serves as an overview which
+    always displays all items. In scenes with many items, such a view will
+    use a high scaling factor so that all items can be shown. Due to the
+    scaling, smaller items will only make an insignificant contribution to
+    the final rendered scene. To avoid drawing these items and reduce the
+    time necessary to render the scene, you can call setMinimumRenderSize()
+    with a non-negative value.
+
+    \note Items that are not drawn as a result of being too small, are still
+    returned by methods such as items() and itemAt(), and participate in
+    collision detection and interactions. It is recommended that you set
+    minimumRenderSize() to a value less than or equal to 1 in order to
+    avoid large unrendered items that are interactive.
+
+    \sa QStyleOptionGraphicsItem::levelOfDetailFromTransform()
+*/
+qreal QGraphicsScene::minimumRenderSize() const
+{
+    Q_D(const QGraphicsScene);
+    return d->minimumRenderSize;
+}
+void QGraphicsScene::setMinimumRenderSize(qreal minSize)
+{
+    Q_D(QGraphicsScene);
+    d->minimumRenderSize = minSize;
+    update();
 }
 
 void QGraphicsScenePrivate::addView(QGraphicsView *view)

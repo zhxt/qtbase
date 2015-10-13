@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -112,18 +112,28 @@
     {ImageViewer}'s appearance.
 
     \snippet widgets/imageviewer/imageviewer.cpp 1
+
+    In the \c open() slot, we show a file dialog to the user. We compile
+    a list of mime types for use as a filter by querying QImageReader
+    for the available mime type names.
+
+    We show the file dialog until a valid file name is entered or
+    the user cancels.
+
+    The function \c loadFile() is used to load the image.
+
     \snippet widgets/imageviewer/imageviewer.cpp 2
 
-    In the \c open() slot, we show a file dialog to the user. The
-    easiest way to create a QFileDialog is to use the static
-    convenience functions. QFileDialog::getOpenFileName() returns an
-    existing file selected by the user. If the user presses \uicontrol
-    Cancel, QFileDialog returns an empty string.
+    In the \c loadFile() function, we instantiate a QImageReader
+    and enable automatic transformations by calling
+    QImageReader::setAutoTransform(). For files in JPEG format,
+    this ensures that portrait mode images of digital cameras are shown
+    correctly by applying the appropriate orientation read from the
+    EXIF meta data stored in the image file.
 
-    Unless the file name is a empty string, we check if the file's
-    format is an image format by constructing a QImage which tries to
-    load the image from the file. If the constructor returns a null
-    image, we use a QMessageBox to alert the user.
+    We then load the image using QImageReader::read(). If this returns
+    a null image, indicating that the file is not an image file,
+    we use a QMessageBox to alert the user.
 
     The QMessageBox class provides a modal dialog with a short
     message, an icon, and some buttons. As with QFileDialog the
@@ -135,7 +145,6 @@
     information message with an \uicontrol OK button (the default) is
     sufficient, since the message is part of a normal operation.
 
-    \snippet widgets/imageviewer/imageviewer.cpp 3
     \snippet widgets/imageviewer/imageviewer.cpp 4
 
     If the format is supported, we display the image in \c imageLabel

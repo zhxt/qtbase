@@ -20,6 +20,4 @@ x11 {
     LIBS += $$QMAKE_LIBS_X11
 }
 
-!wince*:win32: LIBS += -luser32 -lgdi32
-
-mac:CONFIG+=insignificant_test # QTBUG-25300, QTBUG-23695
+win32:!wince:!winrt: LIBS += -luser32 -lgdi32

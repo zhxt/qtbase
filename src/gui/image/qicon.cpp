@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +35,7 @@
 #include "qicon_p.h"
 #include "qiconengine.h"
 #include "qiconengineplugin.h"
+#include "qimagereader.h"
 #include "private/qfactoryloader_p.h"
 #include "private/qiconloader_p.h"
 #include "qpainter.h"
@@ -53,7 +46,7 @@
 #include "qdebug.h"
 #include "qpalette.h"
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 #include <private/qt_mac_p.h>
 #include <private/qt_cocoa_helpers_mac_p.h>
 #endif
@@ -181,7 +174,7 @@ void QPixmapIconEngine::paint(QPainter *painter, const QRect &rect, QIcon::Mode 
 {
     QSize pixmapSize = rect.size() * qt_effective_device_pixel_ratio(0);
     QPixmap px = pixmap(pixmapSize, mode, state);
-    painter->drawPixmap(rect, pixmap(pixmapSize, mode, state));
+    painter->drawPixmap(rect, px);
 }
 
 static inline int area(const QSize &s) { return s.width() * s.height(); }
@@ -362,41 +355,93 @@ void QPixmapIconEngine::addPixmap(const QPixmap &pixmap, QIcon::Mode mode, QIcon
     }
 }
 
-void QPixmapIconEngine::addFile(const QString &fileName, const QSize &_size, QIcon::Mode mode, QIcon::State state)
+// Read out original image depth as set by ICOReader
+static inline int origIcoDepth(const QImage &image)
 {
-    if (!fileName.isEmpty()) {
-        QSize size = _size;
-        QPixmap pixmap;
+    const QString s = image.text(QStringLiteral("_q_icoOrigDepth"));
+    return s.isEmpty() ? 32 : s.toInt();
+}
 
-        QString abs = fileName;
-        if (fileName.at(0) != QLatin1Char(':'))
-            abs = QFileInfo(fileName).absoluteFilePath();
+static inline int findBySize(const QList<QImage> &images, const QSize &size)
+{
+    for (int i = 0; i < images.size(); ++i) {
+        if (images.at(i).size() == size)
+            return i;
+    }
+    return -1;
+}
 
-        for (int i = 0; i < pixmaps.count(); ++i) {
-            if (pixmaps.at(i).mode == mode && pixmaps.at(i).state == state) {
-                QPixmapIconEngineEntry *pe = &pixmaps[i];
-                if(size == QSize()) {
-                    pixmap = QPixmap(abs);
-                    size = pixmap.size();
-                }
-                if (pe->size == QSize() && pe->pixmap.isNull()) {
-                    pe->pixmap = QPixmap(pe->fileName);
-                    // Reset the devicePixelRatio. The pixmap may be loaded from a @2x file,
-                    // but be used as a 1x pixmap by QIcon.
-                    pe->pixmap.setDevicePixelRatio(1.0);
-                    pe->size = pe->pixmap.size();
-                }
-                if(pe->size == size) {
-                    pe->pixmap = pixmap;
-                    pe->fileName = abs;
-                    return;
-                }
+// Convenience class providing a bool read() function.
+namespace {
+class ImageReader
+{
+public:
+    ImageReader(const QString &fileName) : m_reader(fileName), m_atEnd(false) {}
+
+    QByteArray format() const { return m_reader.format(); }
+
+    bool read(QImage *image)
+    {
+        if (m_atEnd)
+            return false;
+        *image = m_reader.read();
+        if (!image->size().isValid()) {
+            m_atEnd = true;
+            return false;
+        }
+        m_atEnd = !m_reader.jumpToNextImage();
+        return true;
+    }
+
+private:
+    QImageReader m_reader;
+    bool m_atEnd;
+};
+} // namespace
+
+void QPixmapIconEngine::addFile(const QString &fileName, const QSize &size, QIcon::Mode mode, QIcon::State state)
+{
+    if (fileName.isEmpty())
+        return;
+    const QString abs = fileName.startsWith(QLatin1Char(':')) ? fileName : QFileInfo(fileName).absoluteFilePath();
+    const bool ignoreSize = !size.isValid();
+    ImageReader imageReader(abs);
+    const QByteArray format = imageReader.format();
+    if (format.isEmpty()) // Device failed to open or unsupported format.
+        return;
+    QImage image;
+    if (format != "ico") {
+        if (ignoreSize) { // No size specified: Add all images.
+            while (imageReader.read(&image))
+                pixmaps += QPixmapIconEngineEntry(abs, image, mode, state);
+        } else {
+            // Try to match size. If that fails, add a placeholder with the filename and empty pixmap for the size.
+            while (imageReader.read(&image) && image.size() != size) {}
+            pixmaps += image.size() == size ?
+                QPixmapIconEngineEntry(abs, image, mode, state) : QPixmapIconEngineEntry(abs, size, mode, state);
+        }
+        return;
+    }
+    // Special case for reading Windows ".ico" files. Historically (QTBUG-39287),
+    // these files may contain low-resolution images. As this information is lost,
+    // ICOReader sets the original format as an image text key value. Read all matching
+    // images into a list trying to find the highest quality per size.
+    QList<QImage> icoImages;
+    while (imageReader.read(&image)) {
+        if (ignoreSize || image.size() == size) {
+            const int position = findBySize(icoImages, image.size());
+            if (position >= 0) { // Higher quality available? -> replace.
+                if (origIcoDepth(image) > origIcoDepth(icoImages.at(position)))
+                    icoImages[position] = image;
+            } else {
+                icoImages.append(image);
             }
         }
-        QPixmapIconEngineEntry e(abs, size, mode, state);
-        e.pixmap = pixmap;
-        pixmaps += e;
     }
+    foreach (const QImage &i, icoImages)
+        pixmaps += QPixmapIconEngineEntry(abs, i, mode, state);
+    if (icoImages.isEmpty() && !ignoreSize) // Add placeholder with the filename and empty pixmap for the size.
+        pixmaps += QPixmapIconEngineEntry(abs, size, mode, state);
 }
 
 QString QPixmapIconEngine::key() const
@@ -561,7 +606,7 @@ QFactoryLoader *qt_iconEngineFactoryLoader()
 /*!
   Constructs a null icon.
 */
-QIcon::QIcon()
+QIcon::QIcon() Q_DECL_NOEXCEPT
     : d(0)
 {
 }
@@ -584,6 +629,13 @@ QIcon::QIcon(const QIcon &other)
     if (d)
         d->ref.ref();
 }
+
+/*!
+  \fn QIcon::QIcon(QIcon &&other)
+
+  Move-constructs a QIcon instance, making it point to the same object
+  that \a other was pointing to.
+*/
 
 /*!
     Constructs an icon from the file with the given \a fileName. The
@@ -642,6 +694,14 @@ QIcon &QIcon::operator=(const QIcon &other)
     d = other.d;
     return *this;
 }
+
+/*!
+    \fn QIcon &QIcon::operator=(QIcon &&other)
+
+    Move-assigns \a other to this QIcon instance.
+
+    \since 5.2
+*/
 
 /*!
     \fn void QIcon::swap(QIcon &other)
@@ -851,7 +911,7 @@ void QIcon::paint(QPainter *painter, const QRect &rect, Qt::Alignment alignment,
 */
 
 /*!
-    Returns true if the icon is empty; otherwise returns false.
+    Returns \c true if the icon is empty; otherwise returns \c false.
 
     An icon is empty if it has neither a pixmap nor a filename.
 
@@ -928,10 +988,16 @@ void QIcon::addPixmap(const QPixmap &pixmap, Mode mode, State state)
     QImageWriter::supportedImageFormats() functions to retrieve a
     complete list of the supported file formats.
 
-    Note: When you add a non-empty filename to a QIcon, the icon becomes
+    If a high resolution version of the image exists (identified by
+    the suffix \c @2x on the base name), it is automatically loaded
+    and added with the \e{device pixel ratio} set to a value of 2.
+    This can be disabled by setting the environment variable
+    \c QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING (see QImageReader).
+
+    \note When you add a non-empty filename to a QIcon, the icon becomes
     non-null, even if the file doesn't exist or points to a corrupt file.
 
-    \sa addPixmap()
+    \sa addPixmap(), QPixmap::devicePixelRatio()
  */
 void QIcon::addFile(const QString &fileName, const QSize &size, Mode mode, State state)
 {
@@ -965,14 +1031,15 @@ void QIcon::addFile(const QString &fileName, const QSize &size, Mode mode, State
     d->engine->addFile(fileName, size, mode, state);
 
     // Check if a "@2x" file exists and add it.
-    if (qApp->devicePixelRatio() > 1.0) {
+    static bool disable2xImageLoading = !qEnvironmentVariableIsEmpty("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING");
+    if (!disable2xImageLoading && qApp->devicePixelRatio() > 1.0) {
+        QString at2xfileName = fileName;
         int dotIndex = fileName.lastIndexOf(QLatin1Char('.'));
-        if (dotIndex != -1) {
-            QString at2xfileName = fileName;
-            at2xfileName.insert(dotIndex, QStringLiteral("@2x"));
-            if (QFile::exists(at2xfileName))
-                d->engine->addFile(at2xfileName, size, mode, state);
-        }
+        if (dotIndex == -1) /* no dot */
+            dotIndex = fileName.size(); /* append */
+        at2xfileName.insert(dotIndex, QStringLiteral("@2x"));
+        if (QFile::exists(at2xfileName))
+            d->engine->addFile(at2xfileName, size, mode, state);
     }
 }
 
@@ -1068,7 +1135,6 @@ void QIcon::setThemeName(const QString &name)
 */
 QString QIcon::themeName()
 {
-    QIconLoader::instance()->ensureInitialized();
     return QIconLoader::instance()->themeName();
 }
 
@@ -1111,11 +1177,12 @@ QIcon QIcon::fromTheme(const QString &name, const QIcon &fallback)
         icon = *qtIconCache()->object(name);
     } else {
         QPlatformTheme * const platformTheme = QGuiApplicationPrivate::platformTheme();
-        QIconEngine * const engine = platformTheme ? platformTheme->createIconEngine(name)
+        bool hasUserTheme = QIconLoader::instance()->hasUserTheme();
+        QIconEngine * const engine = (platformTheme && !hasUserTheme) ? platformTheme->createIconEngine(name)
                                                    : new QIconLoaderEngine(name);
         QIcon *cachedIcon  = new QIcon(engine);
-        qtIconCache()->insert(name, cachedIcon);
         icon = *cachedIcon;
+        qtIconCache()->insert(name, cachedIcon);
     }
 
     // Note the qapp check is to allow lazy loading of static icons
@@ -1129,8 +1196,8 @@ QIcon QIcon::fromTheme(const QString &name, const QIcon &fallback)
 /*!
     \since 4.6
 
-    Returns true if there is an icon available for \a name in the
-    current icon theme, otherwise returns false.
+    Returns \c true if there is an icon available for \a name in the
+    current icon theme, otherwise returns \c false.
 
     \sa themeSearchPaths(), fromTheme(), setThemeName()
 */
@@ -1138,7 +1205,7 @@ bool QIcon::hasThemeIcon(const QString &name)
 {
     QIcon icon = fromTheme(name);
 
-    return !icon.isNull();
+    return icon.name() == name;
 }
 
 
@@ -1260,8 +1327,20 @@ QDataStream &operator>>(QDataStream &s, QIcon &icon)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QIcon &i)
 {
-    dbg.nospace() << "QIcon(" << i.name() << ')';
-    return dbg.space();
+    QDebugStateSaver saver(dbg);
+    dbg.resetFormat();
+    dbg.nospace();
+    dbg << "QIcon(";
+    if (i.isNull()) {
+        dbg << "null";
+    } else {
+        if (!i.name().isEmpty())
+            dbg << i.name() << ',';
+        dbg << "availableSizes[normal,Off]=" << i.availableSizes()
+            << ",cacheKey=" << showbase << hex << i.cacheKey() << dec << noshowbase;
+    }
+    dbg << ')';
+    return dbg;
 }
 #endif
 

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -108,6 +100,7 @@ struct tm {
 #endif // _TM_DEFINED
 
 FILETIME qt_wince_time_tToFt( time_t tt );
+time_t qt_wince_ftToTime_t( const FILETIME ft );
 
 // File I/O ---------------------------------------------------------
 #define _O_RDONLY       0x0001
@@ -215,7 +208,7 @@ int qt_wince_SetErrorMode(int);
 bool qt_wince__chmod(const char *file, int mode);
 bool qt_wince__wchmod(const wchar_t *file, int mode);
 
-#pragma warning(disable: 4273)
+QT_WARNING_DISABLE_MSVC(4273)
 HANDLE qt_wince_CreateFileA(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
 
 // Printer ----------------------------------------------------------
@@ -433,6 +426,7 @@ generate_inline_return_func4(getenv_s, errno_t, size_t *, char *, size_t, const 
 generate_inline_return_func2(_putenv_s, errno_t, const char *, const char *)
 generate_inline_return_func0(_getpid, int)
 generate_inline_return_func1(time_tToFt, FILETIME, time_t)
+generate_inline_return_func1(ftToTime_t, time_t, FILETIME)
 generate_inline_return_func0(_getdrive, int)
 generate_inline_return_func2(_waccess, int, const wchar_t *, int)
 generate_inline_return_func3(_wopen, int, const wchar_t *, int, int)

@@ -8,8 +8,24 @@
 #
 # We mean it.
 
+message("CMAKE_VERSION: ${CMAKE_VERSION}")
+message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+message("CMAKE_MODULES_UNDER_TEST: ${CMAKE_MODULES_UNDER_TEST}")
+foreach(_mod ${CMAKE_MODULES_UNDER_TEST})
+    message("CMAKE_${_mod}_MODULE_MAJOR_VERSION: ${CMAKE_${_mod}_MODULE_MAJOR_VERSION}")
+    message("CMAKE_${_mod}_MODULE_MINOR_VERSION: ${CMAKE_${_mod}_MODULE_MINOR_VERSION}")
+    message("CMAKE_${_mod}_MODULE_PATCH_VERSION: ${CMAKE_${_mod}_MODULE_PATCH_VERSION}")
+endforeach()
 
 set(BUILD_OPTIONS_LIST)
+
+if (CMAKE_C_COMPILER)
+  list(APPEND BUILD_OPTIONS_LIST "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}")
+endif()
+
+if (CMAKE_CXX_COMPILER)
+  list(APPEND BUILD_OPTIONS_LIST "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
+endif()
 
 if (CMAKE_BUILD_TYPE)
   list(APPEND BUILD_OPTIONS_LIST "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
@@ -39,6 +55,7 @@ foreach(module ${CMAKE_MODULES_UNDER_TEST})
 endforeach()
 
 macro(expect_pass _dir)
+  cmake_parse_arguments(_ARGS "" "BINARY" "" ${ARGN})
   string(REPLACE "(" "_" testname "${_dir}")
   string(REPLACE ")" "_" testname "${testname}")
   add_test(${testname} ${CMAKE_CTEST_COMMAND}
@@ -50,6 +67,7 @@ macro(expect_pass _dir)
     --build-makeprogram ${CMAKE_MAKE_PROGRAM}
     --build-project ${_dir}
     --build-options "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" ${BUILD_OPTIONS_LIST}
+    --test-command ${_ARGS_BINARY}
   )
 endmacro()
 

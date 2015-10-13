@@ -1,21 +1,31 @@
 ----------------------------------------------------------------------------
 --
--- Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
--- Contact: http://www.qt-project.org/legal
+-- Copyright (C) 2015 The Qt Company Ltd.
+-- Contact: http://www.qt.io/licensing/
 --
 -- This file is part of the QtQml module of the Qt Toolkit.
 --
--- $QT_BEGIN_LICENSE:LGPL-ONLY$
--- GNU Lesser General Public License Usage
--- This file may be used under the terms of the GNU Lesser
--- General Public License version 2.1 as published by the Free Software
--- Foundation and appearing in the file LICENSE.LGPL included in the
--- packaging of this file.  Please review the following information to
--- ensure the GNU Lesser General Public License version 2.1 requirements
--- will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+-- $QT_BEGIN_LICENSE:LGPL21$
+-- Commercial License Usage
+-- Licensees holding valid commercial Qt licenses may use this file in
+-- accordance with the commercial license agreement provided with the
+-- Software or, alternatively, in accordance with the terms contained in
+-- a written agreement between you and The Qt Company. For licensing terms
+-- and conditions see http://www.qt.io/terms-conditions. For further
+-- information use the contact form at http://www.qt.io/contact-us.
 --
--- If you have questions regarding the use of this file, please contact
--- us via http://www.qt-project.org/.
+-- GNU Lesser General Public License Usage
+-- Alternatively, this file may be used under the terms of the GNU Lesser
+-- General Public License version 2.1 or version 3 as published by the Free
+-- Software Foundation and appearing in the file LICENSE.LGPLv21 and
+-- LICENSE.LGPLv3 included in the packaging of this file. Please review the
+-- following information to ensure the GNU Lesser General Public License
+-- requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+-- http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+--
+-- As a special exception, The Qt Company gives you certain additional
+-- rights. These rights are described in The Qt Company LGPL Exception
+-- version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 --
 -- $QT_END_LICENSE$
 --
@@ -65,6 +75,7 @@
 --- context keywords.
 %token T_PUBLIC "public"
 %token T_IMPORT "import"
+%token T_PRAGMA "pragma"
 %token T_AS "as"
 %token T_ON "on"
 %token T_GET "get"
@@ -88,40 +99,32 @@
 
 /./****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtQml module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -141,40 +144,32 @@
 
 /:/****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtQml module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -253,7 +248,8 @@ public:
       AST::VariableDeclarationList *VariableDeclarationList;
 
       AST::UiProgram *UiProgram;
-      AST::UiImportList *UiImportList;
+      AST::UiHeaderItemList *UiHeaderItemList;
+      AST::UiPragma *UiPragma;
       AST::UiImport *UiImport;
       AST::UiParameterList *UiParameterList;
       AST::UiPublicMember *UiPublicMember;
@@ -266,6 +262,7 @@ public:
       AST::UiObjectMemberList *UiObjectMemberList;
       AST::UiArrayMemberList *UiArrayMemberList;
       AST::UiQualifiedId *UiQualifiedId;
+      AST::UiQualifiedPragmaId *UiQualifiedPragmaId;
     };
 
 public:
@@ -316,7 +313,7 @@ public:
     inline DiagnosticMessage diagnosticMessage() const
     {
         foreach (const DiagnosticMessage &d, diagnostic_messages) {
-            if (! d.kind == DiagnosticMessage::Warning)
+            if (d.kind != DiagnosticMessage::Warning)
                 return d;
         }
 
@@ -347,6 +344,7 @@ protected:
     { return location_stack [tos + index - 1]; }
 
     AST::UiQualifiedId *reparseAsQualifiedId(AST::ExpressionNode *expr);
+    AST::UiQualifiedPragmaId *reparseAsQualifiedPragmaId(AST::ExpressionNode *expr);
 
 protected:
     Engine *driver;
@@ -486,6 +484,19 @@ AST::UiQualifiedId *Parser::reparseAsQualifiedId(AST::ExpressionNode *expr)
     return 0;
 }
 
+AST::UiQualifiedPragmaId *Parser::reparseAsQualifiedPragmaId(AST::ExpressionNode *expr)
+{
+    if (AST::IdentifierExpression *idExpr = AST::cast<AST::IdentifierExpression *>(expr)) {
+        AST::UiQualifiedPragmaId *q = new (pool) AST::UiQualifiedPragmaId(idExpr->name);
+        q->identifierToken = idExpr->identifierToken;
+
+        return q->finish();
+    }
+
+    return 0;
+}
+
+
 bool Parser::parse(int startToken)
 {
     Lexer *lexer = driver->lexer();
@@ -594,37 +605,61 @@ case $rule_number: {
 } break;
 ./
 
-UiProgram: UiImportListOpt UiRootMember ;
+UiProgram: UiHeaderItemListOpt UiRootMember;
 /.
 case $rule_number: {
-  sym(1).UiProgram = new (pool) AST::UiProgram(sym(1).UiImportList,
+  sym(1).UiProgram = new (pool) AST::UiProgram(sym(1).UiHeaderItemList,
         sym(2).UiObjectMemberList->finish());
 } break;
 ./
 
-UiImportListOpt: Empty ;
-UiImportListOpt: UiImportList ;
+UiHeaderItemListOpt: Empty ;
+UiHeaderItemListOpt: UiHeaderItemList ;
 /.
 case $rule_number: {
-    sym(1).Node = sym(1).UiImportList->finish();
+    sym(1).Node = sym(1).UiHeaderItemList->finish();
 } break;
 ./
 
-UiImportList: UiImport ;
+UiHeaderItemList: UiPragma ;
 /.
 case $rule_number: {
-    sym(1).Node = new (pool) AST::UiImportList(sym(1).UiImport);
+    sym(1).Node = new (pool) AST::UiHeaderItemList(sym(1).UiPragma);
 } break;
 ./
 
-UiImportList: UiImportList UiImport ;
+UiHeaderItemList: UiImport ;
 /.
 case $rule_number: {
-    sym(1).Node = new (pool) AST::UiImportList(sym(1).UiImportList, sym(2).UiImport);
+    sym(1).Node = new (pool) AST::UiHeaderItemList(sym(1).UiImport);
 } break;
 ./
+
+UiHeaderItemList: UiHeaderItemList UiPragma ;
+/.
+case $rule_number: {
+    sym(1).Node = new (pool) AST::UiHeaderItemList(sym(1).UiHeaderItemList, sym(2).UiPragma);
+} break;
+./
+
+UiHeaderItemList: UiHeaderItemList UiImport ;
+/.
+case $rule_number: {
+    sym(1).Node = new (pool) AST::UiHeaderItemList(sym(1).UiHeaderItemList, sym(2).UiImport);
+} break;
+./
+
+PragmaId: MemberExpression ;
 
 ImportId: MemberExpression ;
+
+UiPragma: UiPragmaHead T_AUTOMATIC_SEMICOLON ;
+UiPragma: UiPragmaHead T_SEMICOLON ;
+/.
+case $rule_number: {
+    sym(1).UiPragma->semicolonToken = loc(2);
+} break;
+./
 
 UiImport: UiImportHead T_AUTOMATIC_SEMICOLON ;
 UiImport: UiImportHead T_SEMICOLON ;
@@ -663,6 +698,28 @@ case $rule_number: {
     sym(1).UiImport->importIdToken = loc(3);
     sym(1).UiImport->importId = stringRef(3);
     sym(1).UiImport->semicolonToken = loc(4);
+} break;
+./
+
+UiPragmaHead: T_PRAGMA PragmaId ;
+/.
+case $rule_number: {
+    AST::UiPragma *node = 0;
+
+    if (AST::UiQualifiedPragmaId *qualifiedId = reparseAsQualifiedPragmaId(sym(2).Expression)) {
+        node = new (pool) AST::UiPragma(qualifiedId);
+    }
+
+    sym(1).Node = node;
+
+    if (node) {
+        node->pragmaToken = loc(1);
+    } else {
+       diagnostic_messages.append(DiagnosticMessage(DiagnosticMessage::Error, loc(1),
+         QLatin1String("Expected a qualified name id")));
+
+        return false; // ### remove me
+    }
 } break;
 ./
 
@@ -1027,6 +1084,31 @@ case $rule_number: {
 }   break;
 ./
 
+UiObjectMember: T_READONLY T_PROPERTY UiPropertyType JsIdentifier T_COLON UiQualifiedId UiObjectInitializer ;
+/.
+case $rule_number: {
+    AST::UiPublicMember *node = new (pool) AST::UiPublicMember(stringRef(3), stringRef(4));
+    node->isReadonlyMember = true;
+    node->readonlyToken = loc(1);
+    node->propertyToken = loc(2);
+    node->typeToken = loc(3);
+    node->identifierToken = loc(4);
+    node->semicolonToken = loc(5); // insert a fake ';' before ':'
+
+    AST::UiQualifiedId *propertyName = new (pool) AST::UiQualifiedId(stringRef(4));
+    propertyName->identifierToken = loc(4);
+    propertyName->next = 0;
+
+    AST::UiObjectBinding *binding = new (pool) AST::UiObjectBinding(
+      propertyName, sym(6).UiQualifiedId, sym(7).UiObjectInitializer);
+    binding->colonToken = loc(5);
+
+    node->binding = binding;
+
+    sym(1).Node = node;
+}   break;
+./
+
 UiObjectMember: FunctionDeclaration ;
 /.
 case $rule_number: {
@@ -1260,6 +1342,7 @@ case $rule_number: {
   sym(1).Node = node;
 } break;
 ./
+
 
 UiQualifiedId: MemberExpression ;
 /.

@@ -11,8 +11,10 @@
     "QtDBus" => "$basedir/src/dbus",
     "QtConcurrent" => "$basedir/src/concurrent",
     "QtPlatformSupport" => "$basedir/src/platformsupport",
+    "QtPlatformHeaders" => "$basedir/src/platformheaders",
     "QtANGLE/KHR" => "!$basedir/src/3rdparty/angle/include/KHR",
     "QtANGLE/GLES2" => "!$basedir/src/3rdparty/angle/include/GLES2",
+    "QtANGLE/GLES3" => "!$basedir/src/3rdparty/angle/include/GLES3",
     "QtANGLE/EGL" => "!$basedir/src/3rdparty/angle/include/EGL",
     "QtZlib" => "!$basedir/src/3rdparty/zlib",
     "QtOpenGLExtensions" => "$basedir/src/openglextensions",
@@ -24,6 +26,7 @@
 %classnames = (
     "qglobal.h" => "QtGlobal",
     "qendian.h" => "QtEndian",
+    "qconfig.h" => "QtConfig",
     "qplugin.h" => "QtPlugin",
     "qalgorithms.h" => "QtAlgorithms",
     "qcontainerfwd.h" => "QtContainerFwd",
@@ -31,6 +34,8 @@
     "qevent.h" => "QtEvents",
     "qnamespace.h" => "Qt",
     "qnumeric.h" => "QtNumeric",
+    "qvariant.h" => "QVariantHash,QVariantList,QVariantMap",
+    "qgl.h" => "QGL",
     "qsql.h" => "QSql",
     "qssl.h" => "QSsl",
     "qtest.h" => "QTest",
@@ -44,13 +49,6 @@
         "QGenericPluginFactory" => "QtGui/QGenericPluginFactory"
     }
 );
-%explicitheaders = (
-    "QtCore" => {
-        "QVariantHash" => "qvariant.h",
-        "QVariantList" => "qvariant.h",
-        "QVariantMap" => "qvariant.h",
-    }
-);
 
 @qpa_headers = ( qr/^qplatform/, qr/^qwindowsystem/ );
 my @angle_headers = ('egl.h', 'eglext.h', 'eglplatform.h', 'gl2.h', 'gl2ext.h', 'gl2platform.h', 'ShaderLang.h', 'khrplatform.h');
@@ -59,7 +57,7 @@ my @zlib_headers = ( "zconf.h", "zlib.h" );
 @ignore_headers = ( @internal_zlib_headers );
 @ignore_for_include_check = ( "qsystemdetection.h", "qcompilerdetection.h", "qprocessordetection.h", @zlib_headers, @angle_headers);
 @ignore_for_qt_begin_namespace_check = ( "qconfig.h", "qconfig-dist.h", "qconfig-large.h", "qconfig-medium.h", "qconfig-minimal.h", "qconfig-small.h", "qfeatures.h", "qatomic_arch.h", "qatomic_windowsce.h", "qt_windows.h", "qatomic_macosx.h", @zlib_headers, @angle_headers);
-%inject_headers = ( "$basedir/src/corelib/global" => [ "qconfig.h" ] );
+%inject_headers = ( "$basedir/src/corelib/global" => [ "qconfig.h", "qfeatures.h" ] );
 # Module dependencies.
 # Every module that is required to build this module should have one entry.
 # Each of the module version specifiers can take one of the following values:

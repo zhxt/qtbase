@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -85,6 +77,7 @@ public:
     void setGeometry(const QRect &r) { item_->setGeometry(r); }
     Qt::Alignment alignment() const { return item_->alignment(); }
     QLayoutItem *item() { return item_; }
+    void setItem(QLayoutItem *newitem) { item_ = newitem; }
     QLayoutItem *takeItem() { QLayoutItem *i = item_; item_ = 0; return i; }
 
     int hStretch() { return item_->widget() ?
@@ -170,6 +163,18 @@ public:
             }
         }
         return 0;
+    }
+    QLayoutItem* replaceAt(int index, QLayoutItem *newitem) Q_DECL_OVERRIDE
+    {
+        if (!newitem)
+            return 0;
+        QLayoutItem *item = 0;
+        QGridBox *b = things.value(index);
+        if (b) {
+            item = b->takeItem();
+            b->setItem(newitem);
+        }
+        return item;
     }
 
     void getItemPosition(int index, int *row, int *column, int *rowSpan, int *columnSpan) const {
@@ -560,7 +565,7 @@ void QGridLayoutPrivate::add(QGridBox *box, int row1, int row2, int col1, int co
         add(box, row1, col1);
         return;
     }
-    expand(row2 + 1, col2 + 1);
+    expand(qMax(row1, row2) + 1, qMax(col1, col2) + 1);
     box->row = row1;
     box->col = col1;
 
@@ -1270,7 +1275,7 @@ QSize QGridLayout::maximumSize() const
 */
 bool QGridLayout::hasHeightForWidth() const
 {
-    return ((QGridLayout*)this)->d_func()->hasHeightForWidth(horizontalSpacing(), verticalSpacing());
+    return const_cast<QGridLayout*>(this)->d_func()->hasHeightForWidth(horizontalSpacing(), verticalSpacing());
 }
 
 /*!
@@ -1417,20 +1422,6 @@ void QGridLayout::addItem(QLayoutItem *item, int row, int column, int rowSpan, i
     invalidate();
 }
 
-/*
-  Returns true if the widget \a w can be added to the layout \a l;
-  otherwise returns false.
-*/
-static bool checkWidget(QLayout *l, QWidget *w)
-{
-    if (!w) {
-        qWarning("QLayout: Cannot add null widget to %s/%s", l->metaObject()->className(),
-                  l->objectName().toLocal8Bit().data());
-        return false;
-    }
-    return true;
-}
-
 /*!
     Adds the given \a widget to the cell grid at \a row, \a column. The
     top-left position is (0, 0) by default.
@@ -1441,7 +1432,8 @@ static bool checkWidget(QLayout *l, QWidget *w)
 */
 void QGridLayout::addWidget(QWidget *widget, int row, int column, Qt::Alignment alignment)
 {
-    if (!checkWidget(this, widget))
+    Q_D(QGridLayout);
+    if (!d->checkWidget(widget))
         return;
     if (row < 0 || column < 0) {
         qWarning("QGridLayout: Cannot add %s/%s to %s/%s at row %d column %d",
@@ -1470,7 +1462,7 @@ void QGridLayout::addWidget(QWidget *widget, int fromRow, int fromColumn,
                             int rowSpan, int columnSpan, Qt::Alignment alignment)
 {
     Q_D(QGridLayout);
-    if (!checkWidget(this, widget))
+    if (!d->checkWidget(widget))
         return;
     int toRow = (rowSpan < 0) ? -1 : fromRow + rowSpan - 1;
     int toColumn = (columnSpan < 0) ? -1 : fromColumn + columnSpan - 1;
@@ -1505,6 +1497,8 @@ void QGridLayout::addWidget(QWidget *widget, int fromRow, int fromColumn,
 void QGridLayout::addLayout(QLayout *layout, int row, int column, Qt::Alignment alignment)
 {
     Q_D(QGridLayout);
+    if (!d->checkLayout(layout))
+        return;
     if (!adoptLayout(layout))
         return;
     QGridBox *b = new QGridBox(layout);
@@ -1525,6 +1519,8 @@ void QGridLayout::addLayout(QLayout *layout, int row, int column,
                                       int rowSpan, int columnSpan, Qt::Alignment alignment)
 {
     Q_D(QGridLayout);
+    if (!d->checkLayout(layout))
+        return;
     if (!adoptLayout(layout))
         return;
     QGridBox *b = new QGridBox(layout);

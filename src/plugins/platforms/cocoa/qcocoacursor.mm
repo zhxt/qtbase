@@ -1,45 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qcocoacursor.h"
+#include "qcocoawindow.h"
 #include "qcocoahelpers.h"
 #include "qcocoaautoreleasepool.h"
 
@@ -63,65 +56,10 @@ QCocoaCursor::~QCocoaCursor()
 
 void QCocoaCursor::changeCursor(QCursor *cursor, QWindow *window)
 {
-    Q_UNUSED(window);
+    NSCursor * cocoaCursor = convertCursor(cursor);
 
-    const Qt::CursorShape newShape = cursor ? cursor->shape() : Qt::ArrowCursor;
-    // Check for a suitable built-in NSCursor first:
-    switch (newShape) {
-    case Qt::ArrowCursor:
-        [[NSCursor arrowCursor] set];
-        break;
-    case Qt::CrossCursor:
-        [[NSCursor crosshairCursor] set];
-        break;
-    case Qt::IBeamCursor:
-        [[NSCursor IBeamCursor] set];
-        break;
-    case Qt::WhatsThisCursor: //for now just use the pointing hand
-    case Qt::PointingHandCursor:
-        [[NSCursor pointingHandCursor] set];
-        break;
-    case Qt::SplitVCursor:
-        [[NSCursor resizeUpDownCursor] set];
-        break;
-    case Qt::SplitHCursor:
-        [[NSCursor resizeLeftRightCursor] set];
-        break;
-    case Qt::OpenHandCursor:
-        [[NSCursor openHandCursor] set];
-        break;
-    case Qt::ClosedHandCursor:
-        [[NSCursor closedHandCursor] set];
-        break;
-    case Qt::DragMoveCursor:
-        [[NSCursor crosshairCursor] set];
-        break;
-    case Qt::DragCopyCursor:
-        [[NSCursor crosshairCursor] set];
-        break;
-    case Qt::DragLinkCursor:
-        [[NSCursor dragLinkCursor] set];
-        break;
-    default : {
-        // No suitable OS cursor exist, use cursors provided
-        // by Qt for the rest. Check for a cached cursor:
-        NSCursor *cocoaCursor = m_cursors.value(newShape);
-        if (cocoaCursor && cursor->shape() == Qt::BitmapCursor) {
-            [cocoaCursor release];
-            cocoaCursor = 0;
-        }
-        if (cocoaCursor == 0) {
-            cocoaCursor = createCursorData(cursor);
-            if (cocoaCursor == 0) {
-                [[NSCursor arrowCursor] set];
-                return;
-            }
-            m_cursors.insert(newShape, cocoaCursor);
-        }
-
-        [cocoaCursor set];
-        break; }
-    }
+    if (QPlatformWindow * platformWindow = window->handle())
+        static_cast<QCocoaWindow *>(platformWindow)->setWindowCursor(cocoaCursor);
 }
 
 QPoint QCocoaCursor::pos() const
@@ -135,10 +73,73 @@ void QCocoaCursor::setPos(const QPoint &position)
     pos.x = position.x();
     pos.y = position.y();
 
-    CGEventRef e = CGEventCreateMouseEvent(0, kCGEventMouseMoved, pos, 0);
+    CGEventRef e = CGEventCreateMouseEvent(0, kCGEventMouseMoved, pos, kCGMouseButtonLeft);
     CGEventPost(kCGHIDEventTap, e);
     CFRelease(e);
 }
+
+NSCursor *QCocoaCursor::convertCursor(QCursor * cursor)
+{
+    const Qt::CursorShape newShape = cursor ? cursor->shape() : Qt::ArrowCursor;
+    NSCursor *cocoaCursor;
+
+    // Check for a suitable built-in NSCursor first:
+    switch (newShape) {
+    case Qt::ArrowCursor:
+        cocoaCursor= [NSCursor arrowCursor];
+        break;
+    case Qt::CrossCursor:
+        cocoaCursor = [NSCursor crosshairCursor];
+        break;
+    case Qt::IBeamCursor:
+        cocoaCursor = [NSCursor IBeamCursor];
+        break;
+    case Qt::WhatsThisCursor: //for now just use the pointing hand
+    case Qt::PointingHandCursor:
+        cocoaCursor = [NSCursor pointingHandCursor];
+        break;
+    case Qt::SplitVCursor:
+        cocoaCursor = [NSCursor resizeUpDownCursor];
+        break;
+    case Qt::SplitHCursor:
+        cocoaCursor = [NSCursor resizeLeftRightCursor];
+        break;
+    case Qt::OpenHandCursor:
+        cocoaCursor = [NSCursor openHandCursor];
+        break;
+    case Qt::ClosedHandCursor:
+        cocoaCursor = [NSCursor closedHandCursor];
+        break;
+    case Qt::DragMoveCursor:
+        cocoaCursor = [NSCursor crosshairCursor];
+        break;
+    case Qt::DragCopyCursor:
+        cocoaCursor = [NSCursor crosshairCursor];
+        break;
+    case Qt::DragLinkCursor:
+        cocoaCursor = [NSCursor dragLinkCursor];
+        break;
+    default : {
+        // No suitable OS cursor exist, use cursors provided
+        // by Qt for the rest. Check for a cached cursor:
+        cocoaCursor = m_cursors.value(newShape);
+        if (cocoaCursor && cursor->shape() == Qt::BitmapCursor) {
+            [cocoaCursor release];
+            cocoaCursor = 0;
+        }
+        if (cocoaCursor == 0) {
+            cocoaCursor = createCursorData(cursor);
+            if (cocoaCursor == 0)
+                return [NSCursor arrowCursor];
+
+            m_cursors.insert(newShape, cocoaCursor);
+        }
+
+        break; }
+    }
+    return cocoaCursor;
+}
+
 
 // Creates an NSCursor for the given QCursor.
 NSCursor *QCocoaCursor::createCursorData(QCursor *cursor)
@@ -218,8 +219,8 @@ NSCursor *QCocoaCursor::createCursorData(QCursor *cursor)
         return createCursorFromPixmap(pixmap, hotspot);
         break; }
     case Qt::SizeAllCursor: {
-        QPixmap pixmap = QPixmap(QLatin1String(":/qt-project.org/mac/cursors/images/pluscursor.png"));
-        return createCursorFromPixmap(pixmap, hotspot);
+        QPixmap pixmap = QPixmap(QLatin1String(":/qt-project.org/mac/cursors/images/sizeallcursor.png"));
+        return createCursorFromPixmap(pixmap, QPoint(8, 8));
         break; }
     case Qt::BusyCursor: {
         QPixmap pixmap = QPixmap(QLatin1String(":/qt-project.org/mac/cursors/images/waitcursor.png"));
@@ -300,7 +301,20 @@ NSCursor *QCocoaCursor::createCursorFromBitmap(const QBitmap *bitmap, const QBit
 NSCursor *QCocoaCursor::createCursorFromPixmap(const QPixmap pixmap, const QPoint hotspot)
 {
     NSPoint hotSpot = NSMakePoint(hotspot.x(), hotspot.y());
-    NSImage *nsimage = static_cast<NSImage *>(qt_mac_create_nsimage(pixmap));
+    NSImage *nsimage;
+    if (pixmap.devicePixelRatio() > 1.0) {
+        QSize layoutSize = pixmap.size() / pixmap.devicePixelRatio();
+        QPixmap scaledPixmap = pixmap.scaled(layoutSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        nsimage = static_cast<NSImage *>(qt_mac_create_nsimage(scaledPixmap));
+        CGImageRef cgImage = qt_mac_toCGImage(pixmap.toImage());
+        NSBitmapImageRep *imageRep = [[NSBitmapImageRep alloc] initWithCGImage:cgImage];
+        [nsimage addRepresentation:imageRep];
+        [imageRep release];
+        CGImageRelease(cgImage);
+    } else {
+        nsimage = static_cast<NSImage *>(qt_mac_create_nsimage(pixmap));
+    }
+
     NSCursor *nsCursor = [[NSCursor alloc] initWithImage:nsimage hotSpot: hotSpot];
     [nsimage release];
     return nsCursor;

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -48,6 +40,7 @@
 #include <qfont.h>
 
 #include <private/qguiapplication_p.h>
+#include <qpa/qplatformfontdatabase.h>
 
 #undef signals
 #include <gtk/gtk.h>
@@ -90,6 +83,7 @@ QGtk2Dialog::QGtk2Dialog(GtkWidget *gtkWidget) : gtkWidget(gtkWidget)
 
 QGtk2Dialog::~QGtk2Dialog()
 {
+    gtk_clipboard_store(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
     gtk_widget_destroy(gtkWidget);
 }
 
@@ -132,6 +126,7 @@ bool QGtk2Dialog::show(Qt::WindowFlags flags, Qt::WindowModality modality, QWind
     }
 
     gtk_widget_show(gtkWidget);
+    gdk_window_focus(gtkWidget->window, 0);
     return true;
 }
 
@@ -282,13 +277,13 @@ bool QGtk2FileDialogHelper::defaultNameFilterDisables() const
     return false;
 }
 
-void QGtk2FileDialogHelper::setDirectory(const QString &directory)
+void QGtk2FileDialogHelper::setDirectory(const QUrl &directory)
 {
     GtkDialog *gtkDialog = d->gtkDialog();
-    gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(gtkDialog), directory.toUtf8());
+    gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(gtkDialog), directory.toLocalFile().toUtf8());
 }
 
-QString QGtk2FileDialogHelper::directory() const
+QUrl QGtk2FileDialogHelper::directory() const
 {
     // While GtkFileChooserDialog is hidden, gtk_file_chooser_get_current_folder()
     // returns a bogus value -> return the cached value before hiding
@@ -302,27 +297,33 @@ QString QGtk2FileDialogHelper::directory() const
         ret = QString::fromUtf8(folder);
         g_free(folder);
     }
-    return ret;
+    return QUrl::fromLocalFile(ret);
 }
 
-void QGtk2FileDialogHelper::selectFile(const QString &filename)
+void QGtk2FileDialogHelper::selectFile(const QUrl &filename)
 {
     GtkDialog *gtkDialog = d->gtkDialog();
-    gtk_file_chooser_select_filename(GTK_FILE_CHOOSER(gtkDialog), filename.toUtf8());
+    if (options()->acceptMode() == QFileDialogOptions::AcceptSave) {
+        QFileInfo fi(filename.toLocalFile());
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(gtkDialog), fi.path().toUtf8());
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(gtkDialog), fi.fileName().toUtf8());
+    } else {
+        gtk_file_chooser_select_filename(GTK_FILE_CHOOSER(gtkDialog), filename.toLocalFile().toUtf8());
+    }
 }
 
-QStringList QGtk2FileDialogHelper::selectedFiles() const
+QList<QUrl> QGtk2FileDialogHelper::selectedFiles() const
 {
     // While GtkFileChooserDialog is hidden, gtk_file_chooser_get_filenames()
     // returns a bogus value -> return the cached value before hiding
     if (!_selection.isEmpty())
         return _selection;
 
-    QStringList selection;
+    QList<QUrl> selection;
     GtkDialog *gtkDialog = d->gtkDialog();
     GSList *filenames = gtk_file_chooser_get_filenames(GTK_FILE_CHOOSER(gtkDialog));
     for (GSList *it  = filenames; it; it = it->next)
-        selection += QString::fromUtf8((const char*)it->data);
+        selection += QUrl::fromLocalFile(QString::fromUtf8((const char*)it->data));
     g_slist_free(filenames);
     return selection;
 }
@@ -356,7 +357,7 @@ void QGtk2FileDialogHelper::onAccepted()
     if (filter.isEmpty())
         emit filterSelected(filter);
 
-    QStringList files = selectedFiles();
+    QList<QUrl> files = selectedFiles();
     emit filesSelected(files);
     if (files.count() == 1)
         emit fileSelected(files.first());
@@ -370,7 +371,7 @@ void QGtk2FileDialogHelper::onSelectionChanged(GtkDialog *gtkDialog, QGtk2FileDi
         selection = QString::fromUtf8(filename);
         g_free(filename);
     }
-    emit helper->currentChanged(selection);
+    emit helper->currentChanged(QUrl::fromLocalFile(selection));
 }
 
 void QGtk2FileDialogHelper::onCurrentFolderChanged(QGtk2FileDialogHelper *dialog)
@@ -419,11 +420,10 @@ void QGtk2FileDialogHelper::applyOptions()
     if (!nameFilters.isEmpty())
         setNameFilters(nameFilters);
 
-    const QString initialDirectory = opts->initialDirectory();
-    if (!initialDirectory.isEmpty())
-        setDirectory(initialDirectory);
+    if (opts->initialDirectory().isLocalFile())
+        setDirectory(opts->initialDirectory());
 
-    foreach (const QString &filename, opts->initiallySelectedFiles())
+    foreach (const QUrl &filename, opts->initiallySelectedFiles())
         selectFile(filename);
 
     const QString initialNameFilter = opts->initiallySelectedNameFilter();
@@ -512,14 +512,22 @@ static QString qt_fontToString(const QFont &font)
     int weight = font.weight();
     if (weight >= QFont::Black)
         pango_font_description_set_weight(desc, PANGO_WEIGHT_HEAVY);
+    else if (weight >= QFont::ExtraBold)
+        pango_font_description_set_weight(desc, PANGO_WEIGHT_ULTRABOLD);
     else if (weight >= QFont::Bold)
         pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     else if (weight >= QFont::DemiBold)
         pango_font_description_set_weight(desc, PANGO_WEIGHT_SEMIBOLD);
+    else if (weight >= QFont::Medium)
+        pango_font_description_set_weight(desc, PANGO_WEIGHT_MEDIUM);
     else if (weight >= QFont::Normal)
         pango_font_description_set_weight(desc, PANGO_WEIGHT_NORMAL);
-    else
+    else if (weight >= QFont::Light)
         pango_font_description_set_weight(desc, PANGO_WEIGHT_LIGHT);
+    else if (weight >= QFont::ExtraLight)
+        pango_font_description_set_weight(desc, PANGO_WEIGHT_ULTRALIGHT);
+    else
+        pango_font_description_set_weight(desc, PANGO_WEIGHT_THIN);
 
     int style = font.style();
     if (style == QFont::StyleItalic)
@@ -546,17 +554,8 @@ static QFont qt_fontFromString(const QString &name)
     if (!family.isEmpty())
         font.setFamily(family);
 
-    int weight = pango_font_description_get_weight(desc);
-    if (weight >= PANGO_WEIGHT_HEAVY)
-        font.setWeight(QFont::Black);
-    else if (weight >= PANGO_WEIGHT_BOLD)
-        font.setWeight(QFont::Bold);
-    else if (weight >= PANGO_WEIGHT_SEMIBOLD)
-        font.setWeight(QFont::DemiBold);
-    else if (weight >= PANGO_WEIGHT_NORMAL)
-        font.setWeight(QFont::Normal);
-    else
-        font.setWeight(QFont::Light);
+    const int weight = pango_font_description_get_weight(desc);
+    font.setWeight(QPlatformFontDatabase::weightFromInteger(weight));
 
     PangoStyle style = pango_font_description_get_style(desc);
     if (style == PANGO_STYLE_ITALIC)
@@ -587,6 +586,7 @@ QFont QGtk2FontDialogHelper::currentFont() const
 
 void QGtk2FontDialogHelper::onAccepted()
 {
+    emit currentFontChanged(currentFont());
     emit accept();
     emit fontSelected(currentFont());
 }

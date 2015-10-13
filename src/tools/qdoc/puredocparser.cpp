@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -101,10 +93,10 @@ void PureDocParser::parseSourceFile(const Location& location, const QString& fil
     readToken();
 
     /*
-      The set of active namespaces is cleared before parsing
+      The set of open namespaces is cleared before parsing
       each source file. The word "source" here means cpp file.
      */
-    activeNamespaces_.clear();
+    qdb_->clearOpenNamespaces();
 
     processQdocComments();
     in.close();
@@ -118,9 +110,9 @@ void PureDocParser::parseSourceFile(const Location& location, const QString& fil
  */
 bool PureDocParser::processQdocComments()
 {
-    QSet<QString> topicCommandsAllowed = topicCommands();
-    QSet<QString> otherMetacommandsAllowed = otherMetaCommands();
-    QSet<QString> metacommandsAllowed = topicCommandsAllowed + otherMetacommandsAllowed;
+    const QSet<QString>& topicCommandsAllowed = topicCommands();
+    const QSet<QString>& otherMetacommandsAllowed = otherMetaCommands();
+    const QSet<QString>& metacommandsAllowed = topicCommandsAllowed + otherMetacommandsAllowed;
 
     while (tok != Tok_Eoi) {
         if (tok == Tok_Doc) {
@@ -137,59 +129,78 @@ bool PureDocParser::processQdocComments()
             /*
               Doc parses the comment.
              */
-            Doc doc(start_loc,end_loc,comment,metacommandsAllowed);
+            Doc doc(start_loc, end_loc, comment, metacommandsAllowed, topicCommandsAllowed);
 
             QString topic;
-            ArgList args;
+            bool isQmlPropertyTopic = false;
+            bool isJsPropertyTopic = false;
 
-            QSet<QString> topicCommandsUsed = topicCommandsAllowed & doc.metaCommandsUsed();
-
-            /*
-              There should be one topic command in the set,
-              or none. If the set is empty, then the comment
-              should be a function description.
-             */
-            if (topicCommandsUsed.count() > 0) {
-                topic = *topicCommandsUsed.begin();
-                args = doc.metaCommandArgs(topic);
+            const TopicList& topics = doc.topicsUsed();
+            if (!topics.isEmpty()) {
+                topic = topics[0].topic;
+                if ((topic == COMMAND_QMLPROPERTY) ||
+                    (topic == COMMAND_QMLPROPERTYGROUP) ||
+                    (topic == COMMAND_QMLATTACHEDPROPERTY)) {
+                    isQmlPropertyTopic = true;
+                }
+                else if ((topic == COMMAND_JSPROPERTY) ||
+                         (topic == COMMAND_JSPROPERTYGROUP) ||
+                         (topic == COMMAND_JSATTACHEDPROPERTY)) {
+                    isJsPropertyTopic = true;
+                }
+            }
+            if ((isQmlPropertyTopic || isJsPropertyTopic) && topics.size() > 1) {
+                qDebug() << "MULTIPLE TOPICS:" << doc.location().fileName() << doc.location().lineNo();
+                for (int i=0; i<topics.size(); ++i) {
+                    qDebug() << "  " << topics[i].topic << topics[i].args;
+                }
             }
 
             NodeList nodes;
-            QList<Doc> docs;
+            DocList docs;
 
             if (topic.isEmpty()) {
                 doc.location().warning(tr("This qdoc comment contains no topic command "
                                           "(e.g., '\\%1', '\\%2').")
                                        .arg(COMMAND_MODULE).arg(COMMAND_PAGE));
             }
+            else if (isQmlPropertyTopic || isJsPropertyTopic) {
+                Doc nodeDoc = doc;
+                processQmlProperties(nodeDoc, nodes, docs, isJsPropertyTopic);
+            }
             else {
-                /*
-                  There is a topic command. Process it.
-                 */
-                if ((topic == COMMAND_QMLPROPERTY) ||
-                        (topic == COMMAND_QMLATTACHEDPROPERTY)) {
+                ArgList args;
+                QSet<QString> topicCommandsUsed = topicCommandsAllowed & doc.metaCommandsUsed();
+                if (topicCommandsUsed.count() > 0) {
+                    topic = *topicCommandsUsed.begin();
+                    args = doc.metaCommandArgs(topic);
+                }
+                if (topicCommandsUsed.count() > 1) {
+                    QString topics;
+                    QSet<QString>::ConstIterator t = topicCommandsUsed.constBegin();
+                    while (t != topicCommandsUsed.constEnd()) {
+                        topics += " \\" + *t + ",";
+                        ++t;
+                    }
+                    topics[topics.lastIndexOf(',')] = '.';
+                    int i = topics.lastIndexOf(',');
+                    topics[i] = ' ';
+                    topics.insert(i+1,"and");
+                    doc.location().warning(tr("Multiple topic commands found in comment: %1").arg(topics));
+                }
+                ArgList::ConstIterator a = args.cbegin();
+                while (a != args.cend()) {
                     Doc nodeDoc = doc;
-                    Node* node = processTopicCommandGroup(nodeDoc,topic,args);
+                    Node* node = processTopicCommand(nodeDoc,topic,*a);
                     if (node != 0) {
                         nodes.append(node);
                         docs.append(nodeDoc);
                     }
-                }
-                else {
-                    ArgList::ConstIterator a = args.begin();
-                    while (a != args.end()) {
-                        Doc nodeDoc = doc;
-                        Node* node = processTopicCommand(nodeDoc,topic,*a);
-                        if (node != 0) {
-                            nodes.append(node);
-                            docs.append(nodeDoc);
-                        }
-                        ++a;
-                    }
+                    ++a;
                 }
             }
 
-            Node* treeRoot = QDocDatabase::qdocDB()->treeRoot();
+            Node* treeRoot = QDocDatabase::qdocDB()->primaryTreeRoot();
             NodeList::Iterator n = nodes.begin();
             QList<Doc>::Iterator d = docs.begin();
             while (n != nodes.end()) {

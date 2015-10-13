@@ -1,39 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Intel Corporation.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -111,13 +104,15 @@ static inline void qt_socket_getPortAndAddress(const qt_sockaddr *s, quint16 *po
             QHostAddress tmpAddress;
             tmpAddress.setAddress(tmp);
             *addr = tmpAddress;
+            if (s->a6.sin6_scope_id) {
 #ifndef QT_NO_IPV6IFNAME
-            char scopeid[IFNAMSIZ];
-            if (::if_indextoname(s->a6.sin6_scope_id, scopeid)) {
-                addr->setScopeId(QLatin1String(scopeid));
-            } else
+                char scopeid[IFNAMSIZ];
+                if (::if_indextoname(s->a6.sin6_scope_id, scopeid)) {
+                    addr->setScopeId(QLatin1String(scopeid));
+                } else
 #endif
-            addr->setScopeId(QString::number(s->a6.sin6_scope_id));
+                    addr->setScopeId(QString::number(s->a6.sin6_scope_id));
+            }
         }
         if (port)
             *port = ntohs(s->a6.sin6_port);
@@ -133,6 +128,83 @@ static inline void qt_socket_getPortAndAddress(const qt_sockaddr *s, quint16 *po
     }
 }
 
+static inline uint makeScopeId(const QHostAddress &addr)
+{
+    QString scopeid = addr.scopeId();
+    if (scopeid.isEmpty())
+        return 0;
+
+    bool ok;
+    uint id = scopeid.toUInt(&ok);
+#ifndef QT_NO_IPV6IFNAME
+    if (!ok)
+        id = ::if_nametoindex(scopeid.toLatin1());
+#endif
+    return id;
+}
+
+static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
+                                    QAbstractSocket::NetworkLayerProtocol socketProtocol, int &level, int &n)
+{
+    n = -1;
+    level = SOL_SOCKET; // default
+
+    switch (opt) {
+    case QNativeSocketEngine::NonBlockingSocketOption:  // fcntl, not setsockopt
+    case QNativeSocketEngine::BindExclusively:          // not handled on Unix
+        Q_UNREACHABLE();
+
+    case QNativeSocketEngine::BroadcastSocketOption:
+        n = SO_BROADCAST;
+        break;
+    case QNativeSocketEngine::ReceiveBufferSocketOption:
+        n = SO_RCVBUF;
+        break;
+    case QNativeSocketEngine::SendBufferSocketOption:
+        n = SO_SNDBUF;
+        break;
+    case QNativeSocketEngine::AddressReusable:
+        n = SO_REUSEADDR;
+        break;
+    case QNativeSocketEngine::ReceiveOutOfBandData:
+        n = SO_OOBINLINE;
+        break;
+    case QNativeSocketEngine::LowDelayOption:
+        level = IPPROTO_TCP;
+        n = TCP_NODELAY;
+        break;
+    case QNativeSocketEngine::KeepAliveOption:
+        n = SO_KEEPALIVE;
+        break;
+    case QNativeSocketEngine::MulticastTtlOption:
+        if (socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) {
+            level = IPPROTO_IPV6;
+            n = IPV6_MULTICAST_HOPS;
+        } else
+        {
+            level = IPPROTO_IP;
+            n = IP_MULTICAST_TTL;
+        }
+        break;
+    case QNativeSocketEngine::MulticastLoopbackOption:
+        if (socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) {
+            level = IPPROTO_IPV6;
+            n = IPV6_MULTICAST_LOOP;
+        } else
+        {
+            level = IPPROTO_IP;
+            n = IP_MULTICAST_LOOP;
+        }
+        break;
+    case QNativeSocketEngine::TypeOfServiceOption:
+        if (socketProtocol == QAbstractSocket::IPv4Protocol) {
+            level = IPPROTO_IP;
+            n = IP_TOS;
+        }
+        break;
+    }
+}
+
 /*! \internal
 
     Creates and returns a new socket descriptor of type \a socketType
@@ -144,15 +216,16 @@ bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType soc
     int protocol = (socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) ? AF_INET6 : AF_INET;
     int type = (socketType == QAbstractSocket::UdpSocket) ? SOCK_DGRAM : SOCK_STREAM;
 
-	int socket = qt_safe_socket(protocol, type, 0);
-    if (socket <= 0 && socketProtocol == QAbstractSocket::AnyIPProtocol && errno == EAFNOSUPPORT) {
+    int socket = qt_safe_socket(protocol, type, 0, O_NONBLOCK);
+    if (socket < 0 && socketProtocol == QAbstractSocket::AnyIPProtocol && errno == EAFNOSUPPORT) {
         protocol = AF_INET;
-        socket = qt_safe_socket(protocol, type, 0);
+        socket = qt_safe_socket(protocol, type, 0, O_NONBLOCK);
         socketProtocol = QAbstractSocket::IPv4Protocol;
     }
 
-    if (socket <= 0) {
-        switch (errno) {
+    if (socket < 0) {
+        int ecopy = errno;
+        switch (ecopy) {
         case EPROTONOSUPPORT:
         case EAFNOSUPPORT:
         case EINVAL:
@@ -171,8 +244,19 @@ bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType soc
             break;
         }
 
+#if defined (QNATIVESOCKETENGINE_DEBUG)
+        qDebug("QNativeSocketEnginePrivate::createNewSocket(%d, %d) == false (%s)",
+               socketType, socketProtocol,
+               strerror(ecopy));
+#endif
+
         return false;
     }
+
+#if defined (QNATIVESOCKETENGINE_DEBUG)
+    qDebug("QNativeSocketEnginePrivate::createNewSocket(%d, %d) == true",
+           socketType, socketProtocol);
+#endif
 
     socketDescriptor = socket;
     return true;
@@ -187,65 +271,16 @@ int QNativeSocketEnginePrivate::option(QNativeSocketEngine::SocketOption opt) co
     if (!q->isValid())
         return -1;
 
-    int n = -1;
-    int level = SOL_SOCKET; // default
-
-    switch (opt) {
-    case QNativeSocketEngine::ReceiveBufferSocketOption:
-        n = SO_RCVBUF;
-        break;
-    case QNativeSocketEngine::SendBufferSocketOption:
-        n = SO_SNDBUF;
-        break;
-    case QNativeSocketEngine::NonBlockingSocketOption:
-        break;
-    case QNativeSocketEngine::BroadcastSocketOption:
-        break;
-    case QNativeSocketEngine::AddressReusable:
-        n = SO_REUSEADDR;
-        break;
-    case QNativeSocketEngine::BindExclusively:
+    // handle non-getsockopt cases first
+    if (opt == QNativeSocketEngine::BindExclusively || opt == QNativeSocketEngine::NonBlockingSocketOption
+            || opt == QNativeSocketEngine::BroadcastSocketOption)
         return true;
-    case QNativeSocketEngine::ReceiveOutOfBandData:
-        n = SO_OOBINLINE;
-        break;
-    case QNativeSocketEngine::LowDelayOption:
-        level = IPPROTO_TCP;
-        n = TCP_NODELAY;
-        break;
-    case QNativeSocketEngine::KeepAliveOption:
-        n = SO_KEEPALIVE;
-        break;
-    case QNativeSocketEngine::MulticastTtlOption:
-        if (socketProtocol == QAbstractSocket::IPv6Protocol) {
-            level = IPPROTO_IPV6;
-            n = IPV6_MULTICAST_HOPS;
-        } else
-        {
-            level = IPPROTO_IP;
-            n = IP_MULTICAST_TTL;
-        }
-        break;
-    case QNativeSocketEngine::MulticastLoopbackOption:
-        if (socketProtocol == QAbstractSocket::IPv6Protocol) {
-            level = IPPROTO_IPV6;
-            n = IPV6_MULTICAST_LOOP;
-        } else
-        {
-            level = IPPROTO_IP;
-            n = IP_MULTICAST_LOOP;
-        }
-        break;
-    case QNativeSocketEngine::TypeOfServiceOption:
-        if (socketProtocol == QAbstractSocket::IPv4Protocol) {
-            level = IPPROTO_IP;
-            n = IP_TOS;
-        }
-        break;
-    }
 
+    int n, level;
     int v = -1;
     QT_SOCKOPTLEN_T len = sizeof(v);
+
+    convertToLevelAndOption(opt, socketProtocol, level, n);
     if (::getsockopt(socketDescriptor, level, n, (char *) &v, &len) != -1)
         return v;
 
@@ -262,19 +297,8 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
     if (!q->isValid())
         return false;
 
-    int n = 0;
-    int level = SOL_SOCKET; // default
-
+    // handle non-setsockopt cases first
     switch (opt) {
-    case QNativeSocketEngine::ReceiveBufferSocketOption:
-        n = SO_RCVBUF;
-        break;
-    case QNativeSocketEngine::SendBufferSocketOption:
-        n = SO_SNDBUF;
-        break;
-    case QNativeSocketEngine::BroadcastSocketOption:
-        n = SO_BROADCAST;
-        break;
     case QNativeSocketEngine::NonBlockingSocketOption: {
         // Make the socket nonblocking.
 #if !defined(Q_OS_VXWORKS)
@@ -304,58 +328,24 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
 #endif // Q_OS_VXWORKS
         return true;
     }
-    case QNativeSocketEngine::AddressReusable:
-#if defined(SO_REUSEPORT)
+    case QNativeSocketEngine::BindExclusively:
+        return true;
+
+    default:
+        break;
+    }
+
+    int n, level;
+    convertToLevelAndOption(opt, socketProtocol, level, n);
+#if defined(SO_REUSEPORT) && !defined(Q_OS_LINUX)
+    if (opt == QNativeSocketEngine::AddressReusable) {
         // on OS X, SO_REUSEADDR isn't sufficient to allow multiple binds to the
         // same port (which is useful for multicast UDP). SO_REUSEPORT is, but
         // we most definitely do not want to use this for TCP. See QTBUG-6305.
         if (socketType == QAbstractSocket::UdpSocket)
             n = SO_REUSEPORT;
-        else
-            n = SO_REUSEADDR;
-#else
-        n = SO_REUSEADDR;
-#endif
-        break;
-    case QNativeSocketEngine::BindExclusively:
-        return true;
-    case QNativeSocketEngine::ReceiveOutOfBandData:
-        n = SO_OOBINLINE;
-        break;
-    case QNativeSocketEngine::LowDelayOption:
-        level = IPPROTO_TCP;
-        n = TCP_NODELAY;
-        break;
-    case QNativeSocketEngine::KeepAliveOption:
-        n = SO_KEEPALIVE;
-        break;
-    case QNativeSocketEngine::MulticastTtlOption:
-        if (socketProtocol == QAbstractSocket::IPv6Protocol) {
-            level = IPPROTO_IPV6;
-            n = IPV6_MULTICAST_HOPS;
-        } else
-        {
-            level = IPPROTO_IP;
-            n = IP_MULTICAST_TTL;
-        }
-        break;
-    case QNativeSocketEngine::MulticastLoopbackOption:
-        if (socketProtocol == QAbstractSocket::IPv6Protocol) {
-            level = IPPROTO_IPV6;
-            n = IPV6_MULTICAST_LOOP;
-        } else
-        {
-            level = IPPROTO_IP;
-            n = IP_MULTICAST_LOOP;
-        }
-        break;
-    case QNativeSocketEngine::TypeOfServiceOption:
-        if (socketProtocol == QAbstractSocket::IPv4Protocol) {
-            level = IPPROTO_IP;
-            n = IP_TOS;
-        }
-        break;
     }
+#endif
 
     return ::setsockopt(socketDescriptor, level, n, (char *) &v, sizeof(v)) == 0;
 }
@@ -363,7 +353,7 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
 bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &addr, quint16 port)
 {
 #ifdef QNATIVESOCKETENGINE_DEBUG
-    qDebug("QNativeSocketEnginePrivate::nativeConnect() : %d ", socketDescriptor);
+    qDebug() << "QNativeSocketEnginePrivate::nativeConnect() " << socketDescriptor;
 #endif
 
     struct sockaddr_in sockAddrIPv4;
@@ -376,14 +366,8 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &addr, quint16
         memset(&sockAddrIPv6, 0, sizeof(sockAddrIPv6));
         sockAddrIPv6.sin6_family = AF_INET6;
         sockAddrIPv6.sin6_port = htons(port);
+        sockAddrIPv6.sin6_scope_id = makeScopeId(addr);
 
-        QString scopeid = addr.scopeId();
-        bool ok;
-        sockAddrIPv6.sin6_scope_id = scopeid.toInt(&ok);
-#ifndef QT_NO_IPV6IFNAME
-        if (!ok)
-            sockAddrIPv6.sin6_scope_id = ::if_nametoindex(scopeid.toLatin1());
-#endif
         Q_IPV6ADDR ip6 = addr.toIPv6Address();
         memcpy(&sockAddrIPv6.sin6_addr.s6_addr, &ip6, sizeof(ip6));
 
@@ -403,6 +387,9 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &addr, quint16
     }
 
     int connectResult = qt_safe_connect(socketDescriptor, sockAddrPtr, sockAddrSize);
+#if defined (QNATIVESOCKETENGINE_DEBUG)
+    int ecopy = errno;
+#endif
     if (connectResult == -1) {
         switch (errno) {
         case EISCONN:
@@ -454,7 +441,7 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &addr, quint16
             qDebug("QNativeSocketEnginePrivate::nativeConnect(%s, %i) == false (%s)",
                    addr.toString().toLatin1().constData(), port,
                    socketState == QAbstractSocket::ConnectingState
-                   ? "Connection in progress" : socketErrorString.toLatin1().constData());
+                   ? "Connection in progress" : strerror(ecopy));
 #endif
             return false;
         }
@@ -489,11 +476,8 @@ bool QNativeSocketEnginePrivate::nativeBind(const QHostAddress &address, quint16
         memset(&sockAddrIPv6, 0, sizeof(sockAddrIPv6));
         sockAddrIPv6.sin6_family = AF_INET6;
         sockAddrIPv6.sin6_port = htons(port);
-#ifndef QT_NO_IPV6IFNAME
-        sockAddrIPv6.sin6_scope_id = ::if_nametoindex(address.scopeId().toLatin1().data());
-#else
-        sockAddrIPv6.sin6_scope_id = address.scopeId().toInt();
-#endif
+        sockAddrIPv6.sin6_scope_id = makeScopeId(address);
+
         Q_IPV6ADDR tmp = address.toIPv6Address();
         memcpy(&sockAddrIPv6.sin6_addr.s6_addr, &tmp, sizeof(tmp));
         sockAddrSize = sizeof(sockAddrIPv6);
@@ -522,6 +506,9 @@ bool QNativeSocketEnginePrivate::nativeBind(const QHostAddress &address, quint16
     }
 
     if (bindResult < 0) {
+#if defined (QNATIVESOCKETENGINE_DEBUG)
+        int ecopy = errno;
+#endif
         switch(errno) {
         case EADDRINUSE:
             setError(QAbstractSocket::AddressInUseError, AddressInuseErrorString);
@@ -541,14 +528,11 @@ bool QNativeSocketEnginePrivate::nativeBind(const QHostAddress &address, quint16
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
         qDebug("QNativeSocketEnginePrivate::nativeBind(%s, %i) == false (%s)",
-               address.toString().toLatin1().constData(), port, socketErrorString.toLatin1().constData());
+               address.toString().toLatin1().constData(), port, strerror(ecopy));
 #endif
 
         return false;
     }
-
-    localPort = port;
-    localAddress = address;
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     qDebug("QNativeSocketEnginePrivate::nativeBind(%s, %i) == true",
@@ -561,6 +545,9 @@ bool QNativeSocketEnginePrivate::nativeBind(const QHostAddress &address, quint16
 bool QNativeSocketEnginePrivate::nativeListen(int backlog)
 {
     if (qt_safe_listen(socketDescriptor, backlog) < 0) {
+#if defined (QNATIVESOCKETENGINE_DEBUG)
+        int ecopy = errno;
+#endif
         switch (errno) {
         case EADDRINUSE:
             setError(QAbstractSocket::AddressInUseError,
@@ -572,7 +559,7 @@ bool QNativeSocketEnginePrivate::nativeListen(int backlog)
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
         qDebug("QNativeSocketEnginePrivate::nativeListen(%i) == false (%s)",
-               backlog, socketErrorString.toLatin1().constData());
+               backlog, strerror(ecopy));
 #endif
         return false;
     }
@@ -729,7 +716,7 @@ bool QNativeSocketEnginePrivate::nativeLeaveMulticastGroup(const QHostAddress &g
 
 QNetworkInterface QNativeSocketEnginePrivate::nativeMulticastInterface() const
 {
-    if (socketProtocol == QAbstractSocket::IPv6Protocol) {
+    if (socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) {
         uint v;
         QT_SOCKOPTLEN_T sizeofv = sizeof(v);
         if (::getsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_MULTICAST_IF, &v, &sizeofv) == -1)
@@ -741,7 +728,7 @@ QNetworkInterface QNativeSocketEnginePrivate::nativeMulticastInterface() const
     QT_SOCKOPTLEN_T sizeofv = sizeof(v);
     if (::getsockopt(socketDescriptor, IPPROTO_IP, IP_MULTICAST_IF, &v, &sizeofv) == -1)
         return QNetworkInterface();
-    if (v.s_addr != 0 && sizeofv >= sizeof(v)) {
+    if (v.s_addr != 0 && sizeofv >= QT_SOCKOPTLEN_T(sizeof(v))) {
         QHostAddress ipv4(ntohl(v.s_addr));
         QList<QNetworkInterface> ifaces = QNetworkInterface::allInterfaces();
         for (int i = 0; i < ifaces.count(); ++i) {
@@ -759,7 +746,7 @@ QNetworkInterface QNativeSocketEnginePrivate::nativeMulticastInterface() const
 
 bool QNativeSocketEnginePrivate::nativeSetMulticastInterface(const QNetworkInterface &iface)
 {
-    if (socketProtocol == QAbstractSocket::IPv6Protocol) {
+    if (socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) {
         uint v = iface.index();
         return (::setsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_MULTICAST_IF, &v, sizeof(v)) != -1);
     }
@@ -847,7 +834,7 @@ qint64 QNativeSocketEnginePrivate::nativePendingDatagramSize() const
     }
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativePendingDatagramSize() == %i", recvResult);
+    qDebug("QNativeSocketEnginePrivate::nativePendingDatagramSize() == %zd", recvResult);
 #endif
 
     return qint64(recvResult);
@@ -898,16 +885,10 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
         memset(&sockAddrIPv6, 0, sizeof(sockAddrIPv6));
         sockAddrIPv6.sin6_family = AF_INET6;
         sockAddrIPv6.sin6_port = htons(port);
+        sockAddrIPv6.sin6_scope_id = makeScopeId(host);
 
         Q_IPV6ADDR tmp = host.toIPv6Address();
         memcpy(&sockAddrIPv6.sin6_addr.s6_addr, &tmp, sizeof(tmp));
-        QString scopeid = host.scopeId();
-        bool ok;
-        sockAddrIPv6.sin6_scope_id = scopeid.toInt(&ok);
-#ifndef QT_NO_IPV6IFNAME
-        if (!ok)
-            sockAddrIPv6.sin6_scope_id = ::if_nametoindex(scopeid.toLatin1());
-#endif
         sockAddrSize = sizeof(sockAddrIPv6);
         sockAddrPtr = (struct sockaddr *)&sockAddrIPv6;
     } else if (host.protocol() == QAbstractSocket::IPv4Protocol) {
@@ -1012,13 +993,13 @@ bool QNativeSocketEnginePrivate::fetchConnectionParameters()
             socketType = QAbstractSocket::UnknownSocketType;
     }
 #if defined (QNATIVESOCKETENGINE_DEBUG)
-    QString socketProtocolStr = "UnknownProtocol";
-    if (socketProtocol == QAbstractSocket::IPv4Protocol) socketProtocolStr = "IPv4Protocol";
-    else if (socketProtocol == QAbstractSocket::IPv6Protocol) socketProtocolStr = "IPv6Protocol";
+    QString socketProtocolStr = QStringLiteral("UnknownProtocol");
+    if (socketProtocol == QAbstractSocket::IPv4Protocol) socketProtocolStr = QStringLiteral("IPv4Protocol");
+    else if (socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) socketProtocolStr = QStringLiteral("IPv6Protocol");
 
-    QString socketTypeStr = "UnknownSocketType";
-    if (socketType == QAbstractSocket::TcpSocket) socketTypeStr = "TcpSocket";
-    else if (socketType == QAbstractSocket::UdpSocket) socketTypeStr = "UdpSocket";
+    QString socketTypeStr = QStringLiteral("UnknownSocketType");
+    if (socketType == QAbstractSocket::TcpSocket) socketTypeStr = QStringLiteral("TcpSocket");
+    else if (socketType == QAbstractSocket::UdpSocket) socketTypeStr = QStringLiteral("UdpSocket");
 
     qDebug("QNativeSocketEnginePrivate::fetchConnectionParameters() local == %s:%i,"
            " peer == %s:%i, socket == %s - %s",
@@ -1112,13 +1093,60 @@ qint64 QNativeSocketEnginePrivate::nativeRead(char *data, qint64 maxSize)
     }
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeRead(%p \"%s\", %llu) == %i",
+    qDebug("QNativeSocketEnginePrivate::nativeRead(%p \"%s\", %llu) == %zd",
            data, qt_prettyDebug(data, qMin(r, ssize_t(16)), r).data(),
            maxSize, r);
 #endif
 
     return qint64(r);
 }
+
+#ifdef Q_OS_BLACKBERRY
+int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool selectForRead) const
+{
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(socketDescriptor, &fds);
+
+    int retval;
+    QList<QSocketNotifier *> notifiers;
+    if (selectForRead) {
+        notifiers << readNotifier;
+        retval = bb_select(notifiers, socketDescriptor + 1, &fds, 0, timeout);
+    } else {
+        notifiers << writeNotifier;
+        retval = bb_select(notifiers, socketDescriptor + 1, 0, &fds, timeout);
+    }
+
+    return retval;
+}
+
+int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool checkWrite,
+                       bool *selectForRead, bool *selectForWrite) const
+{
+    fd_set fdread;
+    FD_ZERO(&fdread);
+    if (checkRead)
+        FD_SET(socketDescriptor, &fdread);
+
+    fd_set fdwrite;
+    FD_ZERO(&fdwrite);
+    if (checkWrite)
+        FD_SET(socketDescriptor, &fdwrite);
+
+    QList<QSocketNotifier *> notifiers;
+    notifiers << readNotifier << writeNotifier;
+    int ret = bb_select(notifiers, socketDescriptor + 1, &fdread, &fdwrite, timeout);
+
+    if (ret <= 0)
+        return ret;
+    *selectForRead = FD_ISSET(socketDescriptor, &fdread);
+    *selectForWrite = FD_ISSET(socketDescriptor, &fdwrite);
+
+    return ret;
+}
+
+#else // not Q_OS_BLACKBERRY:
 
 int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool selectForRead) const
 {
@@ -1166,5 +1194,6 @@ int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool c
 
     return ret;
 }
+#endif // Q_OS_BLACKBERRY
 
 QT_END_NAMESPACE

@@ -1,46 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 //#define WINVER 0x0500
-#if _WIN32_WINNT < 0x0400
+#if !defined Q_OS_WINRT && (_WIN32_WINNT < 0x0400)
 #define _WIN32_WINNT 0x0400
 #endif
 
@@ -54,19 +46,25 @@
 #include <qpointer.h>
 
 #include <private/qcoreapplication_p.h>
+#ifndef Q_OS_WINRT
 #include <private/qeventdispatcher_win_p.h>
+#else
+#include <private/qeventdispatcher_winrt_p.h>
+#endif
 
 #include <qt_windows.h>
 
-
+#ifndef Q_OS_WINRT
 #ifndef Q_OS_WINCE
 #ifndef _MT
 #define _MT
-#endif
+#endif // _MT
 #include <process.h>
-#else
+#else   // !Q_OS_WINCE
 #include "qfunctions_wince.h"
-#endif
+#endif // Q_OS_WINCE
+#else // !Q_OS_WINRT
+#endif // Q_OS_WINRT
 
 #ifndef QT_NO_THREAD
 QT_BEGIN_NAMESPACE
@@ -101,11 +99,11 @@ void QThreadData::clearCurrentThreadData()
     TlsSetValue(qt_current_thread_data_tls_index, 0);
 }
 
-QThreadData *QThreadData::current()
+QThreadData *QThreadData::current(bool createIfNecessary)
 {
     qt_create_tls();
     QThreadData *threadData = reinterpret_cast<QThreadData *>(TlsGetValue(qt_current_thread_data_tls_index));
-    if (!threadData) {
+    if (!threadData && createIfNecessary) {
         threadData = new QThreadData;
         // This needs to be called prior to new AdoptedThread() to
         // avoid recursion.
@@ -123,7 +121,9 @@ QThreadData *QThreadData::current()
         threadData->threadId = reinterpret_cast<Qt::HANDLE>(GetCurrentThreadId());
 
         if (!QCoreApplicationPrivate::theMainThread) {
-            QCoreApplicationPrivate::theMainThread = threadData->thread;
+            QCoreApplicationPrivate::theMainThread = threadData->thread.load();
+            // TODO: is there a way to reflect the branch's behavior using
+            // WinRT API?
         } else {
             HANDLE realHandle = INVALID_HANDLE_VALUE;
 #if !defined(Q_OS_WINCE) || (defined(_WIN32_WCE) && (_WIN32_WCE>=0x600))
@@ -178,11 +178,15 @@ void qt_watch_adopted_thread(const HANDLE adoptedThreadHandle, QThread *qthread)
     // Start watcher thread if it is not already running.
     if (qt_adopted_thread_watcher_id == 0) {
         if (qt_adopted_thread_wakeup == 0) {
+#ifndef Q_OS_WINRT
             qt_adopted_thread_wakeup = CreateEvent(0, false, false, 0);
+#else
+            qt_adopted_thread_wakeup = CreateEventEx(0, NULL, 0, EVENT_ALL_ACCESS);
+#endif
             qt_adopted_thread_handles.prepend(qt_adopted_thread_wakeup);
         }
 
-        CreateThread(0, 0, qt_adopted_thread_watcher_function, 0, 0, &qt_adopted_thread_watcher_id);
+        CloseHandle(CreateThread(0, 0, qt_adopted_thread_watcher_function, 0, 0, &qt_adopted_thread_watcher_id));
     } else {
         SetEvent(qt_adopted_thread_wakeup);
     }
@@ -208,18 +212,30 @@ DWORD WINAPI qt_adopted_thread_watcher_function(LPVOID)
         qt_adopted_thread_watcher_mutex.unlock();
 
         DWORD ret = WAIT_TIMEOUT;
-        int loops = (handlesCopy.count() / MAXIMUM_WAIT_OBJECTS) + 1, offset, count;
+        int count;
+        int offset;
+        int loops = handlesCopy.size() / MAXIMUM_WAIT_OBJECTS;
+        if (handlesCopy.size() % MAXIMUM_WAIT_OBJECTS)
+            ++loops;
         if (loops == 1) {
             // no need to loop, no timeout
             offset = 0;
             count = handlesCopy.count();
+#ifndef Q_OS_WINRT
             ret = WaitForMultipleObjects(handlesCopy.count(), handlesCopy.constData(), false, INFINITE);
+#else
+            ret = WaitForMultipleObjectsEx(handlesCopy.count(), handlesCopy.constData(), false, INFINITE, false);
+#endif
         } else {
             int loop = 0;
             do {
                 offset = loop * MAXIMUM_WAIT_OBJECTS;
                 count = qMin(handlesCopy.count() - offset, MAXIMUM_WAIT_OBJECTS);
+#ifndef Q_OS_WINRT
                 ret = WaitForMultipleObjects(count, handlesCopy.constData() + offset, false, 100);
+#else
+                ret = WaitForMultipleObjectsEx(count, handlesCopy.constData() + offset, false, 100, false);
+#endif
                 loop = (loop + 1) % loops;
             } while (ret == WAIT_TIMEOUT);
         }
@@ -266,7 +282,7 @@ DWORD WINAPI qt_adopted_thread_watcher_function(LPVOID)
     return 0;
 }
 
-#if !defined(QT_NO_DEBUG) && defined(Q_CC_MSVC) && !defined(Q_OS_WINCE)
+#if !defined(QT_NO_DEBUG) && defined(Q_CC_MSVC) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
 
 #ifndef Q_OS_WIN64
 #  define ULONG_PTR DWORD
@@ -296,7 +312,7 @@ void qt_set_thread_name(HANDLE threadId, LPCSTR threadName)
     {
     }
 }
-#endif // !QT_NO_DEBUG && Q_CC_MSVC && !Q_OS_WINCE
+#endif // !QT_NO_DEBUG && Q_CC_MSVC && !Q_OS_WINCE && !Q_OS_WINRT
 
 /**************************************************************************
  ** QThreadPrivate
@@ -306,7 +322,11 @@ void qt_set_thread_name(HANDLE threadId, LPCSTR threadName)
 
 void QThreadPrivate::createEventDispatcher(QThreadData *data)
 {
+#ifndef Q_OS_WINRT
     QEventDispatcherWin32 *theEventDispatcher = new QEventDispatcherWin32;
+#else
+    QEventDispatcherWinRT *theEventDispatcher = new QEventDispatcherWinRT;
+#endif
     data->eventDispatcher.storeRelease(theEventDispatcher);
     theEventDispatcher->startingUp();
 }
@@ -334,7 +354,7 @@ unsigned int __stdcall QT_ENSURE_STACK_ALIGNED_FOR_SSE QThreadPrivate::start(voi
     else
         createEventDispatcher(data);
 
-#if !defined(QT_NO_DEBUG) && defined(Q_CC_MSVC) && !defined(Q_OS_WINCE)
+#if !defined(QT_NO_DEBUG) && defined(Q_CC_MSVC) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     // sets the name of the current thread.
     QByteArray objectName = thr->objectName().toLocal8Bit();
     qt_set_thread_name((HANDLE)-1,
@@ -377,6 +397,7 @@ void QThreadPrivate::finish(void *arg, bool lockAnyway)
     d->running = false;
     d->finished = true;
     d->isInFinish = false;
+    d->interruptionRequested = false;
 
     if (!d->waiters) {
         CloseHandle(d->handle);
@@ -384,7 +405,6 @@ void QThreadPrivate::finish(void *arg, bool lockAnyway)
     }
 
     d->id = 0;
-
 }
 
 /**************************************************************************
@@ -399,13 +419,17 @@ Qt::HANDLE QThread::currentThreadId() Q_DECL_NOTHROW
 int QThread::idealThreadCount() Q_DECL_NOTHROW
 {
     SYSTEM_INFO sysinfo;
+#ifndef Q_OS_WINRT
     GetSystemInfo(&sysinfo);
+#else
+    GetNativeSystemInfo(&sysinfo);
+#endif
     return sysinfo.dwNumberOfProcessors;
 }
 
 void QThread::yieldCurrentThread()
 {
-#ifndef Q_OS_WINCE
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     SwitchToThread();
 #else
     ::Sleep(0);
@@ -427,7 +451,6 @@ void QThread::usleep(unsigned long usecs)
     ::Sleep((usecs / 1000) + 1);
 }
 
-
 void QThread::start(Priority priority)
 {
     Q_D(QThread);
@@ -446,7 +469,9 @@ void QThread::start(Priority priority)
     d->finished = false;
     d->exited = false;
     d->returnCode = 0;
+    d->interruptionRequested = false;
 
+#ifndef Q_OS_WINRT
     /*
       NOTE: we create the thread in the suspended state, set the
       priority and then resume the thread.
@@ -459,6 +484,10 @@ void QThread::start(Priority priority)
     */
     d->handle = (Qt::HANDLE) _beginthreadex(NULL, d->stackSize, QThreadPrivate::start,
                                             this, CREATE_SUSPENDED, &(d->id));
+#else // !Q_OS_WINRT
+    d->handle = (Qt::HANDLE) CreateThread(NULL, d->stackSize, (LPTHREAD_START_ROUTINE)QThreadPrivate::start,
+                                            this, CREATE_SUSPENDED, reinterpret_cast<LPDWORD>(&d->id));
+#endif // Q_OS_WINRT
 
     if (!d->handle) {
         qErrnoWarning(errno, "QThread::start: Failed to create thread");
@@ -523,7 +552,11 @@ void QThread::terminate()
         d->terminatePending = true;
         return;
     }
+
+    // Calling ExitThread() in setTerminationEnabled is all we can do on WinRT
+#ifndef Q_OS_WINRT
     TerminateThread(d->handle, 0);
+#endif
     QThreadPrivate::finish(this, false);
 }
 
@@ -543,7 +576,11 @@ bool QThread::wait(unsigned long time)
     locker.mutex()->unlock();
 
     bool ret = false;
+#ifndef Q_OS_WINRT
     switch (WaitForSingleObject(d->handle, time)) {
+#else
+    switch (WaitForSingleObjectEx(d->handle, time, false)) {
+#endif
     case WAIT_OBJECT_0:
         ret = true;
         break;
@@ -584,7 +621,11 @@ void QThread::setTerminationEnabled(bool enabled)
     if (enabled && d->terminatePending) {
         QThreadPrivate::finish(thr, false);
         locker.unlock(); // don't leave the mutex locked!
+#ifndef Q_OS_WINRT
         _endthreadex(0);
+#else
+        ExitThread(0);
+#endif
     }
 }
 

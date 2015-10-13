@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +35,10 @@
 #include <qdir.h>
 #include <qpluginloader.h>
 #include "theplugin/plugininterface.h"
+
+#if defined(QT_BUILD_INTERNAL) && defined(Q_OF_MACH_O)
+#  include <QtCore/private/qmachparser_p.h>
+#endif
 
 // Helper macros to let us know if some suffixes are valid
 #define bundle_VALID    false
@@ -118,6 +114,8 @@ private slots:
     void deleteinstanceOnUnload();
     void loadDebugObj();
     void loadCorruptElf();
+    void loadMachO_data();
+    void loadMachO();
 #if defined (Q_OS_UNIX)
     void loadGarbage();
 #endif
@@ -258,8 +256,8 @@ void tst_QPluginLoader::deleteinstanceOnUnload()
         PluginInterface *instance2 = qobject_cast<PluginInterface*>(loader2.instance());
         QCOMPARE(instance2->pluginName(), QLatin1String("Plugin ok"));
 
-        QSignalSpy spy1(loader1.instance(), SIGNAL(destroyed()));
-        QSignalSpy spy2(loader2.instance(), SIGNAL(destroyed()));
+        QSignalSpy spy1(loader1.instance(), &QObject::destroyed);
+        QSignalSpy spy2(loader2.instance(), &QObject::destroyed);
         QVERIFY(spy1.isValid());
         QVERIFY(spy2.isValid());
         if (pass == 0) {
@@ -311,6 +309,78 @@ void tst_QPluginLoader::loadCorruptElf()
 #endif
 }
 
+void tst_QPluginLoader::loadMachO_data()
+{
+#ifdef Q_OF_MACH_O
+    QTest::addColumn<int>("parseResult");
+
+    QTest::newRow("/dev/null") << int(QMachOParser::NotSuitable);
+    QTest::newRow("elftest/debugobj.so") << int(QMachOParser::NotSuitable);
+    QTest::newRow("tst_qpluginloader.cpp") << int(QMachOParser::NotSuitable);
+    QTest::newRow("tst_qpluginloader") << int(QMachOParser::NotSuitable);
+
+#  ifdef Q_PROCESSOR_X86_64
+    QTest::newRow("machtest/good.x86_64.dylib") << int(QMachOParser::QtMetaDataSection);
+    QTest::newRow("machtest/good.i386.dylib") << int(QMachOParser::NotSuitable);
+    QTest::newRow("machtest/good.fat.no-x86_64.dylib") << int(QMachOParser::NotSuitable);
+    QTest::newRow("machtest/good.fat.no-i386.dylib") << int(QMachOParser::QtMetaDataSection);
+#  elif defined(Q_PROCESSOR_X86_32)
+    QTest::newRow("machtest/good.i386.dylib") << int(QMachOParser::QtMetaDataSection);
+    QTest::newRow("machtest/good.x86_64.dylib") << int(QMachOParser::NotSuitable);
+    QTest::newRow("machtest/good.fat.no-i386.dylib") << int(QMachOParser::NotSuitable);
+    QTest::newRow("machtest/good.fat.no-x86_64.dylib") << int(QMachOParser::QtMetaDataSection);
+#  endif
+#  ifndef Q_PROCESSOR_POWER_64
+    QTest::newRow("machtest/good.ppc64.dylib") << int(QMachOParser::NotSuitable);
+#  endif
+
+    QTest::newRow("machtest/good.fat.all.dylib") << int(QMachOParser::QtMetaDataSection);
+    QTest::newRow("machtest/good.fat.stub-x86_64.dylib") << int(QMachOParser::NotSuitable);
+    QTest::newRow("machtest/good.fat.stub-i386.dylib") << int(QMachOParser::NotSuitable);
+
+    QDir d(QFINDTESTDATA("machtest"));
+    QStringList badlist = d.entryList(QStringList() << "bad*.dylib");
+    foreach (const QString &bad, badlist)
+        QTest::newRow(qPrintable("machtest/" + bad)) << int(QMachOParser::NotSuitable);
+#endif
+}
+
+void tst_QPluginLoader::loadMachO()
+{
+#ifdef Q_OF_MACH_O
+    QFile f(QFINDTESTDATA(QTest::currentDataTag()));
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QByteArray data = f.readAll();
+
+    long pos;
+    ulong len;
+    QString errorString;
+    int r = QMachOParser::parse(data.constData(), data.size(), f.fileName(), &errorString, &pos, &len);
+
+    QFETCH(int, parseResult);
+    QCOMPARE(r, parseResult);
+
+    if (r == QMachOParser::NotSuitable)
+        return;
+
+    QVERIFY(pos > 0);
+    QVERIFY(len >= sizeof(void*));
+    QVERIFY(pos + long(len) < data.size());
+    QCOMPARE(pos & (sizeof(void*) - 1), 0UL);
+
+    void *value = *(void**)(data.constData() + pos);
+    QCOMPARE(value, sizeof(void*) > 4 ? (void*)(0xc0ffeec0ffeeL) : (void*)0xc0ffee);
+
+    // now that we know it's valid, let's try to make it invalid
+    ulong offeredlen = pos;
+    do {
+        --offeredlen;
+        r = QMachOParser::parse(data.constData(), offeredlen, f.fileName(), &errorString, &pos, &len);
+        QVERIFY2(r == QMachOParser::NotSuitable, qPrintable(QString("Failed at size 0x%1").arg(offeredlen, 0, 16)));
+    } while (offeredlen);
+#endif
+}
+
 #if defined (Q_OS_UNIX)
 void tst_QPluginLoader::loadGarbage()
 {
@@ -345,7 +415,7 @@ void tst_QPluginLoader::reloadPlugin()
     QVERIFY(instance);
     QCOMPARE(instance->pluginName(), QLatin1String("Plugin ok"));
 
-    QSignalSpy spy(loader.instance(), SIGNAL(destroyed()));
+    QSignalSpy spy(loader.instance(), &QObject::destroyed);
     QVERIFY(spy.isValid());
     QVERIFY(loader.unload());   // refcount reached 0, did really unload
     QCOMPARE(spy.count(), 1);

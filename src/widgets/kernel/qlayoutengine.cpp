@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,10 +37,10 @@
 #include "qvector.h"
 #include "qwidget.h"
 
-#include <qlist.h>
-#include <qalgorithms.h>
-
+#include <qvarlengtharray.h>
 #include <qdebug.h>
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -83,9 +75,7 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
     int cMax = 0;
     int sumStretch = 0;
     int sumSpacing = 0;
-
-    bool wannaGrow = false; // anyone who really wants to grow?
-    //    bool canShrink = false; // anyone who could be persuaded to shrink?
+    int expandingCount = 0;
 
     bool allEmptyNonstretch = true;
     int pendingSpacing = -1;
@@ -111,8 +101,9 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
             }
             pendingSpacing = data->effectiveSpacer(spacer);
         }
-        wannaGrow = wannaGrow || data->expansive || data->stretch > 0;
-        allEmptyNonstretch = allEmptyNonstretch && !wannaGrow && data->empty;
+        if (data->expansive)
+            expandingCount++;
+        allEmptyNonstretch = allEmptyNonstretch && data->empty && !data->expansive && data->stretch <= 0;
     }
 
     int extraspace = 0;
@@ -130,12 +121,13 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
             sumSpacing = spacer * spacerCount;
         }
 
-        QList<int> list;
+        QVarLengthArray<int, 32> minimumSizes;
+        minimumSizes.reserve(count);
 
         for (i = start; i < start + count; i++)
-            list << chain.at(i).minimumSize;
+            minimumSizes << chain.at(i).minimumSize;
 
-        qSort(list);
+        std::sort(minimumSizes.begin(), minimumSizes.end());
 
         int space_left = space - sumSpacing;
 
@@ -144,7 +136,7 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
         int space_used=0;
         int current = 0;
         while (idx < count && space_used < space_left) {
-            current = list.at(idx);
+            current = minimumSizes.at(idx);
             space_used = sum + current * (count - idx);
             sum += current;
             ++idx;
@@ -233,13 +225,14 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
             QLayoutStruct *data = &chain[i];
             if (!data->done
                 && (data->maximumSize <= data->smartSizeHint()
-                    || (wannaGrow && !data->expansive && data->stretch == 0)
                     || (!allEmptyNonstretch && data->empty &&
                         !data->expansive && data->stretch == 0))) {
                 data->size = data->smartSizeHint();
                 data->done = true;
                 space_left -= data->size;
                 sumStretch -= data->stretch;
+                 if (data->expansive)
+                     expandingCount--;
                 n--;
             }
         }
@@ -265,10 +258,13 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
                 if (data->done)
                     continue;
                 extraspace = 0;
-                if (sumStretch <= 0)
-                    fp_w += fp_space / n;
-                else
+                if (sumStretch > 0) {
                     fp_w += (fp_space * data->stretch) / sumStretch;
+                } else if (expandingCount > 0) {
+                    fp_w += (fp_space * (data->expansive ? 1 : 0)) / expandingCount;
+                } else {
+                    fp_w += fp_space * 1 / n;
+                }
                 int w = fRound(fp_w);
                 data->size = w;
                 fp_w -= toFixed(w); // give the difference to the next
@@ -287,6 +283,8 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
                         data->done = true;
                         space_left -= data->smartSizeHint();
                         sumStretch -= data->stretch;
+                        if (data->expansive)
+                            expandingCount--;
                         n--;
                     }
                 }
@@ -300,6 +298,8 @@ void qGeomCalc(QVector<QLayoutStruct> &chain, int start, int count,
                         data->done = true;
                         space_left -= data->maximumSize;
                         sumStretch -= data->stretch;
+                        if (data->expansive)
+                            expandingCount--;
                         n--;
                     }
                 }
@@ -370,7 +370,7 @@ Q_WIDGETS_EXPORT QSize qSmartMinSize(const QSize &sizeHint, const QSize &minSize
 
 Q_WIDGETS_EXPORT QSize qSmartMinSize(const QWidgetItem *i)
 {
-    QWidget *w = ((QWidgetItem *)i)->widget();
+    QWidget *w = const_cast<QWidgetItem *>(i)->widget();
     return qSmartMinSize(w->sizeHint(), w->minimumSizeHint(),
                             w->minimumSize(), w->maximumSize(),
                             w->sizePolicy());
@@ -408,7 +408,7 @@ Q_WIDGETS_EXPORT QSize qSmartMaxSize(const QSize &sizeHint,
 
 Q_WIDGETS_EXPORT QSize qSmartMaxSize(const QWidgetItem *i, Qt::Alignment align)
 {
-    QWidget *w = ((QWidgetItem*)i)->widget();
+    QWidget *w = const_cast<QWidgetItem*>(i)->widget();
 
     return qSmartMaxSize(w->sizeHint().expandedTo(w->minimumSizeHint()), w->minimumSize(), w->maximumSize(),
                             w->sizePolicy(), align);

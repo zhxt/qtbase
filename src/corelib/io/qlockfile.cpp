@@ -1,39 +1,32 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 David Faure <faure+bluesystems@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -74,9 +67,12 @@ QT_BEGIN_NAMESPACE
 
     If the process holding the lock crashes, the lock file stays on disk and can prevent
     any other process from accessing the shared resource, ever. For this reason, QLockFile
-    tries to detect such a "stale" lock file, based on the process ID written into the file,
-    and (in case that process ID got reused meanwhile), on the last modification time of
-    the lock file (30s by default, for the use case of a short-lived operation).
+    tries to detect such a "stale" lock file, based on the process ID written into the file.
+    To cover the situation that the process ID got reused meanwhile, the current process name is
+    compared to the name of the process that corresponds to the process ID from the lock file.
+    If the process names differ, the lock file is considered stale.
+    Additionally, the last modification time of the lock file (30s by default, for the use case of a
+    short-lived operation) is taken into account.
     If the lock file is found to be stale, it will be deleted.
 
     For the use case of protecting a resource over a long time, you should therefore call
@@ -130,7 +126,7 @@ QLockFile::~QLockFile()
     The value of \a staleLockTime is used by lock() and tryLock() in order
     to determine when an existing lock file is considered stale, i.e. left over
     by a crashed process. This is useful for the case where the PID got reused
-    meanwhile, so the only way to detect a stale lock file is by the fact that
+    meanwhile, so one way to detect a stale lock file is by the fact that
     it has been around for a long time.
 
     \sa staleLockTime()
@@ -154,8 +150,8 @@ int QLockFile::staleLockTime() const
 }
 
 /*!
-    Returns true if the lock was acquired by this QLockFile instance,
-    otherwise returns false.
+    Returns \c true if the lock was acquired by this QLockFile instance,
+    otherwise returns \c false.
 
     \sa lock(), unlock(), tryLock()
 */
@@ -175,7 +171,7 @@ bool QLockFile::isLocked() const
     thread without unlocking first is not allowed. This function will
     \e dead-lock when the file is locked recursively.
 
-    Returns true if the lock was acquired, false if it could not be acquired
+    Returns \c true if the lock was acquired, false if it could not be acquired
     due to an unrecoverable error, such as no permissions in the parent directory.
 
     \sa unlock(), tryLock()
@@ -186,8 +182,8 @@ bool QLockFile::lock()
 }
 
 /*!
-    Attempts to create the lock file. This function returns true if the
-    lock was obtained; otherwise it returns false. If another process (or
+    Attempts to create the lock file. This function returns \c true if the
+    lock was obtained; otherwise it returns \c false. If another process (or
     another thread) has created the lock file already, this function will
     wait for at most \a timeout milliseconds for the lock file to become
     available.
@@ -255,7 +251,7 @@ bool QLockFile::tryLock(int timeout)
 /*!
     Retrieves information about the current owner of the lock file.
 
-    If tryLock() returns false, and error() returns LockFailedError,
+    If tryLock() returns \c false, and error() returns LockFailedError,
     this function can be called to find out more information about the existing
     lock file:
     \list
@@ -272,7 +268,7 @@ bool QLockFile::tryLock(int timeout)
     the choice to delete it. After removing the file using removeStaleLockFile(),
     the application can call tryLock() again.
 
-    This function returns true if the information could be successfully retrieved, false
+    This function returns \c true if the information could be successfully retrieved, false
     if the lock file doesn't exist or doesn't contain the expected data.
     This can happen if the lock file was deleted between the time where tryLock() failed
     and the call to this function. Simply call tryLock() again if this happens.
@@ -295,7 +291,7 @@ bool QLockFilePrivate::getLockInfo(qint64 *pid, QString *hostname, QString *appn
     appNameLine.chop(1);
     QByteArray hostNameLine = reader.readLine();
     hostNameLine.chop(1);
-    if (pidLine.isEmpty() || appNameLine.isEmpty())
+    if (pidLine.isEmpty())
         return false;
 
     qint64 thePid = pidLine.toLongLong();
@@ -318,7 +314,7 @@ bool QLockFilePrivate::getLockInfo(qint64 *pid, QString *hostname, QString *appn
     with staleLockTime(0), and after tryLock() returned LockFailedError, and the user
     agreed on removing the lock file.
 
-    Returns true on success, false if the lock file couldn't be removed. This happens
+    Returns \c true on success, false if the lock file couldn't be removed. This happens
     on Windows, when the application owning the lock is still running.
 */
 bool QLockFile::removeStaleLockFile()
@@ -334,7 +330,7 @@ bool QLockFile::removeStaleLockFile()
 /*!
     Returns the lock file error status.
 
-    If tryLock() returns false, this function can be called to find out
+    If tryLock() returns \c false, this function can be called to find out
     the reason why the locking failed.
 */
 QLockFile::LockError QLockFile::error() const

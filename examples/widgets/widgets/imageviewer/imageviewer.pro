@@ -10,8 +10,6 @@ target.path = $$[QT_INSTALL_EXAMPLES]/widgets/widgets/imageviewer
 INSTALLS += target
 
 
-wince*: {
+wince {
    DEPLOYMENT_PLUGIN += qjpeg qgif
 }
-
-simulator: warning(This example might not fully work on Simulator platform)

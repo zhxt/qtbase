@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -286,16 +286,16 @@ QByteArray z = x.mid(5);        // z == "pineapples"
 
 
 //! [30]
-QByteArray x("Qt by DIGIA");
+QByteArray x("Qt by THE QT COMPANY");
 QByteArray y = x.toLower();
-// y == "qt by digia"
+// y == "qt by the qt company"
 //! [30]
 
 
 //! [31]
-QByteArray x("Qt by DIGIA");
+QByteArray x("Qt by THE QT COMPANY");
 QByteArray y = x.toUpper();
-// y == "QT BY DIGIA"
+// y == "QT BY THE QT COMPANY"
 //! [31]
 
 
@@ -352,6 +352,14 @@ QByteArray text("Qt is great!");
 text.toBase64();        // returns "UXQgaXMgZ3JlYXQh"
 //! [39]
 
+//! [39bis]
+QByteArray text("<p>Hello?</p>");
+text.toBase64(QByteArray::Base64Encoding | QByteArray::OmitTrailingEquals);      // returns "PHA+SGVsbG8/PC9wPg"
+text.toBase64(QByteArray::Base64Encoding);                                       // returns "PHA+SGVsbG8/PC9wPg=="
+text.toBase64(QByteArray::Base64UrlEncoding);                                    // returns "PHA-SGVsbG8_PC9wPg=="
+text.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);   // returns "PHA-SGVsbG8_PC9wPg"
+//! [39bis]
+
 
 //! [40]
 QByteArray ba;
@@ -394,6 +402,11 @@ QByteArray text = QByteArray::fromBase64("UXQgaXMgZ3JlYXQh");
 text.data();            // returns "Qt is great!"
 //! [44]
 
+//! [44bis]
+QByteArray::fromBase64("PHA+SGVsbG8/PC9wPg==", QByteArray::Base64Encoding); // returns "<p>Hello?</p>"
+QByteArray::fromBase64("PHA-SGVsbG8_PC9wPg==", QByteArray::Base64UrlEncoding); // returns "<p>Hello?</p>"
+//! [44bis]
+
 
 //! [45]
 QByteArray text = QByteArray::fromHex("517420697320677265617421");
@@ -403,7 +416,7 @@ text.data();            // returns "Qt is great!"
 //! [46]
 QString tmp = "test";
 QByteArray text = tmp.toLocal8Bit();
-char *data = new char[text.size()]
+char *data = new char[text.size()];
 strcpy(data, text.data());
 delete [] data;
 //! [46]
@@ -411,7 +424,7 @@ delete [] data;
 //! [47]
 QString tmp = "test";
 QByteArray text = tmp.toLocal8Bit();
-char *data = new char[text.size() + 1]
+char *data = new char[text.size() + 1];
 strcpy(data, text.data());
 delete [] data;
 //! [47]
@@ -427,7 +440,7 @@ ba2.constData();                // Returns "ca\0" with terminating \0.
 
 QByteArray ba3("ca\0r\0t", 4);
 ba3.size();                     // Returns 4.
-ba2.constData();                // Returns "ca\0r" with terminating \0.
+ba3.constData();                // Returns "ca\0r" with terminating \0.
 
 const char cart[] = {'c', 'a', '\0', 'r', '\0', 't'};
 QByteArray ba4(QByteArray::fromRawData(cart, 6));

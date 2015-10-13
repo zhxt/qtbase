@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -76,11 +68,36 @@
 #include "cxx11-explicit-override-control.h"
 
 #include "parse-defines.h"
+#include "related-metaobjects-in-namespaces.h"
+#include "related-metaobjects-in-gadget.h"
+#include "related-metaobjects-name-conflict.h"
+
+#include "non-gadget-parent-class.h"
+#include "grand-parent-gadget-class.h"
+
+Q_DECLARE_METATYPE(const QMetaObject*);
+
 
 QT_USE_NAMESPACE
 
 template <bool b> struct QTBUG_31218 {};
 struct QTBUG_31218_Derived : QTBUG_31218<-1<0> {};
+
+#if defined(Q_MOC_RUN)
+ class QTBUG_45790 : Bug() { };
+#endif
+
+class CreatableGadget
+{
+    Q_GADGET
+public:
+    Q_INVOKABLE CreatableGadget()
+    {
+        CreatableGadget::qt_static_metacall((QObject*)this, QMetaObject::ReadProperty, -1, Q_NULLPTR);
+    }
+};
+
+CreatableGadget creatableGadget; // Force the compiler to use the constructor
 
 struct MyStruct {};
 struct MyStruct2 {};
@@ -128,6 +145,7 @@ public:
         emit send(value);
     }
 
+    bool operator< ( const Sender & ) const { /* QTBUG-36834 */ return true;}
 signals:
     void send(const String::Type&);
     void send(const Int::Type&);
@@ -170,6 +188,9 @@ class TestClassinfoWithEscapes: public QObject
     Q_OBJECT
     Q_CLASSINFO("escaped", "\"bar\"")
     Q_CLASSINFO("\"escaped\"", "foo")
+    Q_CLASSINFO("cpp c*/omment", "f/*oo")
+    Q_CLASSINFO("endswith\\", "Or?\?/")
+    Q_CLASSINFO("newline\n inside\n", "Or \r")
 public slots:
     void slotWithAReallyLongName(int)
     { }
@@ -416,7 +437,7 @@ public:
 
     enum TestEnum { One, Two, Three };
 
-    Q_ENUMS(TestEnum)
+    Q_ENUM(TestEnum)
 };
 
 class PropertyUseClass : public QObject
@@ -435,7 +456,7 @@ class EnumSourceClass : public QObject
 public:
     enum TestEnum { Value = 37 };
 
-    Q_ENUMS(TestEnum)
+    Q_ENUM(TestEnum)
 };
 
 class EnumUserClass : public QObject
@@ -523,6 +544,7 @@ private slots:
     void structQObject();
     void namespacedFlags();
     void warnOnMultipleInheritance();
+    void ignoreOptionClashes();
     void forgottenQInterface();
     void os9Newline();
     void winNewline();
@@ -530,6 +552,7 @@ private slots:
     void frameworkSearchPath();
     void cstyleEnums();
     void defineMacroViaCmdline();
+    void specifyMetaTagsFromCmdline();
     void invokable();
     void singleFunctionKeywordSignalAndSlot();
     void templateGtGt();
@@ -565,6 +588,15 @@ private slots:
     void parseDefines();
     void preprocessorOnly();
     void unterminatedFunctionMacro();
+    void QTBUG32933_relatedObjectsDontIncludeItself();
+    void writeEnumFromUnrelatedClass();
+    void relatedMetaObjectsWithinNamespaces();
+    void relatedMetaObjectsInGadget();
+    void relatedMetaObjectsNameConflict_data();
+    void relatedMetaObjectsNameConflict();
+    void strignLiteralsInMacroExtension();
+    void veryLongStringData();
+    void gadgetHierarchy();
 
 signals:
     void sigWithUnsignedArg(unsigned foo);
@@ -587,6 +619,7 @@ private:
     void setMember3( const QString &sVal ) { sMember = sVal; }
 
 private:
+    QString m_moc;
     QString m_sourceDirectory;
     QString qtIncludePath;
     class PrivateClass;
@@ -597,12 +630,16 @@ private:
 
 void tst_Moc::initTestCase()
 {
+    QString binpath = QLibraryInfo::location(QLibraryInfo::BinariesPath);
+    QString qmake = QString("%1/qmake").arg(binpath);
+    m_moc = QString("%1/moc").arg(binpath);
+
     const QString testHeader = QFINDTESTDATA("backslash-newlines.h");
     QVERIFY(!testHeader.isEmpty());
     m_sourceDirectory = QFileInfo(testHeader).absolutePath();
 #if defined(Q_OS_UNIX) && !defined(QT_NO_PROCESS)
     QProcess proc;
-    proc.start("qmake", QStringList() << "-query" << "QT_INSTALL_HEADERS");
+    proc.start(qmake, QStringList() << "-query" << "QT_INSTALL_HEADERS");
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray output = proc.readAllStandardOutput();
@@ -646,7 +683,7 @@ void tst_Moc::oldStyleCasts()
 #endif
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
-    proc.start("moc", QStringList(m_sourceDirectory + QStringLiteral("/oldstyle-casts.h")));
+    proc.start(m_moc, QStringList(m_sourceDirectory + QStringLiteral("/oldstyle-casts.h")));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
@@ -655,7 +692,7 @@ void tst_Moc::oldStyleCasts()
 
     QStringList args;
     args << "-c" << "-x" << "c++" << "-Wold-style-cast" << "-I" << "."
-         << "-I" << qtIncludePath << "-o" << "/dev/null" << "-fPIE" << "-";
+         << "-I" << qtIncludePath << "-o" << "/dev/null" << "-fPIC" << "-";
     proc.start("gcc", args);
     QVERIFY(proc.waitForStarted());
     proc.write(mocOut);
@@ -677,15 +714,15 @@ void tst_Moc::warnOnExtraSignalSlotQualifiaction()
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
     const QString header = m_sourceDirectory + QStringLiteral("/extraqualification.h");
-    proc.start("moc", QStringList(header));
+    proc.start(m_moc, QStringList(header));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":53: Warning: Function declaration Test::badFunctionDeclaration contains extra qualification. Ignoring as signal or slot.\n") +
-                header + QString(":56: Warning: parsemaybe: Function declaration Test::anotherOne contains extra qualification. Ignoring as signal or slot.\n"));
+                QString(":48: Warning: Function declaration Test::badFunctionDeclaration contains extra qualification. Ignoring as signal or slot.\n") +
+                header + QString(":51: Warning: parsemaybe: Function declaration Test::anotherOne contains extra qualification. Ignoring as signal or slot.\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -716,7 +753,7 @@ void tst_Moc::inputFileNameWithDotsButNoExtension()
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
     proc.setWorkingDirectory(m_sourceDirectory + QStringLiteral("/task71021"));
-    proc.start("moc", QStringList("../Header"));
+    proc.start(m_moc, QStringList("../Header"));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
@@ -725,7 +762,7 @@ void tst_Moc::inputFileNameWithDotsButNoExtension()
 
     QStringList args;
     args << "-c" << "-x" << "c++" << "-I" << ".."
-         << "-I" << qtIncludePath << "-o" << "/dev/null" << "-fPIE" <<  "-";
+         << "-I" << qtIncludePath << "-o" << "/dev/null" << "-fPIC" <<  "-";
     proc.start("gcc", args);
     QVERIFY(proc.waitForStarted());
     proc.write(mocOut);
@@ -787,6 +824,14 @@ void tst_Moc::classinfoWithEscapes()
 {
     const QMetaObject *mobj = &TestClassinfoWithEscapes::staticMetaObject;
     QCOMPARE(mobj->methodCount() - mobj->methodOffset(), 1);
+
+    QCOMPARE(mobj->classInfoCount(), 5);
+    QCOMPARE(mobj->classInfo(2).name(), "cpp c*/omment");
+    QCOMPARE(mobj->classInfo(2).value(), "f/*oo");
+    QCOMPARE(mobj->classInfo(3).name(), "endswith\\");
+    QCOMPARE(mobj->classInfo(3).value(), "Or?\?/");
+    QCOMPARE(mobj->classInfo(4).name(), "newline\n inside\n");
+    QCOMPARE(mobj->classInfo(4).value(), "Or \r");
 
     QMetaMethod mm = mobj->method(mobj->methodOffset());
     QCOMPARE(mm.methodSignature(), QByteArray("slotWithAReallyLongName(int)"));
@@ -881,7 +926,7 @@ void tst_Moc::testExtraDataForEnum()
     const QMetaObject *mobjUser = &EnumUserClass::staticMetaObject;
     QCOMPARE(mobjUser->enumeratorCount(), 0);
 
-    const QMetaObject **objects = mobjUser->d.relatedMetaObjects;
+    const QMetaObject * const *objects = mobjUser->d.relatedMetaObjects;
     QVERIFY(objects);
     QVERIFY(objects[0] == mobjSource);
     QVERIFY(objects[1] == 0);
@@ -956,14 +1001,54 @@ void tst_Moc::warnOnMultipleInheritance()
     QStringList args;
     const QString header = m_sourceDirectory + QStringLiteral("/warn-on-multiple-qobject-subclasses.h");
     args << "-I" << qtIncludePath + "/QtGui" << header;
-    proc.start("moc", args);
+    proc.start(m_moc, args);
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":53: Warning: Class Bar inherits from two QObject subclasses QWindow and Foo. This is not supported!\n"));
+                QString(":48: Warning: Class Bar inherits from two QObject subclasses QWindow and Foo. This is not supported!\n"));
+#else
+    QSKIP("Only tested on linux/gcc");
+#endif
+}
+
+void tst_Moc::ignoreOptionClashes()
+{
+#ifdef MOC_CROSS_COMPILED
+    QSKIP("Not tested when cross-compiled");
+#endif
+#if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
+    QProcess proc;
+    QStringList args;
+    const QString header = m_sourceDirectory + QStringLiteral("/interface-from-include.h");
+    const QString includeDir = m_sourceDirectory + "/Test.framework/Headers";
+    // given --ignore-option-clashes, -pthread should be ignored, but the -I path should not be.
+    args << "--ignore-option-clashes" << "-pthread" << "-I" << includeDir << "-fno-builtin" << header;
+    proc.start(m_moc, args);
+    bool finished = proc.waitForFinished();
+    if (!finished)
+        qWarning("waitForFinished failed. QProcess error: %d", (int)proc.error());
+    QVERIFY(finished);
+    if (proc.exitCode() != 0) {
+        qDebug() << proc.readAllStandardError();
+    }
+    QCOMPARE(proc.exitCode(), 0);
+    QCOMPARE(proc.readAllStandardError(), QByteArray());
+    QByteArray mocOut = proc.readAllStandardOutput();
+
+    // If -pthread wasn't ignored, it was parsed as a prefix of "thread/", which breaks compilation.
+    QStringList gccArgs;
+    gccArgs << "-c" << "-x" << "c++" << "-I" << ".."
+         << "-I" << qtIncludePath << "-I" << includeDir << "-o" << "/dev/null" << "-fPIC" <<  "-";
+    proc.start("gcc", gccArgs);
+    QVERIFY(proc.waitForStarted());
+    proc.write(mocOut);
+    proc.closeWriteChannel();
+
+    QVERIFY(proc.waitForFinished());
+    QCOMPARE(QString::fromLocal8Bit(proc.readAllStandardError()), QString());
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -979,14 +1064,14 @@ void tst_Moc::forgottenQInterface()
     QStringList args;
     const QString header = m_sourceDirectory + QStringLiteral("/forgotten-qinterface.h");
     args << "-I" << qtIncludePath + "/QtCore" << header;
-    proc.start("moc", args);
+    proc.start(m_moc, args);
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":55: Warning: Class Test implements the interface MyInterface but does not list it in Q_INTERFACES. qobject_cast to MyInterface will not work!\n"));
+                QString(":50: Warning: Class Test implements the interface MyInterface but does not list it in Q_INTERFACES. qobject_cast to MyInterface will not work!\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -1063,7 +1148,7 @@ void tst_Moc::frameworkSearchPath()
          ;
 
     QProcess proc;
-    proc.start("moc", args);
+    proc.start(m_moc, args);
     bool finished = proc.waitForFinished();
     if (!finished)
         qWarning("waitForFinished failed. QProcess error: %d", (int)proc.error());
@@ -1081,12 +1166,18 @@ void tst_Moc::frameworkSearchPath()
 void tst_Moc::cstyleEnums()
 {
     const QMetaObject &obj = CStyleEnums::staticMetaObject;
-    QCOMPARE(obj.enumeratorCount(), 1);
+    QCOMPARE(obj.enumeratorCount(), 2);
     QMetaEnum metaEnum = obj.enumerator(0);
     QCOMPARE(metaEnum.name(), "Baz");
     QCOMPARE(metaEnum.keyCount(), 2);
     QCOMPARE(metaEnum.key(0), "Foo");
     QCOMPARE(metaEnum.key(1), "Bar");
+
+    QMetaEnum metaEnum2 = obj.enumerator(1);
+    QCOMPARE(metaEnum2.name(), "Baz2");
+    QCOMPARE(metaEnum2.keyCount(), 2);
+    QCOMPARE(metaEnum2.key(0), "Foo2");
+    QCOMPARE(metaEnum2.key(1), "Bar2");
 }
 
 void tst_Moc::templateGtGt()
@@ -1096,7 +1187,7 @@ void tst_Moc::templateGtGt()
 #endif
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
-    proc.start("moc", QStringList(m_sourceDirectory + QStringLiteral("/template-gtgt.h")));
+    proc.start(m_moc, QStringList(m_sourceDirectory + QStringLiteral("/template-gtgt.h")));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
@@ -1117,7 +1208,7 @@ void tst_Moc::defineMacroViaCmdline()
     args << "-DFOO";
     args << m_sourceDirectory + QStringLiteral("/macro-on-cmdline.h");
 
-    proc.start("moc", args);
+    proc.start(m_moc, args);
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QCOMPARE(proc.readAllStandardError(), QByteArray());
@@ -1126,6 +1217,37 @@ void tst_Moc::defineMacroViaCmdline()
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
+}
+
+// tst_Moc::specifyMetaTagsFromCmdline()
+// plugin_metadata.h contains a plugin which we register here. Since we're not building this
+// application as a plugin, we need top copy some of the initializer code found in qplugin.h:
+extern "C" QObject *qt_plugin_instance();
+extern "C" const char *qt_plugin_query_metadata();
+class StaticPluginInstance{
+public:
+    StaticPluginInstance() {
+        QStaticPlugin plugin = { &qt_plugin_instance, &qt_plugin_query_metadata };
+        qRegisterStaticPluginFunction(plugin);
+    }
+};
+static StaticPluginInstance staticInstance;
+
+void tst_Moc::specifyMetaTagsFromCmdline() {
+    foreach (const QStaticPlugin &plugin, QPluginLoader::staticPlugins()) {
+        const QString iid = plugin.metaData().value(QLatin1String("IID")).toString();
+        if (iid == QLatin1String("test.meta.tags")) {
+            const QJsonArray metaTagsUriList = plugin.metaData().value("uri").toArray();
+            QCOMPARE(metaTagsUriList.size(), 2);
+
+            // The following uri-s are set in the pro file using
+            // -Muri=com.company.app -Muri=com.company.app.private
+            QCOMPARE(metaTagsUriList[0].toString(), QLatin1String("com.company.app"));
+            QCOMPARE(metaTagsUriList[1].toString(), QLatin1String("com.company.app.private"));
+            return;
+        }
+    }
+    QFAIL("Could not find plugin with IID 'test.meta.tags'");
 }
 
 void tst_Moc::invokable()
@@ -1213,13 +1335,13 @@ public:
     PrivatePropertyTest(QObject *parent = 0) : QObject(parent), mFoo(0), d (new MyDPointer) {}
     int foo() { return mFoo ; }
     void setFoo(int value) { mFoo = value; }
-    MyDPointer *d_func() {return d;}
+    MyDPointer *d_func() {return d.data();}
 signals:
     void blub4Changed();
     void blub5Changed(const QString &newBlub);
 private:
     int mFoo;
-    MyDPointer *d;
+    QScopedPointer<MyDPointer> d;
 };
 
 
@@ -1264,14 +1386,14 @@ void tst_Moc::warnOnPropertyWithoutREAD()
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
     const QString header = m_sourceDirectory + QStringLiteral("/warn-on-property-without-read.h");
-    proc.start("moc", QStringList(header));
+    proc.start(m_moc, QStringList(header));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":46: Warning: Property declaration foo has no READ accessor function or associated MEMBER variable. The property will be invalid.\n"));
+                QString(":41: Warning: Property declaration foo has no READ accessor function or associated MEMBER variable. The property will be invalid.\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -1323,19 +1445,19 @@ void tst_Moc::constructors()
     QCOMPARE(mo->indexOfConstructor("CtorTestClass2(QObject*)"), -1);
     QCOMPARE(mo->indexOfConstructor("CtorTestClass(float,float)"), -1);
 
-    QObject *o1 = mo->newInstance();
+    QScopedPointer<QObject> o1(mo->newInstance());
     QVERIFY(o1 != 0);
     QCOMPARE(o1->parent(), (QObject*)0);
-    QVERIFY(qobject_cast<CtorTestClass*>(o1) != 0);
+    QVERIFY(qobject_cast<CtorTestClass*>(o1.data()) != 0);
 
-    QObject *o2 = mo->newInstance(Q_ARG(QObject*, o1));
+    QObject *o2 = mo->newInstance(Q_ARG(QObject*, o1.data()));
     QVERIFY(o2 != 0);
-    QCOMPARE(o2->parent(), o1);
+    QCOMPARE(o2->parent(), o1.data());
 
     QString str = QString::fromLatin1("hello");
-    QObject *o3 = mo->newInstance(Q_ARG(QString, str));
+    QScopedPointer<QObject> o3(mo->newInstance(Q_ARG(QString, str)));
     QVERIFY(o3 != 0);
-    QCOMPARE(qobject_cast<CtorTestClass*>(o3)->m_str, str);
+    QCOMPARE(qobject_cast<CtorTestClass*>(o3.data())->m_str, str);
 
     {
         //explicit constructor
@@ -1375,14 +1497,14 @@ void tst_Moc::warnOnVirtualSignal()
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
     const QString header = m_sourceDirectory + QStringLiteral("/pure-virtual-signals.h");
-    proc.start("moc", QStringList(header));
+    proc.start(m_moc, QStringList(header));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
-    QCOMPARE(mocWarning, header + QString(":48: Warning: Signals cannot be declared virtual\n") +
-                         header + QString(":50: Warning: Signals cannot be declared virtual\n"));
+    QCOMPARE(mocWarning, header + QString(":43: Warning: Signals cannot be declared virtual\n") +
+                         header + QString(":45: Warning: Signals cannot be declared virtual\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -1464,13 +1586,30 @@ class QTBUG12260_defaultTemplate_Object : public QObject
 public slots:
 #if !(defined(Q_CC_GNU) && __GNUC__ == 4 && __GNUC_MINOR__ <= 3) || defined(Q_MOC_RUN)
     void doSomething(QHash<QString, QVariant> values = QHash<QString, QVariant>() ) { Q_UNUSED(values); }
+    void doSomethingElse(QSharedPointer<QVarLengthArray<QString, (16 >> 2)> > val
+            = QSharedPointer<QVarLengthArray<QString, (16 >> 2)> >() )
+    { Q_UNUSED(val); }
 #else
     // we want to test the previous function, but gcc < 4.4 seemed to have a bug similar to the one moc has.
     typedef QHash<QString, QVariant> WorkaroundGCCBug;
     void doSomething(QHash<QString, QVariant> values = WorkaroundGCCBug() ) { Q_UNUSED(values); }
+    void doSomethingElse(QSharedPointer<QVarLengthArray<QString, (16 >> 2)> > val
+            = (QSharedPointer<QVarLengthArray<QString, (16 >> 2)> >()) )
+    { Q_UNUSED(val); }
 #endif
 
     void doAnotherThing(bool a = (1 < 3), bool b = (1 > 4)) { Q_UNUSED(a); Q_UNUSED(b); }
+
+#if defined(Q_MOC_RUN) || (defined(Q_COMPILER_AUTO_TYPE) && !(defined(Q_CC_CLANG) && Q_CC_CLANG < 304))
+    // There is no Q_COMPILER_>>  but if compiler support auto, it should also support >>
+    void performSomething(QVector<QList<QString>> e = QVector<QList<QString>>(8 < 1),
+                          QHash<int, QVector<QString>> h = QHash<int, QVector<QString>>())
+    { Q_UNUSED(e); Q_UNUSED(h); }
+#else
+    void performSomething(QVector<QList<QString> > e = QVector<QList<QString> >(),
+                          QHash<int, QVector<QString> > h = (QHash<int, QVector<QString> >()))
+    { Q_UNUSED(e); Q_UNUSED(h); }
+#endif
 };
 
 
@@ -1478,6 +1617,8 @@ void tst_Moc::QTBUG12260_defaultTemplate()
 {
     QVERIFY(QTBUG12260_defaultTemplate_Object::staticMetaObject.indexOfSlot("doSomething(QHash<QString,QVariant>)") != -1);
     QVERIFY(QTBUG12260_defaultTemplate_Object::staticMetaObject.indexOfSlot("doAnotherThing(bool,bool)") != -1);
+    QVERIFY(QTBUG12260_defaultTemplate_Object::staticMetaObject.indexOfSlot("doSomethingElse(QSharedPointer<QVarLengthArray<QString,(16>>2)> >)") != -1);
+    QVERIFY(QTBUG12260_defaultTemplate_Object::staticMetaObject.indexOfSlot("performSomething(QVector<QList<QString> >,QHash<int,QVector<QString> >)") != -1);
 }
 
 void tst_Moc::notifyError()
@@ -1488,7 +1629,7 @@ void tst_Moc::notifyError()
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
     const QString header = m_sourceDirectory + QStringLiteral("/error-on-wrong-notify.h");
-    proc.start("moc", QStringList(header));
+    proc.start(m_moc, QStringList(header));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 1);
     QCOMPARE(proc.exitStatus(), QProcess::NormalExit);
@@ -1496,7 +1637,7 @@ void tst_Moc::notifyError()
     QVERIFY(mocOut.isEmpty());
     QString mocError = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocError, header +
-        QString(":52: Error: NOTIFY signal 'fooChanged' of property 'foo' does not exist in class ClassWithWrongNOTIFY.\n"));
+        QString(":47: Error: NOTIFY signal 'fooChanged' of property 'foo' does not exist in class ClassWithWrongNOTIFY.\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -1533,7 +1674,6 @@ class VersionTest : public QObject
     Q_OBJECT
     Q_PROPERTY(int prop1 READ foo)
     Q_PROPERTY(int prop2 READ foo REVISION 2)
-    Q_ENUMS(TestEnum);
 
 public:
     int foo() const { return 0; }
@@ -1542,6 +1682,8 @@ public:
     Q_INVOKABLE Q_REVISION(4) void method2() {}
 
     enum TestEnum { One, Two };
+    Q_ENUM(TestEnum);
+
 
 public slots:
     void slot1() {}
@@ -1566,7 +1708,6 @@ class VersionTestNotify : public QObject
     Q_OBJECT
     Q_PROPERTY(int prop1 READ foo NOTIFY fooChanged)
     Q_PROPERTY(int prop2 READ foo REVISION 2)
-    Q_ENUMS(TestEnum);
 
 public:
     int foo() const { return 0; }
@@ -1575,6 +1716,7 @@ public:
     Q_INVOKABLE Q_REVISION(4) void method2() {}
 
     enum TestEnum { One, Two };
+    Q_ENUM(TestEnum);
 
 public slots:
     void slot1() {}
@@ -1679,6 +1821,14 @@ void tst_Moc::warnings_data()
         << QString("IGNORE_ALL_STDOUT")
         << QString("standard input:1: Warning: Property declaration x has no READ accessor function or associated MEMBER variable. The property will be invalid.");
 
+    // This should output a warning
+    QTest::newRow("Duplicate property warning")
+        << QByteArray("class X : public QObject { Q_OBJECT Q_PROPERTY(int x READ x) Q_PROPERTY(int x READ y) };")
+        << QStringList()
+        << 0
+        << QString("IGNORE_ALL_STDOUT")
+        << QString("standard input:1: Warning: The property 'x' is defined multiple times in class X.");
+
     // Passing "-nn" should NOT suppress the warning
     QTest::newRow("Invalid property warning with -nn")
         << QByteArray("class X : public QObject { Q_OBJECT Q_PROPERTY(int x) };")
@@ -1718,6 +1868,27 @@ void tst_Moc::warnings_data()
         << 1
         << QString()
         << QString("standard input:1: Error: Class contains Q_OBJECT macro but does not inherit from QObject");
+
+    QTest::newRow("Warning on invalid macro")
+        << QByteArray("#define Foo(a, b)\n class X : public QObject { Q_OBJECT  }; \n Foo(a) \n Foo(a,b,c) \n")
+        << QStringList()
+        << 0
+        << QString("IGNORE_ALL_STDOUT")
+        << QString();
+
+    QTest::newRow("Class declaration lacks Q_OBJECT macro.")
+        << QByteArray("class X : public QObject \n { \n public slots: \n void foo() {} \n };")
+        << QStringList()
+        << 1
+        << QString()
+        << QString("standard input:5: Error: Class declaration lacks Q_OBJECT macro.");
+
+    QTest::newRow("QTBUG-46210: crash on invalid macro")
+        << QByteArray("#define Foo(a, b, c) a b c #a #b #c a##b##c #d\n Foo(45);")
+        << QStringList()
+        << 1
+        << QString("IGNORE_ALL_STDOUT")
+        << QString(":2: Error: '#' is not followed by a macro parameter");
 }
 
 void tst_Moc::warnings()
@@ -1744,7 +1915,7 @@ void tst_Moc::warnings()
     env.insert("QT_MESSAGE_PATTERN", "no qDebug or qWarning please");
     proc.setProcessEnvironment(env);
 
-    proc.start("moc", args);
+    proc.start(m_moc, args);
     QVERIFY(proc.waitForStarted());
 
     QCOMPARE(proc.write(input), qint64(input.size()));
@@ -1759,7 +1930,7 @@ void tst_Moc::warnings()
     // magic value "IGNORE_ALL_STDOUT" ignores stdout
     if (expectedStdOut != "IGNORE_ALL_STDOUT")
         QCOMPARE(QString::fromLocal8Bit(proc.readAllStandardOutput()).trimmed(), expectedStdOut);
-    QCOMPARE(QString::fromLocal8Bit(proc.readAllStandardError()).trimmed(), expectedStdErr);
+    QCOMPARE(QString::fromLocal8Bit(proc.readAllStandardError()).trimmed().remove('\r'), expectedStdErr);
 }
 
 class tst_Moc::PrivateClass : public QObject {
@@ -1782,19 +1953,26 @@ void tst_Moc::privateClass()
 
 void tst_Moc::cxx11Enums_data()
 {
+    QTest::addColumn<const QMetaObject *>("meta");
     QTest::addColumn<QByteArray>("enumName");
     QTest::addColumn<char>("prefix");
 
-    QTest::newRow("EnumClass") << QByteArray("EnumClass") << 'A';
-    QTest::newRow("TypedEnum") << QByteArray("TypedEnum") << 'B';
-    QTest::newRow("TypedEnumClass") << QByteArray("TypedEnumClass") << 'C';
-    QTest::newRow("NormalEnum") << QByteArray("NormalEnum") << 'D';
-}
+    const QMetaObject *meta1 = &CXX11Enums::staticMetaObject;
+    const QMetaObject *meta2 = &CXX11Enums2::staticMetaObject;
 
+    QTest::newRow("EnumClass") << meta1 << QByteArray("EnumClass") << 'A';
+    QTest::newRow("EnumClass 2") << meta2 << QByteArray("EnumClass") << 'A';
+    QTest::newRow("TypedEnum") << meta1 << QByteArray("TypedEnum") << 'B';
+    QTest::newRow("TypedEnum 2") << meta2 << QByteArray("TypedEnum") << 'B';
+    QTest::newRow("TypedEnumClass") << meta1 << QByteArray("TypedEnumClass") << 'C';
+    QTest::newRow("TypedEnumClass 2") << meta2 << QByteArray("TypedEnumClass") << 'C';
+    QTest::newRow("NormalEnum") << meta1 << QByteArray("NormalEnum") << 'D';
+    QTest::newRow("NormalEnum 2") << meta2 << QByteArray("NormalEnum") << 'D';
+}
 
 void tst_Moc::cxx11Enums()
 {
-    const QMetaObject *meta = &CXX11Enums::staticMetaObject;
+    QFETCH(const QMetaObject *,meta);
     QCOMPARE(meta->enumeratorOffset(), 0);
 
     QFETCH(QByteArray, enumName);
@@ -2402,8 +2580,6 @@ void tst_Moc::finalClasses()
     QCOMPARE(className, expected);
 }
 
-Q_DECLARE_METATYPE(const QMetaObject*);
-
 void tst_Moc::explicitOverrideControl_data()
 {
     QTest::addColumn<const QMetaObject*>("mo");
@@ -2955,6 +3131,9 @@ void tst_Moc::parseDefines()
 
     index = mo->indexOfSlot("PD_DEFINE_ITSELF_SUFFIX(int)");
     QVERIFY(index != -1);
+
+    index = mo->indexOfSignal("cmdlineSignal(QMap<int,int>)");
+    QVERIFY(index != -1);
 }
 
 void tst_Moc::preprocessorOnly()
@@ -2964,7 +3143,7 @@ void tst_Moc::preprocessorOnly()
 #endif
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
-    proc.start("moc", QStringList() << "-E" << m_sourceDirectory + QStringLiteral("/pp-dollar-signs.h"));
+    proc.start(m_moc, QStringList() << "-E" << m_sourceDirectory + QStringLiteral("/pp-dollar-signs.h"));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray mocOut = proc.readAllStandardOutput();
@@ -2985,7 +3164,7 @@ void tst_Moc::unterminatedFunctionMacro()
 #endif
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
     QProcess proc;
-    proc.start("moc", QStringList() << "-E" << m_sourceDirectory + QStringLiteral("/unterminated-function-macro.h"));
+    proc.start(m_moc, QStringList() << "-E" << m_sourceDirectory + QStringLiteral("/unterminated-function-macro.h"));
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 1);
     QCOMPARE(proc.readAllStandardOutput(), QByteArray());
@@ -2997,7 +3176,267 @@ void tst_Moc::unterminatedFunctionMacro()
 #endif
 }
 
+namespace QTBUG32933_relatedObjectsDontIncludeItself {
+    namespace NS {
+        class Obj : QObject {
+            Q_OBJECT
+            Q_PROPERTY(MyEnum p1 MEMBER member)
+            Q_PROPERTY(Obj::MyEnum p2 MEMBER member)
+            Q_PROPERTY(NS::Obj::MyEnum p3 MEMBER member)
+            Q_PROPERTY(QTBUG32933_relatedObjectsDontIncludeItself::NS::Obj::MyEnum p4 MEMBER member)
+            Q_ENUMS(MyEnum);
+        public:
+            enum MyEnum { Something, SomethingElse };
+            MyEnum member;
+        };
+    }
+}
+
+void tst_Moc::QTBUG32933_relatedObjectsDontIncludeItself()
+{
+    const QMetaObject *mo = &QTBUG32933_relatedObjectsDontIncludeItself::NS::Obj::staticMetaObject;
+    const QMetaObject * const *objects = mo->d.relatedMetaObjects;
+    // the related objects should be empty because the enums is in the same object.
+    QVERIFY(!objects);
+
+}
+
+class UnrelatedClass : public QObject
+{
+    Q_OBJECT
+    Q_ENUMS(UnrelatedEnum)
+public:
+    enum UnrelatedEnum {
+        UnrelatedInvalidValue = -1,
+        UnrelatedValue = 42
+    };
+};
+
+// The presence of this macro used to confuse moc and prevent
+// UnrelatedClass from being listed in the related meta objects.
+Q_DECLARE_METATYPE(UnrelatedClass::UnrelatedEnum)
+
+class TestClassReferencingUnrelatedEnum : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(UnrelatedClass::UnrelatedEnum enumProperty READ enumProperty WRITE setEnumProperty)
+public:
+    TestClassReferencingUnrelatedEnum()
+        : m_enumProperty(UnrelatedClass::UnrelatedInvalidValue)
+    {}
+
+    UnrelatedClass::UnrelatedEnum enumProperty() const {
+        return m_enumProperty;
+    }
+
+    void setEnumProperty(UnrelatedClass::UnrelatedEnum arg) {
+        m_enumProperty = arg;
+    }
+
+private:
+    UnrelatedClass::UnrelatedEnum m_enumProperty;
+};
+
+void tst_Moc::writeEnumFromUnrelatedClass()
+{
+    TestClassReferencingUnrelatedEnum obj;
+    QString enumValueAsString("UnrelatedValue");
+    obj.setProperty("enumProperty", enumValueAsString);
+    QCOMPARE(int(obj.enumProperty()), int(UnrelatedClass::UnrelatedValue));
+}
+
+
+
+void tst_Moc::relatedMetaObjectsWithinNamespaces()
+{
+    const QMetaObject *relatedMo = &QTBUG_2151::A::staticMetaObject;
+
+    const QMetaObject *testMo = &QTBUG_2151::B::staticMetaObject;
+    QVERIFY(testMo->d.relatedMetaObjects);
+    QVERIFY(testMo->d.relatedMetaObjects[0] == relatedMo);
+}
+
+void tst_Moc::relatedMetaObjectsInGadget()
+{
+    const QMetaObject *relatedMo = &QTBUG_35657::A::staticMetaObject;
+
+    const QMetaObject *testMo = &QTBUG_35657::B::staticMetaObject;
+    QVERIFY(testMo->d.relatedMetaObjects);
+    QVERIFY(testMo->d.relatedMetaObjects[0] == relatedMo);
+}
+
+void tst_Moc::relatedMetaObjectsNameConflict_data()
+{
+    typedef QVector<const QMetaObject*> QMetaObjects;
+    QTest::addColumn<const QMetaObject*>("dependingObject");
+    QTest::addColumn<QMetaObjects>("relatedMetaObjects");
+
+    //NS1
+    const QMetaObject *n1gadget = &NS1::Gadget::staticMetaObject;
+    const QMetaObject *n1object = &NS1::Object::staticMetaObject;
+    const QMetaObject *n1nestedGadget = &NS1::Nested::Gadget::staticMetaObject;
+    const QMetaObject *n1nestedObject = &NS1::Nested::Object::staticMetaObject;
+    //N2
+    const QMetaObject *n2gadget = &NS2::Gadget::staticMetaObject;
+    const QMetaObject *n2object = &NS2::Object::staticMetaObject;
+    const QMetaObject *n2nestedGadget = &NS2::Nested::Gadget::staticMetaObject;
+    const QMetaObject *n2nestedObject = &NS2::Nested::Object::staticMetaObject;
+
+    QTest::newRow("N1::dependingObject") << &NS1::DependingObject::staticMetaObject
+                                        <<  (QMetaObjects() << n1gadget << n1object);
+    QTest::newRow("N2::dependingObject") << &NS2::DependingObject::staticMetaObject
+                                        <<  (QMetaObjects() << n2gadget << n2object);
+    QTest::newRow("N1::dependingNestedObject") << &NS1::DependingNestedObject::staticMetaObject
+                                        <<  (QMetaObjects() << n1nestedObject);
+    QTest::newRow("N2::dependingNestedObject") << &NS2::DependingNestedObject::staticMetaObject
+                                        <<  (QMetaObjects() << n2nestedObject);
+    QTest::newRow("N1::dependingNestedGadget") << &NS1::DependingNestedGadget::staticMetaObject
+                                        <<  (QMetaObjects() << n1nestedGadget);
+    QTest::newRow("N2::dependingNestedGadget") << &NS2::DependingNestedGadget::staticMetaObject
+                                        <<  (QMetaObjects() << n2nestedGadget);
+}
+
+void tst_Moc::relatedMetaObjectsNameConflict()
+{
+    typedef QVector<const QMetaObject*> QMetaObjects;
+    QFETCH(const QMetaObject*, dependingObject);
+    QFETCH(QMetaObjects, relatedMetaObjects);
+
+    // load all specified metaobjects int a set
+    QSet<const QMetaObject*> dependency;
+    const QMetaObject *const *i = dependingObject->d.relatedMetaObjects;
+    while (*i) {
+        dependency.insert(*i);
+        ++i;
+    }
+
+    // check if all required metaobjects are specified
+    foreach (const QMetaObject *mo, relatedMetaObjects)
+        QVERIFY(dependency.contains(mo));
+
+    // check if no additional metaobjects ara specified
+    QCOMPARE(dependency.size(), relatedMetaObjects.size());
+}
+
+class StringLiteralsInMacroExtension: public QObject
+{
+    Q_OBJECT
+#define Macro(F) F " " F
+    Q_CLASSINFO(Macro("String"), Macro("Literal"))
+#undef Macro
+
+#define Macro(F) F
+    Q_CLASSINFO("String" Macro("!"), "Literal" Macro("!"))
+    Q_CLASSINFO(Macro("!") "String", Macro("!") "Literal")
+#undef Macro
+
+#define Macro "foo"
+    Q_CLASSINFO("String" Macro, "Literal" Macro)
+    Q_CLASSINFO(Macro "String", Macro "Literal")
+#undef Macro
+};
+
+void tst_Moc::strignLiteralsInMacroExtension()
+{
+    const QMetaObject *mobj = &StringLiteralsInMacroExtension::staticMetaObject;
+    QCOMPARE(mobj->classInfoCount(), 5);
+
+    QCOMPARE(mobj->classInfo(0).name(), "String String");
+    QCOMPARE(mobj->classInfo(0).value(), "Literal Literal");
+
+    QCOMPARE(mobj->classInfo(1).name(), "String!");
+    QCOMPARE(mobj->classInfo(1).value(), "Literal!");
+
+    QCOMPARE(mobj->classInfo(2).name(), "!String");
+    QCOMPARE(mobj->classInfo(2).value(), "!Literal");
+
+    QCOMPARE(mobj->classInfo(3).name(), "Stringfoo");
+    QCOMPARE(mobj->classInfo(3).value(), "Literalfoo");
+
+    QCOMPARE(mobj->classInfo(4).name(), "fooString");
+    QCOMPARE(mobj->classInfo(4).value(), "fooLiteral");
+}
+
+class VeryLongStringData : public QObject
+{
+    Q_OBJECT
+
+    #define repeat2(V) V V
+    #define repeat4(V) repeat2(V) repeat2(V)
+    #define repeat8(V) repeat4(V) repeat4(V)
+    #define repeat16(V) repeat8(V) repeat8(V)
+    #define repeat32(V) repeat16(V) repeat16(V)
+    #define repeat64(V) repeat32(V) repeat32(V)
+    #define repeat128(V) repeat64(V) repeat64(V)
+    #define repeat256(V) repeat128(V) repeat128(V)
+    #define repeat512(V) repeat256(V) repeat256(V)
+    #define repeat1024(V) repeat512(V) repeat512(V)
+    #define repeat2048(V) repeat1024(V) repeat1024(V)
+    #define repeat4096(V) repeat2048(V) repeat2048(V)
+    #define repeat8192(V) repeat4096(V) repeat4096(V)
+    #define repeat16384(V) repeat8192(V) repeat8192(V)
+    #define repeat32768(V) repeat16384(V) repeat16384(V)
+    #define repeat65534(V) repeat32768(V) repeat16384(V) repeat8192(V) repeat4096(V) repeat2048(V) repeat1024(V) repeat512(V) repeat256(V) repeat128(V) repeat64(V) repeat32(V) repeat16(V) repeat8(V) repeat4(V) repeat2(V)
+
+    Q_CLASSINFO(repeat65534("n"), repeat65534("i"))
+    Q_CLASSINFO(repeat65534("e"), repeat65534("r"))
+    Q_CLASSINFO(repeat32768("o"), repeat32768("b"))
+    Q_CLASSINFO(":", ")")
+
+    #undef repeat2
+    #undef repeat4
+    #undef repeat8
+    #undef repeat16
+    #undef repeat32
+    #undef repeat64
+    #undef repeat128
+    #undef repeat256
+    #undef repeat512
+    #undef repeat1024
+    #undef repeat2048
+    #undef repeat4096
+    #undef repeat8192
+    #undef repeat16384
+    #undef repeat32768
+    #undef repeat65534
+};
+
+void tst_Moc::veryLongStringData()
+{
+    const QMetaObject *mobj = &VeryLongStringData::staticMetaObject;
+    QCOMPARE(mobj->classInfoCount(), 4);
+
+    QCOMPARE(mobj->classInfo(0).name()[0], 'n');
+    QCOMPARE(mobj->classInfo(0).value()[0], 'i');
+    QCOMPARE(mobj->classInfo(1).name()[0], 'e');
+    QCOMPARE(mobj->classInfo(1).value()[0], 'r');
+    QCOMPARE(mobj->classInfo(2).name()[0], 'o');
+    QCOMPARE(mobj->classInfo(2).value()[0], 'b');
+    QCOMPARE(mobj->classInfo(3).name()[0], ':');
+    QCOMPARE(mobj->classInfo(3).value()[0], ')');
+
+    QCOMPARE(strlen(mobj->classInfo(0).name()), static_cast<size_t>(65534));
+    QCOMPARE(strlen(mobj->classInfo(0).value()), static_cast<size_t>(65534));
+    QCOMPARE(strlen(mobj->classInfo(1).name()), static_cast<size_t>(65534));
+    QCOMPARE(strlen(mobj->classInfo(1).value()), static_cast<size_t>(65534));
+    QCOMPARE(strlen(mobj->classInfo(2).name()), static_cast<size_t>(32768));
+    QCOMPARE(strlen(mobj->classInfo(2).value()), static_cast<size_t>(32768));
+    QCOMPARE(strlen(mobj->classInfo(3).name()), static_cast<size_t>(1));
+    QCOMPARE(strlen(mobj->classInfo(3).value()), static_cast<size_t>(1));
+}
+
+void tst_Moc::gadgetHierarchy()
+{
+    QCOMPARE(NonGadgetParent::Derived::staticMetaObject.superClass(), static_cast<const QMetaObject*>(Q_NULLPTR));
+    QCOMPARE(GrandParentGadget::DerivedGadget::staticMetaObject.superClass(), &GrandParentGadget::BaseGadget::staticMetaObject);
+}
+
 QTEST_MAIN(tst_Moc)
+
+// the generated code must compile with QT_NO_KEYWORDS
+#undef signals
+#undef slots
+#undef emit
 
 #include "tst_moc.moc"
 

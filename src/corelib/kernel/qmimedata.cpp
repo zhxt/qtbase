@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -53,6 +45,7 @@ struct QMimeDataStruct
     QString format;
     QVariant data;
 };
+Q_DECLARE_TYPEINFO(QMimeDataStruct, Q_MOVABLE_TYPE);
 
 class QMimeDataPrivate : public QObjectPrivate
 {
@@ -64,7 +57,7 @@ public:
 
     QVariant retrieveTypedData(const QString &format, QVariant::Type type) const;
 
-    QList<QMimeDataStruct> dataList;
+    QVector<QMimeDataStruct> dataList;
 };
 
 void QMimeDataPrivate::removeData(const QString &format)
@@ -293,13 +286,18 @@ QVariant QMimeDataPrivate::retrieveTypedData(const QString &format, QVariant::Ty
     The \c value declaration of each format describes the way in which the
     data is encoded.
 
+    In some cases (e.g. dropping multiple email attachments), multiple data
+    values are available. They can be accessed by adding an \c index value:
+
+    \snippet code/src_corelib_kernel_qmimedata.cpp 8
+
     On Windows, the MIME format does not always map directly to the
-    clipboard formats. Qt provides QWindowsMime to map clipboard
+    clipboard formats. Qt provides QWinMime to map clipboard
     formats to open-standard MIME formats. Similarly, the
     QMacPasteboardMime maps MIME to Mac flavors.
 
     \sa QClipboard, QDragEnterEvent, QDragMoveEvent, QDropEvent, QDrag,
-        QWindowsMime, QMacPasteboardMime, {Drag and Drop}
+        QMacPasteboardMime, {Drag and Drop}
 */
 
 /*!
@@ -363,8 +361,8 @@ void QMimeData::setUrls(const QList<QUrl> &urls)
 }
 
 /*!
-    Returns true if the object can return a list of urls; otherwise
-    returns false.
+    Returns \c true if the object can return a list of urls; otherwise
+    returns \c false.
 
     URLs correspond to the MIME type \c text/uri-list.
 
@@ -402,8 +400,8 @@ void QMimeData::setText(const QString &text)
 }
 
 /*!
-    Returns true if the object can return plain text (MIME type \c
-    text/plain); otherwise returns false.
+    Returns \c true if the object can return plain text (MIME type \c
+    text/plain); otherwise returns \c false.
 
     \sa setText(), text(), hasHtml(), hasFormat()
 */
@@ -438,8 +436,8 @@ void QMimeData::setHtml(const QString &html)
 }
 
 /*!
-    Returns true if the object can return HTML (MIME type \c
-    text/html); otherwise returns false.
+    Returns \c true if the object can return HTML (MIME type \c
+    text/html); otherwise returns \c false.
 
     \sa setHtml(), html(), hasFormat()
 */
@@ -484,7 +482,7 @@ void QMimeData::setImageData(const QVariant &image)
 }
 
 /*!
-    Returns true if the object can return an image; otherwise returns
+    Returns \c true if the object can return an image; otherwise returns
     false.
 
     \sa setImageData(), imageData(), hasFormat()
@@ -528,8 +526,8 @@ void QMimeData::setColorData(const QVariant &color)
 
 
 /*!
-    Returns true if the object can return a color (MIME type \c
-    application/x-color); otherwise returns false.
+    Returns \c true if the object can return a color (MIME type \c
+    application/x-color); otherwise returns \c false.
 
     \sa setColorData(), colorData(), hasFormat()
 */
@@ -568,12 +566,27 @@ QByteArray QMimeData::data(const QString &mimeType) const
 void QMimeData::setData(const QString &mimeType, const QByteArray &data)
 {
     Q_D(QMimeData);
-    d->setData(mimeType, QVariant(data));
+
+    if (mimeType == QLatin1String("text/uri-list")) {
+        QByteArray ba = data;
+        if (ba.endsWith('\0'))
+            ba.chop(1);
+        QList<QByteArray> urls = ba.split('\n');
+        QList<QVariant> list;
+        for (int i = 0; i < urls.size(); ++i) {
+            QByteArray ba = urls.at(i).trimmed();
+            if (!ba.isEmpty())
+                list.append(QUrl::fromEncoded(ba));
+        }
+        d->setData(mimeType, list);
+    } else {
+        d->setData(mimeType, QVariant(data));
+    }
 }
 
 /*!
-    Returns true if the object can return data for the MIME type
-    specified by \a mimeType; otherwise returns false.
+    Returns \c true if the object can return data for the MIME type
+    specified by \a mimeType; otherwise returns \c false.
 
     For the most common types of data, you can call the higher-level
     functions hasText(), hasHtml(), hasUrls(), hasImage(), and

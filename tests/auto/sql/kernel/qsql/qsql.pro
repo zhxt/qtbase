@@ -3,10 +3,10 @@ CONFIG += parallel_test
 TARGET = tst_qsql
 SOURCES  += tst_qsql.cpp
 
-QT += sql sql-private gui testlib core-private
+QT = core-private sql-private testlib
 
-wince*: {
+wince {
    DEPLOYMENT_PLUGIN += qsqlite
 }
-win32-g++*: LIBS += -lws2_32
+mingw: LIBS += -lws2_32
 

@@ -1,51 +1,46 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include <QtTest>
+
 #include "qjsonarray.h"
 #include "qjsonobject.h"
 #include "qjsonvalue.h"
 #include "qjsondocument.h"
+#include <limits>
 
-#define INVALID_UNICODE "\357\277\277" // "\uffff"
+#define INVALID_UNICODE "\xCE\xBA\xE1"
+#define UNICODE_NON_CHARACTER "\xEF\xBF\xBF"
 #define UNICODE_DJE "\320\202" // Character from the Serbian Cyrillic alphabet
 
 class tst_QtJson: public QObject
@@ -62,6 +57,8 @@ private Q_SLOTS:
 
     void testValueSimple();
     void testNumbers();
+    void testNumbers_2();
+    void testNumbers_3();
 
     void testObjectSimple();
     void testObjectSmallKeys();
@@ -71,6 +68,7 @@ private Q_SLOTS:
     void testObjectNested();
     void testArrayNested();
     void testArrayNestedEmpty();
+    void testArrayComfortOperators();
     void testObjectNestedEmpty();
 
     void testValueRef();
@@ -84,16 +82,22 @@ private Q_SLOTS:
     void nullValues();
     void nullArrays();
     void nullObject();
+    void constNullObject();
 
     void keySorting();
 
     void undefinedValues();
 
+    void fromVariant();
     void fromVariantMap();
+    void fromVariantHash();
     void toVariantMap();
+    void toVariantHash();
     void toVariantList();
 
     void toJson();
+    void toJsonSillyNumericValues();
+    void toJsonLargeNumericValues();
     void fromJson();
     void fromJsonErrors();
     void fromBinary();
@@ -123,13 +127,26 @@ private Q_SLOTS:
 
     void testTrailingComma();
     void testDetachBug();
+    void testJsonValueRefDefault();
 
     void valueEquals();
+    void objectEquals_data();
+    void objectEquals();
+    void arrayEquals_data();
+    void arrayEquals();
 
     void bom();
     void nesting();
 
     void longStrings();
+
+    void arrayInitializerList();
+    void objectInitializerList();
+
+    void unicodeKeys();
+    void garbageAtEnd();
+
+    void removeNonLatinKey();
 private:
     QString testDataDir;
 };
@@ -192,20 +209,6 @@ void tst_QtJson::testValueSimple()
     QCOMPARE(value.toBool(), false);
     QCOMPARE(value.toObject(), QJsonObject());
     QCOMPARE(value.toArray(), QJsonArray());
-
-    value = true;
-    QCOMPARE(value.toDouble(), 0.);
-    QCOMPARE(value.toString(), QString());
-    QCOMPARE(value.toBool(), true);
-    QCOMPARE(value.toObject(), QJsonObject());
-    QCOMPARE(value.toArray(), QJsonArray());
-
-    value = 999.;
-    QCOMPARE(value.toDouble(), 999.);
-    QCOMPARE(value.toString(), QString());
-    QCOMPARE(value.toBool(), false);
-    QCOMPARE(value.toObject(), QJsonObject());
-    QCOMPARE(value.toArray(), QJsonArray());
 }
 
 void tst_QtJson::testNumbers()
@@ -252,18 +255,18 @@ void tst_QtJson::testNumbers()
             0,
             -1,
             1,
-            (1UL<<54),
-            (1UL<<55),
-            (1UL<<56),
-            -(1UL<<54),
-            -(1UL<<55),
-            -(1UL<<56),
-            (1UL<<54) - 1,
-            (1UL<<55) - 1,
-            (1UL<<56) - 1,
-            -((1UL<<54) - 1),
-            -((1UL<<55) - 1),
-            -((1UL<<56) - 1)
+            (1ll<<54),
+            (1ll<<55),
+            (1ll<<56),
+            -(1ll<<54),
+            -(1ll<<55),
+            -(1ll<<56),
+            (1ll<<54) - 1,
+            (1ll<<55) - 1,
+            (1ll<<56) - 1,
+            -((1ll<<54) - 1),
+            -((1ll<<55) - 1),
+            -((1ll<<56) - 1)
         };
         int n = sizeof(numbers)/sizeof(qint64);
 
@@ -289,18 +292,18 @@ void tst_QtJson::testNumbers()
             0,
             -1,
             1,
-            (1UL<<54),
-            (1UL<<55),
-            (1UL<<56),
-            -(1UL<<54),
-            -(1UL<<55),
-            -(1UL<<56),
-            (1UL<<54) - 1,
-            (1UL<<55) - 1,
-            (1UL<<56) - 1,
-            -((1UL<<54) - 1),
-            -((1UL<<55) - 1),
-            -((1UL<<56) - 1),
+            double(1ll<<54),
+            double(1ll<<55),
+            double(1ll<<56),
+            double(-(1ll<<54)),
+            double(-(1ll<<55)),
+            double(-(1ll<<56)),
+            double((1ll<<54) - 1),
+            double((1ll<<55) - 1),
+            double((1ll<<56) - 1),
+            double(-((1ll<<54) - 1)),
+            double(-((1ll<<55) - 1)),
+            double(-((1ll<<56) - 1)),
             1.1,
             0.1,
             -0.1,
@@ -327,6 +330,69 @@ void tst_QtJson::testNumbers()
         }
     }
 
+}
+
+void tst_QtJson::testNumbers_2()
+{
+    // test cases from TC39 test suite for ECMAScript
+    // http://hg.ecmascript.org/tests/test262/file/d067d2f0ca30/test/suite/ch08/8.5/8.5.1.js
+
+    // Fill an array with 2 to the power of (0 ... -1075)
+    double value = 1;
+    double floatValues[1076], floatValues_1[1076];
+    QJsonObject jObject;
+    for (int power = 0; power <= 1075; power++) {
+        floatValues[power] = value;
+        jObject.insert(QString::number(power), QJsonValue(floatValues[power]));
+        // Use basic math operations for testing, which are required to support 'gradual underflow' rather
+        // than Math.pow etc..., which are defined as 'implementation dependent'.
+        value = value * 0.5;
+    }
+
+    QJsonDocument jDocument1(jObject);
+    QByteArray ba(jDocument1.toJson());
+
+    QJsonDocument jDocument2(QJsonDocument::fromJson(ba));
+    for (int power = 0; power <= 1075; power++) {
+        floatValues_1[power] = jDocument2.object().value(QString::number(power)).toDouble();
+#ifdef Q_OS_QNX
+        if (power >= 970)
+            QEXPECT_FAIL("", "See QTBUG-37066", Abort);
+#endif
+        QVERIFY2(floatValues[power] == floatValues_1[power], QString("floatValues[%1] != floatValues_1[%1]").arg(power).toLatin1());
+    }
+
+    // The last value is below min denorm and should round to 0, everything else should contain a value
+    QVERIFY2(floatValues_1[1075] == 0, "Value after min denorm should round to 0");
+
+    // Validate the last actual value is min denorm
+    QVERIFY2(floatValues_1[1074] == 4.9406564584124654417656879286822e-324, QString("Min denorm value is incorrect: %1").arg(floatValues_1[1074]).toLatin1());
+
+    // Validate that every value is half the value before it up to 1
+    for (int index = 1074; index > 0; index--) {
+        QVERIFY2(floatValues_1[index] != 0, QString("2**- %1 should not be 0").arg(index).toLatin1());
+
+        QVERIFY2(floatValues_1[index - 1] == (floatValues_1[index] * 2), QString("Value should be double adjacent value at index %1").arg(index).toLatin1());
+    }
+}
+
+void tst_QtJson::testNumbers_3()
+{
+    // test case from QTBUG-31926
+    double d1 = 1.123451234512345;
+    double d2 = 1.123451234512346;
+
+    QJsonObject jObject;
+    jObject.insert("d1", QJsonValue(d1));
+    jObject.insert("d2", QJsonValue(d2));
+    QJsonDocument jDocument1(jObject);
+    QByteArray ba(jDocument1.toJson());
+
+    QJsonDocument jDocument2(QJsonDocument::fromJson(ba));
+
+    double d1_1(jDocument2.object().value("d1").toDouble());
+    double d2_1(jDocument2.object().value("d2").toDouble());
+    QVERIFY(d1_1 != d2_1);
 }
 
 void tst_QtJson::testObjectSimple()
@@ -384,13 +450,13 @@ void tst_QtJson::testObjectSimple()
 void tst_QtJson::testObjectSmallKeys()
 {
     QJsonObject data1;
-    data1.insert(QStringLiteral("1"), 123);
+    data1.insert(QStringLiteral("1"), 123.);
     QVERIFY(data1.contains(QStringLiteral("1")));
     QCOMPARE(data1.value(QStringLiteral("1")).toDouble(), (double)123);
-    data1.insert(QStringLiteral("12"), 133);
+    data1.insert(QStringLiteral("12"), 133.);
     QCOMPARE(data1.value(QStringLiteral("12")).toDouble(), (double)133);
     QVERIFY(data1.contains(QStringLiteral("12")));
-    data1.insert(QStringLiteral("123"), 323);
+    data1.insert(QStringLiteral("123"), 323.);
     QCOMPARE(data1.value(QStringLiteral("12")).toDouble(), (double)133);
     QVERIFY(data1.contains(QStringLiteral("123")));
     QCOMPARE(data1.value(QStringLiteral("123")).type(), QJsonValue::Double);
@@ -599,17 +665,35 @@ void tst_QtJson::testObjectNestedEmpty()
     QCOMPARE(reconstituted.value("inner2").type(), QJsonValue::Object);
 }
 
+void tst_QtJson::testArrayComfortOperators()
+{
+    QJsonArray first;
+    first.append(123.);
+    first.append(QLatin1String("foo"));
+
+    QJsonArray second = QJsonArray() << 123. << QLatin1String("foo");
+    QCOMPARE(first, second);
+
+    first = first + QLatin1String("bar");
+    second += QLatin1String("bar");
+    QCOMPARE(first, second);
+}
+
 void tst_QtJson::testValueRef()
 {
     QJsonArray array;
     array.append(1.);
     array.append(2.);
     array.append(3.);
+    array.append(4);
+    array.append(4.1);
     array[1] = false;
 
-    QCOMPARE(array.size(), 3);
+    QCOMPARE(array.size(), 5);
     QCOMPARE(array.at(0).toDouble(), 1.);
     QCOMPARE(array.at(2).toDouble(), 3.);
+    QCOMPARE(array.at(3).toInt(), 4);
+    QCOMPARE(array.at(4).toInt(), 0);
     QCOMPARE(array.at(1).type(), QJsonValue::Bool);
     QCOMPARE(array.at(1).toBool(), false);
 
@@ -633,10 +717,22 @@ void tst_QtJson::testValueRef()
 void tst_QtJson::testObjectIteration()
 {
     QJsonObject object;
+
+    for (QJsonObject::iterator it = object.begin(); it != object.end(); ++it)
+        QVERIFY(false);
+
+    const QString property = "kkk";
+    object.insert(property, 11);
+    object.take(property);
+    for (QJsonObject::iterator it = object.begin(); it != object.end(); ++it)
+        QVERIFY(false);
+
     for (int i = 0; i < 10; ++i)
         object[QString::number(i)] = (double)i;
 
     QCOMPARE(object.size(), 10);
+
+    QCOMPARE(object.begin()->toDouble(), object.constBegin()->toDouble());
 
     for (QJsonObject::iterator it = object.begin(); it != object.end(); ++it) {
         QJsonValue value = it.value();
@@ -713,6 +809,8 @@ void tst_QtJson::testArrayIteration()
         QJsonValue value = (*it);
         QCOMPARE((double)i, value.toDouble());
     }
+
+    QCOMPARE(array.begin()->toDouble(), array.constBegin()->toDouble());
 
     {
         QJsonArray array2 = array;
@@ -927,6 +1025,23 @@ void tst_QtJson::nullObject()
     QCOMPARE(nullObject.contains("foo"), false);
 }
 
+void tst_QtJson::constNullObject()
+{
+    const QJsonObject nullObject;
+    QJsonObject nonNull;
+    nonNull.insert(QLatin1String("foo"), QLatin1String("bar"));
+
+    QCOMPARE(nullObject, QJsonObject());
+    QVERIFY(nullObject != nonNull);
+    QVERIFY(nonNull != nullObject);
+
+    QCOMPARE(nullObject.size(), 0);
+    QCOMPARE(nullObject.keys(), QStringList());
+    QCOMPARE(nullObject, QJsonObject());
+    QCOMPARE(nullObject.contains("foo"), false);
+    QCOMPARE(nullObject["foo"], QJsonValue(QJsonValue::Undefined));
+}
+
 void tst_QtJson::keySorting()
 {
     const char *json = "{ \"B\": true, \"A\": false }";
@@ -940,6 +1055,8 @@ void tst_QtJson::keySorting()
     QCOMPARE(it.key(), QLatin1String("A"));
     ++it;
     QCOMPARE(it.key(), QLatin1String("B"));
+
+    QCOMPARE(o.keys(), QStringList() << QLatin1String("A") << QLatin1String("B"));
 }
 
 void tst_QtJson::undefinedValues()
@@ -965,6 +1082,62 @@ void tst_QtJson::undefinedValues()
     QCOMPARE(array.at(-1).type(), QJsonValue::Undefined);
 }
 
+void tst_QtJson::fromVariant()
+{
+    bool boolValue = true;
+    int intValue = -1;
+    uint uintValue = 1;
+    long long longlongValue = -2;
+    unsigned long long ulonglongValue = 2;
+    float floatValue = 3.3f;
+    double doubleValue = 4.4;
+    QString stringValue("str");
+
+    QStringList stringList;
+    stringList.append(stringValue);
+    stringList.append("str2");
+    QJsonArray jsonArray_string;
+    jsonArray_string.append(stringValue);
+    jsonArray_string.append("str2");
+
+    QVariantList variantList;
+    variantList.append(boolValue);
+    variantList.append(floatValue);
+    variantList.append(doubleValue);
+    variantList.append(stringValue);
+    variantList.append(stringList);
+    variantList.append(QVariant());
+    QJsonArray jsonArray_variant;
+    jsonArray_variant.append(boolValue);
+    jsonArray_variant.append(floatValue);
+    jsonArray_variant.append(doubleValue);
+    jsonArray_variant.append(stringValue);
+    jsonArray_variant.append(jsonArray_string);
+    jsonArray_variant.append(QJsonValue());
+
+    QVariantMap variantMap;
+    variantMap["bool"] = boolValue;
+    variantMap["float"] = floatValue;
+    variantMap["string"] = stringValue;
+    variantMap["array"] = variantList;
+    QJsonObject jsonObject;
+    jsonObject["bool"] = boolValue;
+    jsonObject["float"] = floatValue;
+    jsonObject["string"] = stringValue;
+    jsonObject["array"] = jsonArray_variant;
+
+    QCOMPARE(QJsonValue::fromVariant(QVariant(boolValue)), QJsonValue(boolValue));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(intValue)), QJsonValue(intValue));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(uintValue)), QJsonValue(static_cast<double>(uintValue)));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(longlongValue)), QJsonValue(longlongValue));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(ulonglongValue)), QJsonValue(static_cast<double>(ulonglongValue)));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(floatValue)), QJsonValue(static_cast<double>(floatValue)));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(doubleValue)), QJsonValue(doubleValue));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(stringValue)), QJsonValue(stringValue));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(stringList)), QJsonValue(jsonArray_string));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(variantList)), QJsonValue(jsonArray_variant));
+    QCOMPARE(QJsonValue::fromVariant(QVariant(variantMap)), QJsonValue(jsonObject));
+}
 
 void tst_QtJson::fromVariantMap()
 {
@@ -998,8 +1171,21 @@ void tst_QtJson::fromVariantMap()
     QCOMPARE(array.at(3).toString(), QLatin1String("foo"));
 }
 
+void tst_QtJson::fromVariantHash()
+{
+    QVariantHash map;
+    map.insert(QLatin1String("key1"), QLatin1String("value1"));
+    map.insert(QLatin1String("key2"), QLatin1String("value2"));
+    QJsonObject object = QJsonObject::fromVariantHash(map);
+    QCOMPARE(object.size(), 2);
+    QCOMPARE(object.value(QLatin1String("key1")), QJsonValue(QLatin1String("value1")));
+    QCOMPARE(object.value(QLatin1String("key2")), QJsonValue(QLatin1String("value2")));
+}
+
 void tst_QtJson::toVariantMap()
 {
+    QCOMPARE(QMetaType::Type(QJsonValue(QJsonObject()).toVariant().type()), QMetaType::QVariantMap); // QTBUG-32524
+
     QJsonObject object;
     QVariantMap map = object.toVariantMap();
     QVERIFY(map.isEmpty());
@@ -1027,8 +1213,39 @@ void tst_QtJson::toVariantMap()
     QCOMPARE(list.at(3), QVariant());
 }
 
+void tst_QtJson::toVariantHash()
+{
+    QJsonObject object;
+    QVariantHash hash = object.toVariantHash();
+    QVERIFY(hash.isEmpty());
+
+    object.insert("Key", QString("Value"));
+    object.insert("null", QJsonValue());
+    QJsonArray array;
+    array.append(true);
+    array.append(999.);
+    array.append(QLatin1String("string"));
+    array.append(QJsonValue());
+    object.insert("Array", array);
+
+    hash = object.toVariantHash();
+
+    QCOMPARE(hash.size(), 3);
+    QCOMPARE(hash.value("Key"), QVariant(QString("Value")));
+    QCOMPARE(hash.value("null"), QVariant());
+    QCOMPARE(hash.value("Array").type(), QVariant::List);
+    QVariantList list = hash.value("Array").toList();
+    QCOMPARE(list.size(), 4);
+    QCOMPARE(list.at(0), QVariant(true));
+    QCOMPARE(list.at(1), QVariant(999.));
+    QCOMPARE(list.at(2), QVariant(QLatin1String("string")));
+    QCOMPARE(list.at(3), QVariant());
+}
+
 void tst_QtJson::toVariantList()
 {
+    QCOMPARE(QMetaType::Type(QJsonValue(QJsonArray()).toVariant().type()), QMetaType::QVariantList); // QTBUG-32524
+
     QJsonArray array;
     QVariantList list = array.toVariantList();
     QVERIFY(list.isEmpty());
@@ -1120,7 +1337,7 @@ void tst_QtJson::toJson()
 
         QByteArray json = QJsonDocument(object).toJson(QJsonDocument::Compact);
         QByteArray expected =
-                "{\"Array\": [true,999,\"string\",null,\"\\\\\\u0007\\n\\r\\b\\tabcABC\\\"\"],\"\\\\Key\\n\": \"Value\",\"null\": null}";
+                "{\"Array\":[true,999,\"string\",null,\"\\\\\\u0007\\n\\r\\b\\tabcABC\\\"\"],\"\\\\Key\\n\":\"Value\",\"null\":null}";
         QCOMPARE(json, expected);
 
         QJsonDocument doc;
@@ -1135,6 +1352,95 @@ void tst_QtJson::toJson()
     }
 }
 
+void tst_QtJson::toJsonSillyNumericValues()
+{
+    QJsonObject object;
+    QJsonArray array;
+    array.append(QJsonValue(std::numeric_limits<double>::infinity()));  // encode to: null
+    array.append(QJsonValue(-std::numeric_limits<double>::infinity())); // encode to: null
+    array.append(QJsonValue(std::numeric_limits<double>::quiet_NaN())); // encode to: null
+    object.insert("Array", array);
+
+    QByteArray json = QJsonDocument(object).toJson();
+
+    QByteArray expected =
+            "{\n"
+            "    \"Array\": [\n"
+            "        null,\n"
+            "        null,\n"
+            "        null\n"
+            "    ]\n"
+            "}\n";
+
+    QCOMPARE(json, expected);
+
+    QJsonDocument doc;
+    doc.setObject(object);
+    json = doc.toJson();
+    QCOMPARE(json, expected);
+}
+
+void tst_QtJson::toJsonLargeNumericValues()
+{
+    QJsonObject object;
+    QJsonArray array;
+    array.append(QJsonValue(1.234567)); // actual precision bug in Qt 5.0.0
+    array.append(QJsonValue(1.7976931348623157e+308)); // JS Number.MAX_VALUE
+    array.append(QJsonValue(5e-324));                  // JS Number.MIN_VALUE
+    array.append(QJsonValue(std::numeric_limits<double>::min()));
+    array.append(QJsonValue(std::numeric_limits<double>::max()));
+    array.append(QJsonValue(std::numeric_limits<double>::epsilon()));
+    array.append(QJsonValue(std::numeric_limits<double>::denorm_min()));
+    array.append(QJsonValue(0.0));
+    array.append(QJsonValue(-std::numeric_limits<double>::min()));
+    array.append(QJsonValue(-std::numeric_limits<double>::max()));
+    array.append(QJsonValue(-std::numeric_limits<double>::epsilon()));
+    array.append(QJsonValue(-std::numeric_limits<double>::denorm_min()));
+    array.append(QJsonValue(-0.0));
+    array.append(QJsonValue(9007199254740992LL));  // JS Number max integer
+    array.append(QJsonValue(-9007199254740992LL)); // JS Number min integer
+    object.insert("Array", array);
+
+    QByteArray json = QJsonDocument(object).toJson();
+
+    QByteArray expected =
+            "{\n"
+            "    \"Array\": [\n"
+            "        1.234567,\n"
+            "        1.7976931348623157e+308,\n"
+            //     ((4.9406564584124654e-324 == 5e-324) == true)
+            // I can only think JavaScript has a special formatter to
+            //  emit this value for this IEEE754 bit pattern.
+            "        4.9406564584124654e-324,\n"
+            "        2.2250738585072014e-308,\n"
+            "        1.7976931348623157e+308,\n"
+            "        2.2204460492503131e-16,\n"
+            "        4.9406564584124654e-324,\n"
+            "        0,\n"
+            "        -2.2250738585072014e-308,\n"
+            "        -1.7976931348623157e+308,\n"
+            "        -2.2204460492503131e-16,\n"
+            "        -4.9406564584124654e-324,\n"
+            "        0,\n"
+            "        9007199254740992,\n"
+            "        -9007199254740992\n"
+            "    ]\n"
+            "}\n";
+
+#ifdef Q_OS_QNX
+    QEXPECT_FAIL("", "See QTBUG-37066", Continue);
+#endif
+    QCOMPARE(json, expected);
+
+    QJsonDocument doc;
+    doc.setObject(object);
+    json = doc.toJson();
+#ifdef Q_OS_QNX
+    QEXPECT_FAIL("", "See QTBUG-37066", Continue);
+#endif
+    QCOMPARE(json, expected);
+}
+
 void tst_QtJson::fromJson()
 {
     {
@@ -1147,6 +1453,19 @@ void tst_QtJson::fromJson()
         QCOMPARE(array.size(), 1);
         QCOMPARE(array.at(0).type(), QJsonValue::Bool);
         QCOMPARE(array.at(0).toBool(), true);
+        QCOMPARE(doc.toJson(), json);
+    }
+    {
+        //regression test: test if unicode_control_characters are correctly decoded
+        QByteArray json = "[\n    \"" UNICODE_NON_CHARACTER "\"\n]\n";
+        QJsonDocument doc = QJsonDocument::fromJson(json);
+        QVERIFY(!doc.isEmpty());
+        QCOMPARE(doc.isArray(), true);
+        QCOMPARE(doc.isObject(), false);
+        QJsonArray array = doc.array();
+        QCOMPARE(array.size(), 1);
+        QCOMPARE(array.at(0).type(), QJsonValue::String);
+        QCOMPARE(array.at(0).toString(), QString::fromUtf8(UNICODE_NON_CHARACTER));
         QCOMPARE(doc.toJson(), json);
     }
     {
@@ -1376,7 +1695,7 @@ void tst_QtJson::fromJsonErrors()
         QJsonDocument doc = QJsonDocument::fromJson(json, &error);
         QVERIFY(doc.isEmpty());
         QCOMPARE(error.error, QJsonParseError::IllegalUTF8String);
-        QCOMPARE(error.offset, 13);
+        QCOMPARE(error.offset, 12);
     }
     {
         QJsonParseError error;
@@ -1400,7 +1719,7 @@ void tst_QtJson::fromJsonErrors()
         QJsonDocument doc = QJsonDocument::fromJson(json, &error);
         QVERIFY(doc.isEmpty());
         QCOMPARE(error.error, QJsonParseError::IllegalUTF8String);
-        QCOMPARE(error.offset, 14);
+        QCOMPARE(error.offset, 13);
     }
     {
         QJsonParseError error;
@@ -1520,6 +1839,10 @@ void tst_QtJson::parseNumbers()
             json += numbers[i].str;
             json += " ]";
             QJsonDocument doc = QJsonDocument::fromJson(json);
+#ifdef Q_OS_QNX
+            if (0 == QString::compare(numbers[i].str, "1.1e-308"))
+                QEXPECT_FAIL("", "See QTBUG-37066", Abort);
+#endif
             QVERIFY(!doc.isEmpty());
             QCOMPARE(doc.isArray(), true);
             QCOMPARE(doc.isObject(), false);
@@ -1546,6 +1869,7 @@ void tst_QtJson::parseStrings()
         "abc\\tabc",
         "abc\\u0019abc",
         "abc" UNICODE_DJE "abc",
+        UNICODE_NON_CHARACTER
     };
     int size = sizeof(strings)/sizeof(const char *);
 
@@ -1572,7 +1896,8 @@ void tst_QtJson::parseStrings()
     Pairs pairs [] = {
         { "abc\\/abc", "abc/abc" },
         { "abc\\u0402abc", "abc" UNICODE_DJE "abc" },
-        { "abc\\u0065abc", "abceabc" }
+        { "abc\\u0065abc", "abceabc" },
+        { "abc\\uFFFFabc", "abc" UNICODE_NON_CHARACTER "abc" }
     };
     size = sizeof(pairs)/sizeof(Pairs);
 
@@ -1813,11 +2138,11 @@ void tst_QtJson::testDebugStream()
         // QJsonObject
 
         QJsonObject object;
-        QTest::ignoreMessage(QtDebugMsg, "QJsonObject() ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonObject()");
         qDebug() << object;
 
         object.insert(QLatin1String("foo"), QLatin1String("bar"));
-        QTest::ignoreMessage(QtDebugMsg, "QJsonObject({\"foo\": \"bar\"}) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonObject({\"foo\":\"bar\"})");
         qDebug() << object;
     }
 
@@ -1825,12 +2150,12 @@ void tst_QtJson::testDebugStream()
         // QJsonArray
 
         QJsonArray array;
-        QTest::ignoreMessage(QtDebugMsg, "QJsonArray() ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonArray()");
         qDebug() << array;
 
         array.append(1);
         array.append(QLatin1String("foo"));
-        QTest::ignoreMessage(QtDebugMsg, "QJsonArray([1,\"foo\"]) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonArray([1,\"foo\"])");
         qDebug() << array;
     }
 
@@ -1838,19 +2163,19 @@ void tst_QtJson::testDebugStream()
         // QJsonDocument
 
         QJsonDocument doc;
-        QTest::ignoreMessage(QtDebugMsg, "QJsonDocument() ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonDocument()");
         qDebug() << doc;
 
         QJsonObject object;
         object.insert(QLatin1String("foo"), QLatin1String("bar"));
         doc.setObject(object);
-        QTest::ignoreMessage(QtDebugMsg, "QJsonDocument({\"foo\": \"bar\"}) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonDocument({\"foo\":\"bar\"})");
         qDebug() << doc;
 
         QJsonArray array;
         array.append(1);
         array.append(QLatin1String("foo"));
-        QTest::ignoreMessage(QtDebugMsg, "QJsonDocument([1,\"foo\"]) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonDocument([1,\"foo\"])");
         doc.setArray(array);
         qDebug() << doc;
     }
@@ -1860,36 +2185,36 @@ void tst_QtJson::testDebugStream()
 
         QJsonValue value;
 
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(null) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(null)");
         qDebug() << value;
 
         value = QJsonValue(true); // bool
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(bool, true) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(bool, true)");
         qDebug() << value;
 
         value = QJsonValue((double)4.2); // double
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(double, 4.2) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(double, 4.2)");
         qDebug() << value;
 
         value = QJsonValue((int)42); // int
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(double, 42) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(double, 42)");
         qDebug() << value;
 
         value = QJsonValue(QLatin1String("foo")); // string
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(string, \"foo\") ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(string, \"foo\")");
         qDebug() << value;
 
         QJsonArray array;
         array.append(1);
         array.append(QLatin1String("foo"));
         value = QJsonValue(array); // array
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(array, QJsonArray([1,\"foo\"]) ) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(array, QJsonArray([1,\"foo\"]))");
         qDebug() << value;
 
         QJsonObject object;
         object.insert(QLatin1String("foo"), QLatin1String("bar"));
         value = QJsonValue(object); // object
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(object, QJsonObject({\"foo\": \"bar\"}) ) ");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(object, QJsonObject({\"foo\":\"bar\"}))");
         qDebug() << value;
     }
 }
@@ -2018,6 +2343,16 @@ void tst_QtJson::valueEquals()
     QVERIFY(QJsonValue(true) != QJsonValue(QJsonArray()));
     QVERIFY(QJsonValue(true) != QJsonValue(QJsonObject()));
 
+    QVERIFY(QJsonValue(1) == QJsonValue(1));
+    QVERIFY(QJsonValue(1) != QJsonValue(2));
+    QVERIFY(QJsonValue(1) == QJsonValue(1.));
+    QVERIFY(QJsonValue(1) != QJsonValue(1.1));
+    QVERIFY(QJsonValue(1) != QJsonValue(QJsonValue::Undefined));
+    QVERIFY(QJsonValue(1) != QJsonValue());
+    QVERIFY(QJsonValue(1) != QJsonValue(true));
+    QVERIFY(QJsonValue(1) != QJsonValue(QJsonArray()));
+    QVERIFY(QJsonValue(1) != QJsonValue(QJsonObject()));
+
     QVERIFY(QJsonValue(1.) == QJsonValue(1.));
     QVERIFY(QJsonValue(1.) != QJsonValue(2.));
     QVERIFY(QJsonValue(1.) != QJsonValue(QJsonValue::Undefined));
@@ -2045,6 +2380,134 @@ void tst_QtJson::valueEquals()
     QVERIFY(QJsonValue(QJsonObject()) != QJsonValue(true));
     QVERIFY(QJsonValue(QJsonObject()) != QJsonValue(1.));
     QVERIFY(QJsonValue(QJsonObject()) != QJsonValue(QJsonArray()));
+
+    QVERIFY(QJsonValue("foo") == QJsonValue(QLatin1String("foo")));
+    QVERIFY(QJsonValue("foo") == QJsonValue(QString("foo")));
+    QVERIFY(QJsonValue("\x66\x6f\x6f") == QJsonValue(QString("foo")));
+    QVERIFY(QJsonValue("\x62\x61\x72") == QJsonValue("bar"));
+    QVERIFY(QJsonValue(UNICODE_NON_CHARACTER) == QJsonValue(QString(UNICODE_NON_CHARACTER)));
+    QVERIFY(QJsonValue(UNICODE_DJE) == QJsonValue(QString(UNICODE_DJE)));
+    QVERIFY(QJsonValue("\xc3\xa9") == QJsonValue(QString("\xc3\xa9")));
+}
+
+void tst_QtJson::objectEquals_data()
+{
+    QTest::addColumn<QJsonObject>("left");
+    QTest::addColumn<QJsonObject>("right");
+    QTest::addColumn<bool>("result");
+
+    QTest::newRow("two defaults") << QJsonObject() << QJsonObject() << true;
+
+    QJsonObject object1;
+    object1.insert("property", 1);
+    QJsonObject object2;
+    object2["property"] = 1;
+    QJsonObject object3;
+    object3.insert("property1", 1);
+    object3.insert("property2", 2);
+
+    QTest::newRow("the same object (1 vs 2)") << object1 << object2 << true;
+    QTest::newRow("the same object (3 vs 3)") << object3 << object3 << true;
+    QTest::newRow("different objects (2 vs 3)") << object2 << object3 << false;
+    QTest::newRow("object vs default") << object1 << QJsonObject() << false;
+
+    QJsonObject empty;
+    empty.insert("property", 1);
+    empty.take("property");
+    QTest::newRow("default vs empty") << QJsonObject() << empty << true;
+    QTest::newRow("empty vs empty") << empty << empty << true;
+    QTest::newRow("object vs empty") << object1 << empty << false;
+
+    QJsonObject referencedEmpty;
+    referencedEmpty["undefined"];
+    QTest::newRow("referenced empty vs referenced empty") << referencedEmpty << referencedEmpty << true;
+    QTest::newRow("referenced empty vs object") << referencedEmpty << object1 << false;
+
+    QJsonObject referencedObject1;
+    referencedObject1.insert("property", 1);
+    referencedObject1["undefined"];
+    QJsonObject referencedObject2;
+    referencedObject2.insert("property", 1);
+    referencedObject2["aaaaaaaaa"]; // earlier then "property"
+    referencedObject2["zzzzzzzzz"]; // after "property"
+    QTest::newRow("referenced object vs default") << referencedObject1 << QJsonObject() << false;
+    QTest::newRow("referenced object vs referenced object") << referencedObject1 << referencedObject1 << true;
+    QTest::newRow("referenced object vs object (different)") << referencedObject1 << object3 << false;
+}
+
+void tst_QtJson::objectEquals()
+{
+    QFETCH(QJsonObject, left);
+    QFETCH(QJsonObject, right);
+    QFETCH(bool, result);
+
+    QCOMPARE(left == right, result);
+    QCOMPARE(right == left, result);
+
+    // invariants checks
+    QCOMPARE(left, left);
+    QCOMPARE(right, right);
+    QCOMPARE(left != right, !result);
+    QCOMPARE(right != left, !result);
+
+    // The same but from QJsonValue perspective
+    QCOMPARE(QJsonValue(left) == QJsonValue(right), result);
+    QCOMPARE(QJsonValue(left) != QJsonValue(right), !result);
+    QCOMPARE(QJsonValue(right) == QJsonValue(left), result);
+    QCOMPARE(QJsonValue(right) != QJsonValue(left), !result);
+}
+
+void tst_QtJson::arrayEquals_data()
+{
+    QTest::addColumn<QJsonArray>("left");
+    QTest::addColumn<QJsonArray>("right");
+    QTest::addColumn<bool>("result");
+
+    QTest::newRow("two defaults") << QJsonArray() << QJsonArray() << true;
+
+    QJsonArray array1;
+    array1.append(1);
+    QJsonArray array2;
+    array2.append(2111);
+    array2[0] = 1;
+    QJsonArray array3;
+    array3.insert(0, 1);
+    array3.insert(1, 2);
+
+    QTest::newRow("the same array (1 vs 2)") << array1 << array2 << true;
+    QTest::newRow("the same array (3 vs 3)") << array3 << array3 << true;
+    QTest::newRow("different arrays (2 vs 3)") << array2 << array3 << false;
+    QTest::newRow("array vs default") << array1 << QJsonArray() << false;
+
+    QJsonArray empty;
+    empty.append(1);
+    empty.takeAt(0);
+    QTest::newRow("default vs empty") << QJsonArray() << empty << true;
+    QTest::newRow("empty vs default") << empty << QJsonArray() << true;
+    QTest::newRow("empty vs empty") << empty << empty << true;
+    QTest::newRow("array vs empty") << array1 << empty << false;
+}
+
+void tst_QtJson::arrayEquals()
+{
+    QFETCH(QJsonArray, left);
+    QFETCH(QJsonArray, right);
+    QFETCH(bool, result);
+
+    QCOMPARE(left == right, result);
+    QCOMPARE(right == left, result);
+
+    // invariants checks
+    QCOMPARE(left, left);
+    QCOMPARE(right, right);
+    QCOMPARE(left != right, !result);
+    QCOMPARE(right != left, !result);
+
+    // The same but from QJsonValue perspective
+    QCOMPARE(QJsonValue(left) == QJsonValue(right), result);
+    QCOMPARE(QJsonValue(left) != QJsonValue(right), !result);
+    QCOMPARE(QJsonValue(right) == QJsonValue(left), result);
+    QCOMPARE(QJsonValue(right) != QJsonValue(left), !result);
 }
 
 void tst_QtJson::bom()
@@ -2161,6 +2624,177 @@ void tst_QtJson::longStrings()
         QByteArray a2 = d2.toJson();
         QVERIFY(a1 == a2);
     }
+}
+
+void tst_QtJson::testJsonValueRefDefault()
+{
+    QJsonObject empty;
+
+    QCOMPARE(empty["n/a"].toString(), QString());
+    QCOMPARE(empty["n/a"].toString("default"), QStringLiteral("default"));
+
+    QCOMPARE(empty["n/a"].toBool(), false);
+    QCOMPARE(empty["n/a"].toBool(true), true);
+
+    QCOMPARE(empty["n/a"].toInt(), 0);
+    QCOMPARE(empty["n/a"].toInt(42), 42);
+
+    QCOMPARE(empty["n/a"].toDouble(), 0.0);
+    QCOMPARE(empty["n/a"].toDouble(42.0), 42.0);
+}
+
+void tst_QtJson::arrayInitializerList()
+{
+#ifndef Q_COMPILER_INITIALIZER_LISTS
+    QSKIP("initializer_list is enabled only with c++11 support");
+#else
+    QVERIFY(QJsonArray{}.isEmpty());
+    QCOMPARE(QJsonArray{"one"}.count(), 1);
+    QCOMPARE(QJsonArray{1}.count(), 1);
+
+    {
+        QJsonArray a{1.3, "hello", 0};
+        QCOMPARE(QJsonValue(a[0]), QJsonValue(1.3));
+        QCOMPARE(QJsonValue(a[1]), QJsonValue("hello"));
+        QCOMPARE(QJsonValue(a[2]), QJsonValue(0));
+        QCOMPARE(a.count(), 3);
+    }
+    {
+        QJsonObject o;
+        o["property"] = 1;
+        QJsonArray a1 {o};
+        QCOMPARE(a1.count(), 1);
+        QCOMPARE(a1[0].toObject(), o);
+
+        QJsonArray a2 {o, 23};
+        QCOMPARE(a2.count(), 2);
+        QCOMPARE(a2[0].toObject(), o);
+        QCOMPARE(QJsonValue(a2[1]), QJsonValue(23));
+
+        QJsonArray a3 { a1, o, a2 };
+        QCOMPARE(QJsonValue(a3[0]), QJsonValue(a1));
+        QCOMPARE(QJsonValue(a3[1]), QJsonValue(o));
+        QCOMPARE(QJsonValue(a3[2]), QJsonValue(a2));
+
+        QJsonArray a4 { 1, QJsonArray{1,2,3}, QJsonArray{"hello", 2}, QJsonObject{{"one", 1}} };
+        QCOMPARE(a4.count(), 4);
+        QCOMPARE(QJsonValue(a4[0]), QJsonValue(1));
+
+        {
+            QJsonArray a41 = a4[1].toArray();
+            QJsonArray a42 = a4[2].toArray();
+            QJsonObject a43 = a4[3].toObject();
+            QCOMPARE(a41.count(), 3);
+            QCOMPARE(a42.count(), 2);
+            QCOMPARE(a43.count(), 1);
+
+            QCOMPARE(QJsonValue(a41[2]), QJsonValue(3));
+            QCOMPARE(QJsonValue(a42[1]), QJsonValue(2));
+            QCOMPARE(QJsonValue(a43["one"]), QJsonValue(1));
+        }
+    }
+#endif
+}
+
+void tst_QtJson::objectInitializerList()
+{
+#ifndef Q_COMPILER_INITIALIZER_LISTS
+    QSKIP("initializer_list is enabled only with c++11 support");
+#else
+    QVERIFY(QJsonObject{}.isEmpty());
+
+    {   // one property
+        QJsonObject one {{"one", 1}};
+        QCOMPARE(one.count(), 1);
+        QVERIFY(one.contains("one"));
+        QCOMPARE(QJsonValue(one["one"]), QJsonValue(1));
+    }
+    {   // two properties
+        QJsonObject two {
+                           {"one", 1},
+                           {"two", 2}
+                        };
+        QCOMPARE(two.count(), 2);
+        QVERIFY(two.contains("one"));
+        QVERIFY(two.contains("two"));
+        QCOMPARE(QJsonValue(two["one"]), QJsonValue(1));
+        QCOMPARE(QJsonValue(two["two"]), QJsonValue(2));
+    }
+    {   // nested object
+        QJsonObject object{{"nested", QJsonObject{{"innerProperty", 2}}}};
+        QCOMPARE(object.count(), 1);
+        QVERIFY(object.contains("nested"));
+        QVERIFY(object["nested"].isObject());
+
+        QJsonObject nested = object["nested"].toObject();
+        QCOMPARE(QJsonValue(nested["innerProperty"]), QJsonValue(2));
+    }
+    {   // nested array
+        QJsonObject object{{"nested", QJsonArray{"innerValue", 2.1, "bum cyk cyk"}}};
+        QCOMPARE(object.count(), 1);
+        QVERIFY(object.contains("nested"));
+        QVERIFY(object["nested"].isArray());
+
+        QJsonArray nested = object["nested"].toArray();
+        QCOMPARE(nested.count(), 3);
+        QCOMPARE(QJsonValue(nested[0]), QJsonValue("innerValue"));
+        QCOMPARE(QJsonValue(nested[1]), QJsonValue(2.1));
+    }
+#endif
+}
+
+void tst_QtJson::unicodeKeys()
+{
+    QByteArray json = "{"
+                      "\"x\\u2090_1\": \"hello_1\","
+                      "\"y\\u2090_2\": \"hello_2\","
+                      "\"T\\u2090_3\": \"hello_3\","
+                      "\"xyz_4\": \"hello_4\","
+                      "\"abc_5\": \"hello_5\""
+                      "}";
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(json, &error);
+    QVERIFY(error.error == QJsonParseError::NoError);
+    QJsonObject o = doc.object();
+
+    QCOMPARE(o.keys().size(), 5);
+    Q_FOREACH (const QString &key, o.keys()) {
+        QString suffix = key.mid(key.indexOf(QLatin1Char('_')));
+        QCOMPARE(o[key].toString(), QString("hello") + suffix);
+    }
+}
+
+void tst_QtJson::garbageAtEnd()
+{
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson("{},", &error);
+    QVERIFY(error.error == QJsonParseError::GarbageAtEnd);
+    QVERIFY(error.offset == 2);
+    QVERIFY(doc.isEmpty());
+
+    doc = QJsonDocument::fromJson("{}    ", &error);
+    QVERIFY(error.error == QJsonParseError::NoError);
+    QVERIFY(!doc.isEmpty());
+}
+
+void tst_QtJson::removeNonLatinKey()
+{
+    const QString nonLatinKeyName = QString::fromUtf8("Атрибут100500");
+
+    QJsonObject sourceObject;
+
+    sourceObject.insert("code", 1);
+    sourceObject.remove("code");
+
+    sourceObject.insert(nonLatinKeyName, 1);
+
+    const QByteArray json = QJsonDocument(sourceObject).toJson();
+    const QJsonObject restoredObject = QJsonDocument::fromJson(json).object();
+
+    QCOMPARE(sourceObject.keys(), restoredObject.keys());
+    QVERIFY(sourceObject.contains(nonLatinKeyName));
+    QVERIFY(restoredObject.contains(nonLatinKeyName));
 }
 
 QTEST_MAIN(tst_QtJson)

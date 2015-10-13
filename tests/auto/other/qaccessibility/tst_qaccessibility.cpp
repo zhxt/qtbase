@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,24 +35,18 @@
 #include <QtCore/qglobal.h>
 #ifdef Q_OS_WIN
 # include <QtCore/qt_windows.h>
+#ifndef Q_OS_WINRT
 # include <oleacc.h>
+#endif
 # include <servprov.h>
 # include <winuser.h>
 # ifdef QT_SUPPORTS_IACCESSIBLE2
-#  include <Accessible2.h>
-#  include <AccessibleAction.h>
-#  include <AccessibleComponent.h>
-#  include <AccessibleEditableText.h>
-#  include <AccessibleText.h>
-#  include <AccessibleTable2.h>
-#  include <AccessibleTableCell.h>
+#  include <ia2_api_all.h>
 # endif
 #endif
 #include <QtTest/QtTest>
 #include <QtGui>
-#include <QtGui/private/qaccessible2_p.h>
 #include <QtWidgets>
-#include <QtWidgets/private/qaccessiblewidget_p.h>
 #include <math.h>
 #include <qpa/qplatformnativeinterface.h>
 #include <qpa/qplatformintegration.h>
@@ -71,9 +57,11 @@
 #   undef interface
 #endif
 
-#include <QtGui/private/qaccessible2_p.h>
-#include <QtWidgets/private/qaccessiblewidget_p.h>
 #include "QtTest/qtestaccessible.h"
+
+#include <algorithm>
+
+#include "accessiblewidgets.h"
 
 // Make a widget frameless to prevent size constraints of title bars
 // from interfering (Windows).
@@ -243,6 +231,7 @@ private slots:
     void statesStructTest();
     void navigateHierarchy();
     void sliderTest();
+    void textAttributes_data();
     void textAttributes();
     void hideShowTest();
 
@@ -250,6 +239,7 @@ private slots:
 
     void applicationTest();
     void mainWindowTest();
+    void subWindowTest();
     void buttonTest();
     void scrollBarTest();
     void tabTest();
@@ -262,6 +252,10 @@ private slots:
     void mdiAreaTest();
     void mdiSubWindowTest();
     void lineEditTest();
+    void lineEditTextFunctions_data();
+    void lineEditTextFunctions();
+    void textInterfaceTest_data();
+    void textInterfaceTest();
     void groupBoxTest();
     void dialogButtonBoxTest();
     void dialTest();
@@ -315,6 +309,8 @@ void tst_QAccessibility::initTestCase()
 {
     QTestAccessibility::initialize();
     QPlatformIntegration *pfIntegration = QGuiApplicationPrivate::platformIntegration();
+    if (!pfIntegration->accessibility())
+        QSKIP("This platform does not support accessibility");
     pfIntegration->accessibility()->setActive(true);
 }
 
@@ -389,43 +385,6 @@ void tst_QAccessibility::eventTest()
     QTestAccessibility::clearEvents();
 }
 
-
-class QtTestAccessibleWidget: public QWidget
-{
-    Q_OBJECT
-public:
-    QtTestAccessibleWidget(QWidget *parent, const char *name): QWidget(parent)
-    {
-        setObjectName(name);
-    }
-};
-
-class QtTestAccessibleWidgetIface: public QAccessibleWidget
-{
-public:
-    QtTestAccessibleWidgetIface(QtTestAccessibleWidget *w): QAccessibleWidget(w) {}
-    QString text(QAccessible::Text t) const
-    {
-        if (t == QAccessible::Help)
-            return QString::fromLatin1("Help yourself");
-        return QAccessibleWidget::text(t);
-    }
-    static QAccessibleInterface *ifaceFactory(const QString &key, QObject *o)
-    {
-        if (key == "QtTestAccessibleWidget")
-            return new QtTestAccessibleWidgetIface(static_cast<QtTestAccessibleWidget*>(o));
-        return 0;
-    }
-};
-
-class QtTestAccessibleWidgetSubclass: public QtTestAccessibleWidget
-{
-    Q_OBJECT
-public:
-    QtTestAccessibleWidgetSubclass(QWidget *parent, const char *name): QtTestAccessibleWidget(parent, name)
-    {}
-};
-
 void tst_QAccessibility::customWidget()
 {
     {
@@ -484,14 +443,6 @@ void tst_QAccessibility::deletedWidget()
     widget = 0;
     // fixme: QVERIFY(!iface->isValid());
 }
-
-class KFooButton: public QPushButton
-{
-    Q_OBJECT
-public:
-    KFooButton(const QString &text, QWidget* parent = 0) : QPushButton(text, parent)
-    {}
-};
 
 void tst_QAccessibility::subclassedWidget()
 {
@@ -696,58 +647,164 @@ void tst_QAccessibility::accessibleName()
     QTestAccessibility::clearEvents();
 }
 
-void tst_QAccessibility::textAttributes()
+// note: color should probably always be part of the attributes
+void tst_QAccessibility::textAttributes_data()
 {
-    QTextEdit textEdit;
-    int startOffset;
-    int endOffset;
-    QString attributes;
-    QString text("<html><head></head><body>"
+    QTest::addColumn<QFont>("defaultFont");
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<int>("offset");
+    QTest::addColumn<int>("startOffsetResult");
+    QTest::addColumn<int>("endOffsetResult");
+    QTest::addColumn<QStringList>("attributeResult");
+
+    static QFont defaultFont;
+    defaultFont.setFamily("");
+    defaultFont.setPointSize(13);
+
+    static QFont defaultComplexFont = defaultFont;
+    defaultComplexFont.setFamily("Arial");
+    defaultComplexFont.setPointSize(20);
+    defaultComplexFont.setWeight(QFont::Bold);
+    defaultComplexFont.setStyle(QFont::StyleItalic);
+    defaultComplexFont.setUnderline(true);
+
+    static QStringList defaults = QString("font-style:normal;font-weight:normal;text-align:left;text-position:baseline;font-size:13pt").split(';');
+    static QStringList bold = defaults;
+    bold[1] = QString::fromLatin1("font-weight:bold");
+
+    static QStringList italic = defaults;
+    italic[0] = QString::fromLatin1("font-style:italic");
+
+    static QStringList boldItalic = defaults;
+    boldItalic[0] = QString::fromLatin1("font-style:italic");
+    boldItalic[1] = QString::fromLatin1("font-weight:bold");
+
+    static QStringList monospace = defaults;
+    monospace.append(QLatin1String("font-family:\"monospace\""));
+
+    static QStringList font8pt = defaults;
+    font8pt[4] = (QLatin1String("font-size:8pt"));
+
+    static QStringList color = defaults;
+    color << QLatin1String("color:rgb(240,241,242)") << QLatin1String("background-color:rgb(20,240,30)");
+
+    static QStringList rightAlign = defaults;
+    rightAlign[2] = QStringLiteral("text-align:right");
+
+    static QStringList defaultFontDifferent = defaults;
+    defaultFontDifferent[0] = QString::fromLatin1("font-style:italic");
+    defaultFontDifferent[1] = QString::fromLatin1("font-weight:bold");
+    defaultFontDifferent[4] = QString::fromLatin1("font-size:20pt");
+    defaultFontDifferent.append("text-underline-style:solid");
+    defaultFontDifferent.append("text-underline-type:single");
+    defaultFontDifferent.append("font-family:\"Arial\"");
+
+    static QStringList defaultFontDifferentBoldItalic = defaultFontDifferent;
+    defaultFontDifferentBoldItalic[0] = QString::fromLatin1("font-style:italic");
+    defaultFontDifferentBoldItalic[1] = QString::fromLatin1("font-weight:bold");
+
+    static QStringList defaultFontDifferentMonospace = defaultFontDifferent;
+    defaultFontDifferentMonospace[7] = (QLatin1String("font-family:\"monospace\""));
+
+    static QStringList defaultFontDifferentFont8pt = defaultFontDifferent;
+    defaultFontDifferentFont8pt[4] = (QLatin1String("font-size:8pt"));
+
+    static QStringList defaultFontDifferentColor = defaultFontDifferent;
+    defaultFontDifferentColor << QLatin1String("color:rgb(240,241,242)") << QLatin1String("background-color:rgb(20,240,30)");
+
+    QTest::newRow("defaults 1") << defaultFont << "hello" << 0 << 0 << 5 << defaults;
+    QTest::newRow("defaults 2") << defaultFont << "hello" << 1 << 0 << 5 << defaults;
+    QTest::newRow("defaults 3") << defaultFont << "hello" << 4 << 0 << 5 << defaults;
+    QTest::newRow("defaults 4") << defaultFont << "hello" << 5 << 0 << 5 << defaults;
+    QTest::newRow("offset -1 length") << defaultFont << "hello" << -1 << 0 << 5 << defaults;
+    QTest::newRow("offset -2 cursor pos") << defaultFont << "hello" << -2 << 0 << 5 << defaults;
+    QTest::newRow("offset -3") << defaultFont << "hello" << -3 << -1 << -1 << QStringList();
+    QTest::newRow("invalid offset 2") << defaultFont << "hello" << 6 << -1 << -1 << QStringList();
+    QTest::newRow("invalid offset 3") << defaultFont << "" << 1 << -1 << -1 << QStringList();
+
+    QString boldText = QLatin1String("<html><b>bold</b>text");
+    QTest::newRow("bold 0") << defaultFont << boldText << 0 << 0 << 4 << bold;
+    QTest::newRow("bold 2") << defaultFont << boldText << 2 << 0 << 4 << bold;
+    QTest::newRow("bold 3") << defaultFont << boldText << 3 << 0 << 4 << bold;
+    QTest::newRow("bold 4") << defaultFont << boldText << 4 << 4 << 8 << defaults;
+    QTest::newRow("bold 6") << defaultFont << boldText << 6 << 4 << 8 << defaults;
+
+    QString longText = QLatin1String("<html>"
                  "Hello, <b>this</b> is an <i><b>example</b> text</i>."
                  "<span style=\"font-family: monospace\">Multiple fonts are used.</span>"
                  "Multiple <span style=\"font-size: 8pt\">text sizes</span> are used."
-                 "Let's give some color to <span style=\"color:#f0f1f2; background-color:#14f01e\">Qt</span>."
-                 "</body></html>");
+                 "Let's give some color to <span style=\"color:#f0f1f2; background-color:#14f01e\">Qt</span>.");
 
+    QTest::newRow("default 5") << defaultFont << longText << 6 << 0 << 7 << defaults;
+    QTest::newRow("default 6") << defaultFont << longText << 7 << 7 << 11 << bold;
+    QTest::newRow("bold 7") << defaultFont << longText << 10 << 7 << 11 << bold;
+    QTest::newRow("bold 8") << defaultFont << longText << 10 << 7 << 11 << bold;
+    QTest::newRow("bold italic") << defaultFont << longText << 18 << 18 << 25 << boldItalic;
+    QTest::newRow("monospace") << defaultFont << longText << 34 << 31 << 55 << monospace;
+    QTest::newRow("8pt") << defaultFont << longText << 65 << 64 << 74 << font8pt;
+    QTest::newRow("color") << defaultFont << longText << 110 << 109 << 111 << color;
+
+    // make sure unset font properties default to those of document's default font
+    QTest::newRow("defaultFont default 5") << defaultComplexFont << longText << 6 << 0 << 7 << defaultFontDifferent;
+    QTest::newRow("defaultFont default 6") << defaultComplexFont << longText << 7 << 7 << 11 << defaultFontDifferent;
+    QTest::newRow("defaultFont bold 7") << defaultComplexFont << longText << 10 << 7 << 11 << defaultFontDifferent;
+    QTest::newRow("defaultFont bold 8") << defaultComplexFont << longText << 10 << 7 << 11 << defaultFontDifferent;
+    QTest::newRow("defaultFont bold italic") << defaultComplexFont << longText << 18 << 18 << 25 << defaultFontDifferentBoldItalic;
+    QTest::newRow("defaultFont monospace") << defaultComplexFont << longText << 34 << 31 << 55 << defaultFontDifferentMonospace;
+    QTest::newRow("defaultFont 8pt") << defaultComplexFont << longText << 65 << 64 << 74 << defaultFontDifferentFont8pt;
+    QTest::newRow("defaultFont color") << defaultComplexFont << longText << 110 << 109 << 111 << defaultFontDifferentColor;
+
+    QString rightAligned = QLatin1String("<html><p align=\"right\">right</p>");
+    QTest::newRow("right aligned 1") << defaultFont << rightAligned << 0 << 0 << 5 << rightAlign;
+    QTest::newRow("right aligned 2") << defaultFont << rightAligned << 1 << 0 << 5 << rightAlign;
+    QTest::newRow("right aligned 3") << defaultFont << rightAligned << 5 << 0 << 5 << rightAlign;
+
+    // left \n right \n left, make sure bold and alignment borders coincide
+    QString leftRightLeftAligned = QLatin1String("<html><p><b>left</b></p><p align=\"right\">right</p><p><b>left</b></p>");
+    QTest::newRow("left right left aligned 1") << defaultFont << leftRightLeftAligned << 1 << 0 << 4 << bold;
+    QTest::newRow("left right left aligned 3") << defaultFont << leftRightLeftAligned << 3 << 0 << 4 << bold;
+    QTest::newRow("left right left aligned 4") << defaultFont << leftRightLeftAligned << 4 << 4 << 5 << defaults;
+    QTest::newRow("left right left aligned 5") << defaultFont << leftRightLeftAligned << 5 << 5 << 10 << rightAlign;
+    QTest::newRow("left right left aligned 8") << defaultFont << leftRightLeftAligned << 8 << 5 << 10 << rightAlign;
+    QTest::newRow("left right left aligned 9") << defaultFont << leftRightLeftAligned << 9 << 5 << 10 << rightAlign;
+    QTest::newRow("left right left aligned 10") << defaultFont << leftRightLeftAligned << 10 << 10 << 11 << rightAlign;
+    QTest::newRow("left right left aligned 11") << defaultFont << leftRightLeftAligned << 11 << 11 << 15 << bold;
+    QTest::newRow("left right left aligned 15") << defaultFont << leftRightLeftAligned << 15 << 11 << 15 << bold;
+    QTest::newRow("empty with no fragments") << defaultFont << QString::fromLatin1("\n\n\n\n") << 0 << 0 << 1 << defaults;
+}
+
+void tst_QAccessibility::textAttributes()
+{
+    {
+    QFETCH(QFont, defaultFont);
+    QFETCH(QString, text);
+    QFETCH(int, offset);
+    QFETCH(int, startOffsetResult);
+    QFETCH(int, endOffsetResult);
+    QFETCH(QStringList, attributeResult);
+
+    QTextEdit textEdit;
+    textEdit.document()->setDefaultFont(defaultFont);
     textEdit.setText(text);
+    if (textEdit.document()->characterCount() > 1)
+        textEdit.textCursor().setPosition(1);
     QAccessibleInterface *interface = QAccessible::queryAccessibleInterface(&textEdit);
-
     QAccessibleTextInterface *textInterface=interface->textInterface();
-
     QVERIFY(textInterface);
-    QCOMPARE(textInterface->characterCount(), 112);
+    QCOMPARE(textInterface->characterCount(), textEdit.toPlainText().length());
 
-    attributes = textInterface->attributes(10, &startOffset, &endOffset);
-    QCOMPARE(startOffset, 7);
-    QCOMPARE(endOffset, 11);
-    attributes.prepend(';');
-    QVERIFY(attributes.contains(QLatin1String(";font-weight:bold;")));
+    int startOffset = -1;
+    int endOffset = -1;
+    QString attributes = textInterface->attributes(offset, &startOffset, &endOffset);
 
-    attributes = textInterface->attributes(18, &startOffset, &endOffset);
-    QCOMPARE(startOffset, 18);
-    QCOMPARE(endOffset, 25);
-    attributes.prepend(';');
-    QVERIFY(attributes.contains(QLatin1String(";font-weight:bold;")));
-    QVERIFY(attributes.contains(QLatin1String(";font-style:italic;")));
-
-    attributes = textInterface->attributes(34, &startOffset, &endOffset);
-    QCOMPARE(startOffset, 31);
-    QCOMPARE(endOffset, 55);
-    attributes.prepend(';');
-    QVERIFY(attributes.contains(QLatin1String(";font-family:\"monospace\";")));
-
-    attributes = textInterface->attributes(65, &startOffset, &endOffset);
-    QCOMPARE(startOffset, 64);
-    QCOMPARE(endOffset, 74);
-    attributes.prepend(';');
-    QVERIFY(attributes.contains(QLatin1String(";font-size:8pt;")));
-
-    attributes = textInterface->attributes(110, &startOffset, &endOffset);
-    QCOMPARE(startOffset, 109);
-    QCOMPARE(endOffset, 111);
-    attributes.prepend(';');
-    QVERIFY(attributes.contains(QLatin1String(";background-color:rgb(20,240,30);")));
-    QVERIFY(attributes.contains(QLatin1String(";color:rgb(240,241,242);")));
+    QCOMPARE(startOffset, startOffsetResult);
+    QCOMPARE(endOffset, endOffsetResult);
+    QStringList attrList = attributes.split(QChar(';'), QString::SkipEmptyParts);
+    attributeResult.sort();
+    attrList.sort();
+    QCOMPARE(attrList, attributeResult);
+    }
+    QTestAccessibility::clearEvents();
 }
 
 void tst_QAccessibility::hideShowTest()
@@ -914,30 +971,80 @@ void tst_QAccessibility::mainWindowTest()
     window.show();
     QTRY_VERIFY(QGuiApplication::focusWindow() == &window);
 
-//    We currently don't have an accessible interface for QWindow
-//    the active state is either in the QMainWindow or QQuickView
-//    QAccessibleInterface *windowIface(QAccessible::queryAccessibleInterface(&window));
-//    QVERIFY(windowIface->state().active);
+    // We currently don't have an accessible interface for QWindow
+    // the active state is either in the QMainWindow or QQuickView
+    QAccessibleInterface *windowIface(QAccessible::queryAccessibleInterface(&window));
+    QVERIFY(!windowIface);
 
     QAccessible::State activeState;
     activeState.active = true;
+
+    // We should still not crash if we somehow end up sending state change events
+    // Note that we do not QVERIFY_EVENT, as that relies on the updateHandler being
+    // called, which does not happen/make sense when there's no interface for the event.
     QAccessibleStateChangeEvent active(&window, activeState);
-    QVERIFY_EVENT(&active);
-
-    QWindow child;
-    child.setParent(&window);
-    child.setGeometry(10, 10, 20, 20);
-    child.show();
-
-    child.requestActivate();
-    QTRY_VERIFY(QGuiApplication::focusWindow() == &child);
-
     QAccessibleStateChangeEvent deactivate(&window, activeState);
-    QVERIFY_EVENT(&deactivate); // deactivation of parent
-
-    QAccessibleStateChangeEvent activeChild(&child, activeState);
-    QVERIFY_EVENT(&activeChild);
     }
+}
+
+// Dialogs and other sub-windows must appear in the
+// accessibility hierarchy exactly once as top level objects
+void tst_QAccessibility::subWindowTest()
+{
+    {
+    QWidget mainWidget;
+    mainWidget.setGeometry(100, 100, 100, 100);
+    mainWidget.show();
+    QLabel label(QStringLiteral("Window Contents"), &mainWidget);
+    mainWidget.setLayout(new QHBoxLayout());
+    mainWidget.layout()->addWidget(&label);
+
+    QDialog d(&mainWidget);
+    d.show();
+
+    QAccessibleInterface *app = QAccessible::queryAccessibleInterface(qApp);
+    QVERIFY(app);
+    QCOMPARE(app->childCount(), 2);
+
+    QAccessibleInterface *windowIface = QAccessible::queryAccessibleInterface(&mainWidget);
+    QVERIFY(windowIface);
+    QCOMPARE(windowIface->childCount(), 1);
+    QCOMPARE(app->child(0), windowIface);
+    QCOMPARE(windowIface->parent(), app);
+
+    QAccessibleInterface *dialogIface = QAccessible::queryAccessibleInterface(&d);
+    QVERIFY(dialogIface);
+    QCOMPARE(app->child(1), dialogIface);
+    QCOMPARE(dialogIface->parent(), app);
+    QCOMPARE(dialogIface->parent(), app);
+    }
+
+    {
+    QMainWindow mainWindow;
+    mainWindow.setGeometry(100, 100, 100, 100);
+    mainWindow.show();
+    QLabel label(QStringLiteral("Window Contents"), &mainWindow);
+    mainWindow.setCentralWidget(&label);
+
+    QDialog d(&mainWindow);
+    d.show();
+
+    QAccessibleInterface *app = QAccessible::queryAccessibleInterface(qApp);
+    QVERIFY(app);
+    QCOMPARE(app->childCount(), 2);
+
+    QAccessibleInterface *windowIface = QAccessible::queryAccessibleInterface(&mainWindow);
+    QVERIFY(windowIface);
+    QCOMPARE(windowIface->childCount(), 1);
+    QCOMPARE(app->child(0), windowIface);
+
+    QAccessibleInterface *dialogIface = QAccessible::queryAccessibleInterface(&d);
+    QVERIFY(dialogIface);
+    QCOMPARE(app->child(1), dialogIface);
+    QCOMPARE(dialogIface->parent(), app);
+    QCOMPARE(windowIface->parent(), app);
+    }
+    QTestAccessibility::clearEvents();
 }
 
 class CounterButton : public QPushButton {
@@ -1189,8 +1296,11 @@ void tst_QAccessibility::tabTest()
     QVERIFY(leftButton->state().invisible);
 
     const int lots = 5;
-    for (int i = 0; i < lots; ++i)
+    for (int i = 0; i < lots; ++i) {
         tabBar->addTab("Foo");
+        tabBar->setTabToolTip(i, QLatin1String("Cool tool tip"));
+        tabBar->setTabWhatsThis(i, QLatin1String("I don't know"));
+    }
 
     QAccessibleInterface *child1 = interface->child(0);
     QAccessibleInterface *child2 = interface->child(1);
@@ -1198,6 +1308,10 @@ void tst_QAccessibility::tabTest()
     QCOMPARE(child1->role(), QAccessible::PageTab);
     QVERIFY(child2);
     QCOMPARE(child2->role(), QAccessible::PageTab);
+
+    QCOMPARE(child1->text(QAccessible::Name), QLatin1String("Foo"));
+    QCOMPARE(child1->text(QAccessible::Description), QLatin1String("Cool tool tip"));
+    QCOMPARE(child1->text(QAccessible::Help), QLatin1String("I don't know"));
 
     QVERIFY((child1->state().invisible) == false);
     tabBar->hide();
@@ -1247,6 +1361,7 @@ void tst_QAccessibility::tabWidgetTest()
     QAccessibleInterface* tabBarInterface = 0;
     // there is no special logic to sort the children, so the contents will be 1, the tab bar 2
     tabBarInterface = interface->child(1);
+    QCOMPARE(verifyHierarchy(tabBarInterface), 0);
     QVERIFY(tabBarInterface);
     QCOMPARE(tabBarInterface->childCount(), 4);
     QCOMPARE(tabBarInterface->role(), QAccessible::PageTabList);
@@ -1414,19 +1529,19 @@ void tst_QAccessibility::menuTest()
     iFile->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(file->isVisible() && !edit->isVisible() && !help->isVisible());
+    QTRY_VERIFY(file->isVisible() && !edit->isVisible() && !help->isVisible());
     iEdit->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(!file->isVisible() && edit->isVisible() && !help->isVisible());
+    QTRY_VERIFY(!file->isVisible() && edit->isVisible() && !help->isVisible());
     iHelp->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(!file->isVisible() && !edit->isVisible() && help->isVisible());
+    QTRY_VERIFY(!file->isVisible() && !edit->isVisible() && help->isVisible());
     iAction->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(!file->isVisible() && !edit->isVisible() && !help->isVisible());
+    QTRY_VERIFY(!file->isVisible() && !edit->isVisible() && !help->isVisible());
 
     QVERIFY(interface->actionInterface());
     QCOMPARE(interface->actionInterface()->actionNames(), QStringList());
@@ -1499,8 +1614,8 @@ void tst_QAccessibility::menuTest()
     iFile->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     iFileNew->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
 
-    QVERIFY(file->isVisible());
-    QVERIFY(fileNew->isVisible());
+    QTRY_VERIFY(file->isVisible());
+    QTRY_VERIFY(fileNew->isVisible());
     QVERIFY(!edit->isVisible());
     QVERIFY(!help->isVisible());
 
@@ -1542,13 +1657,10 @@ void tst_QAccessibility::spinBoxTest()
     QCOMPARE(accessibleRect, widgetRect);
     QCOMPARE(interface->text(QAccessible::Value), QLatin1String("3"));
 
-    // one child, the line edit
+    // make sure that the line edit is not there
     const int numChildren = interface->childCount();
-    QCOMPARE(numChildren, 1);
-    QAccessibleInterface *lineEdit = interface->child(0);
-
-    QCOMPARE(lineEdit->role(), QAccessible::EditableText);
-    QCOMPARE(lineEdit->text(QAccessible::Value), QLatin1String("3"));
+    QCOMPARE(numChildren, 0);
+    QVERIFY(interface->child(0) == Q_NULLPTR);
 
     QVERIFY(interface->valueInterface());
     QCOMPARE(interface->valueInterface()->currentValue().toInt(), 3);
@@ -1562,6 +1674,10 @@ void tst_QAccessibility::spinBoxTest()
     QTest::qWait(200);
     QAccessibleValueChangeEvent expectedEvent(spinBox, spinBox->value());
     QVERIFY(QTestAccessibility::containsEvent(&expectedEvent));
+
+    QAccessibleTextInterface *textIface = interface->textInterface();
+    QVERIFY(textIface);
+
     delete spinBox;
     QTestAccessibility::clearEvents();
 }
@@ -1600,13 +1716,16 @@ static QRect characterRect(const QTextEdit &edit, int offset)
     QPointF layoutPosition = layout->position();
     int relativeOffset = offset - block.position();
     QTextLine line = layout->lineForTextPosition(relativeOffset);
-    QFontMetrics fm(edit.currentFont());
+    QTextBlock::iterator it = block.begin();
+    while (!it.fragment().contains(offset))
+        ++it;
+    QFontMetrics fm(it.fragment().charFormat().font());
     QChar ch = edit.document()->characterAt(offset);
     int w = fm.width(ch);
     int h = fm.height();
 
     qreal x = line.cursorToX(relativeOffset);
-    QRect r(layoutPosition.x() + x, layoutPosition.y() + line.y(), w, h);
+    QRect r(layoutPosition.x() + x, layoutPosition.y() + line.y() + line.ascent() + fm.descent() - h, w, h);
     r.moveTo(edit.viewport()->mapToGlobal(r.topLeft()));
 
     return r;
@@ -1632,6 +1751,7 @@ void tst_QAccessibility::textEditTest()
     for (int pass = 0; pass < 2; ++pass) {
         {
         QTextEdit edit;
+        edit.setMinimumSize(600, 400);
         setFrameless(&edit);
         int startOffset;
         int endOffset;
@@ -1642,37 +1762,45 @@ void tst_QAccessibility::textEditTest()
             QFont font("Helvetica");
             font.setPointSizeF(12.5);
             font.setWordSpacing(1.1);
-            edit.setCurrentFont(font);
+            edit.document()->setDefaultFont(font);
         }
 
         edit.show();
         QTest::qWaitForWindowShown(&edit);
         QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(&edit);
         QCOMPARE(iface->text(QAccessible::Value), edit.toPlainText());
-        QCOMPARE(iface->textInterface()->textAtOffset(8, QAccessible::WordBoundary, &startOffset, &endOffset), QString("world"));
+        QVERIFY(iface->state().focusable);
+        QVERIFY(!iface->state().selectable);
+        QVERIFY(!iface->state().selected);
+        QVERIFY(iface->state().selectableText);
+
+        QAccessibleTextInterface *textIface = iface->textInterface();
+        QVERIFY(textIface);
+
+        QCOMPARE(textIface->textAtOffset(8, QAccessible::WordBoundary, &startOffset, &endOffset), QString("world"));
         QCOMPARE(startOffset, 6);
         QCOMPARE(endOffset, 11);
-        QCOMPARE(iface->textInterface()->textAtOffset(15, QAccessible::LineBoundary, &startOffset, &endOffset), QString("How are you today?"));
+        QCOMPARE(textIface->textAtOffset(15, QAccessible::LineBoundary, &startOffset, &endOffset), QString("How are you today?"));
         QCOMPARE(startOffset, 13);
         QCOMPARE(endOffset, 31);
-        QCOMPARE(iface->textInterface()->characterCount(), 48);
-        QFontMetrics fm(edit.currentFont());
-        QCOMPARE(iface->textInterface()->characterRect(0).size(), QSize(fm.width("h"), fm.height()));
-        QCOMPARE(iface->textInterface()->characterRect(5).size(), QSize(fm.width(" "), fm.height()));
-        QCOMPARE(iface->textInterface()->characterRect(6).size(), QSize(fm.width("w"), fm.height()));
+        QCOMPARE(textIface->characterCount(), 48);
+        QFontMetrics fm(edit.document()->defaultFont());
+        QCOMPARE(textIface->characterRect(0).size(), QSize(fm.width("h"), fm.height()));
+        QCOMPARE(textIface->characterRect(5).size(), QSize(fm.width(" "), fm.height()));
+        QCOMPARE(textIface->characterRect(6).size(), QSize(fm.width("w"), fm.height()));
 
         int offset = 10;
-        QCOMPARE(iface->textInterface()->text(offset, offset + 1), QStringLiteral("d"));
-        QVERIFY(fuzzyRectCompare(iface->textInterface()->characterRect(offset), characterRect(edit, offset)));
+        QCOMPARE(textIface->text(offset, offset + 1), QStringLiteral("d"));
+        QVERIFY(fuzzyRectCompare(textIface->characterRect(offset), characterRect(edit, offset)));
         offset = 13;
-        QCOMPARE(iface->textInterface()->text(offset, offset + 1), QStringLiteral("H"));
-        QVERIFY(fuzzyRectCompare(iface->textInterface()->characterRect(offset), characterRect(edit, offset)));
+        QCOMPARE(textIface->text(offset, offset + 1), QStringLiteral("H"));
+        QVERIFY(fuzzyRectCompare(textIface->characterRect(offset), characterRect(edit, offset)));
         offset = 21;
-        QCOMPARE(iface->textInterface()->text(offset, offset + 1), QStringLiteral("y"));
-        QVERIFY(fuzzyRectCompare(iface->textInterface()->characterRect(offset), characterRect(edit, offset)));
+        QCOMPARE(textIface->text(offset, offset + 1), QStringLiteral("y"));
+        QVERIFY(fuzzyRectCompare(textIface->characterRect(offset), characterRect(edit, offset)));
         offset = 32;
-        QCOMPARE(iface->textInterface()->text(offset, offset + 1), QStringLiteral("I"));
-        QVERIFY(fuzzyRectCompare(iface->textInterface()->characterRect(offset), characterRect(edit, offset)));
+        QCOMPARE(textIface->text(offset, offset + 1), QStringLiteral("I"));
+        QVERIFY(fuzzyRectCompare(textIface->characterRect(offset), characterRect(edit, offset)));
 
         QTestAccessibility::clearEvents();
 
@@ -1691,6 +1819,62 @@ void tst_QAccessibility::textEditTest()
         sel.setCursorPosition(end);
         sel.setSelection(0, end);
         QVERIFY_EVENT(&sel);
+
+        // check that we have newlines handled
+        QString poem = QStringLiteral("Once upon a midnight dreary,\nwhile I pondered, weak and weary,\nOver many a quaint and curious volume of forgotten lore\n");
+        QAccessibleEditableTextInterface *editableTextIface = iface->editableTextInterface();
+        QVERIFY(editableTextIface);
+        editableTextIface->replaceText(0, end, poem);
+        QCOMPARE(iface->text(QAccessible::Value), poem);
+        QCOMPARE(textIface->text(0, poem.size()), poem);
+        QCOMPARE(textIface->text(28, 29), QLatin1String("\n"));
+        int start;
+        QCOMPARE(textIface->textAtOffset(42, QAccessible::LineBoundary, &start, &end), QStringLiteral("while I pondered, weak and weary,"));
+        QCOMPARE(start, 29);
+        QCOMPARE(end, 62);
+        QCOMPARE(textIface->textAtOffset(28, QAccessible::CharBoundary, &start, &end), QLatin1String("\n"));
+        QCOMPARE(start, 28);
+        QCOMPARE(end, 29);
+
+        edit.clear();
+        QTestAccessibility::clearEvents();
+
+        // make sure we get notifications when typing text
+        QTestEventList keys;
+        keys.addKeyClick('A');
+        keys.simulate(&edit);
+        keys.clear();
+        QAccessibleTextInsertEvent insertA(&edit, 0, "A");
+        QVERIFY_EVENT(&insertA);
+        QAccessibleTextCursorEvent move1(&edit, 1);
+        QVERIFY_EVENT(&move1);
+
+
+        keys.addKeyClick('c');
+        keys.simulate(&edit);
+        keys.clear();
+        QAccessibleTextInsertEvent insertC(&edit, 1, "c");
+        QVERIFY_EVENT(&insertC);
+        QAccessibleTextCursorEvent move2(&edit, 2);
+        QVERIFY_EVENT(&move2);
+
+        keys.addKeyClick(Qt::Key_Backspace);
+        keys.simulate(&edit);
+        keys.clear();
+
+        // FIXME this should get a proper string instead of space
+        QAccessibleTextRemoveEvent del(&edit, 1, " ");
+        QVERIFY_EVENT(&del);
+        QVERIFY_EVENT(&move1);
+
+        // it would be nicer to get a text update event, but the current implementation
+        // instead does remove and insert which is also fine
+        edit.setText(QStringLiteral("Accessibility rocks"));
+        QAccessibleTextRemoveEvent remove(&edit, 0, "  ");
+        QVERIFY_EVENT(&remove);
+
+        QAccessibleTextInsertEvent insert(&edit, 0, "Accessibility rocks");
+        QVERIFY_EVENT(&insert);
         }
         QTestAccessibility::clearEvents();
     }
@@ -1865,8 +2049,9 @@ void tst_QAccessibility::lineEditTest()
     QVERIFY(iface->state().sizeable);
     QVERIFY(iface->state().movable);
     QVERIFY(iface->state().focusable);
-    QVERIFY(iface->state().selectable);
-    QVERIFY(iface->state().hasPopup);
+    QVERIFY(!iface->state().selectable);
+    QVERIFY(iface->state().selectableText);
+    QVERIFY(!iface->state().hasPopup);
     QCOMPARE(bool(iface->state().focused), le->hasFocus());
 
     QString secret(QLatin1String("secret"));
@@ -1876,13 +2061,13 @@ void tst_QAccessibility::lineEditTest()
     QCOMPARE(iface->text(QAccessible::Value), secret);
     le->setEchoMode(QLineEdit::NoEcho);
     QVERIFY(iface->state().passwordEdit);
-    QVERIFY(iface->text(QAccessible::Value).isEmpty());
+    QCOMPARE(iface->text(QAccessible::Value), QString());
     le->setEchoMode(QLineEdit::Password);
     QVERIFY(iface->state().passwordEdit);
-    QVERIFY(iface->text(QAccessible::Value).isEmpty());
+    QCOMPARE(iface->text(QAccessible::Value), QString(secret.length(), QLatin1Char('*')));
     le->setEchoMode(QLineEdit::PasswordEchoOnEdit);
     QVERIFY(iface->state().passwordEdit);
-    QVERIFY(iface->text(QAccessible::Value).isEmpty());
+    QCOMPARE(iface->text(QAccessible::Value), QString(secret.length(), QLatin1Char('*')));
     le->setEchoMode(QLineEdit::Normal);
     QVERIFY(!(iface->state().passwordEdit));
     QCOMPARE(iface->text(QAccessible::Value), secret);
@@ -1893,8 +2078,10 @@ void tst_QAccessibility::lineEditTest()
     QVERIFY(!(iface->state().sizeable));
     QVERIFY(!(iface->state().movable));
     QVERIFY(iface->state().focusable);
-    QVERIFY(iface->state().selectable);
-    QVERIFY(iface->state().hasPopup);
+    QVERIFY(!iface->state().selectable);
+    QVERIFY(!iface->state().selected);
+    QVERIFY(iface->state().selectableText);
+    QVERIFY(!iface->state().hasPopup);
     QCOMPARE(bool(iface->state().focused), le->hasFocus());
 
     QLineEdit *le2 = new QLineEdit(toplevel);
@@ -2094,6 +2281,183 @@ void tst_QAccessibility::lineEditTest()
     QTestAccessibility::clearEvents();
 }
 
+void tst_QAccessibility::lineEditTextFunctions_data()
+{
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<int>("textFunction"); // before = 0, at = 1, after = 2
+    QTest::addColumn<int>("boundaryType");
+    QTest::addColumn<int>("cursorPosition");
+    QTest::addColumn<int>("offset");
+    QTest::addColumn<int>("expectedStart");
+    QTest::addColumn<int>("expectedEnd");
+    QTest::addColumn<QString>("expectedText");
+
+    // -2 gives cursor position, -1 is length
+    // invalid positions will return empty strings and either -1 and -1 or both the cursor position, both is fine
+    QTest::newRow("char before -2") << "hello" << 0 << (int) QAccessible::CharBoundary << 3 << -2 << 2 << 3 << "l";
+    QTest::newRow("char at -2") << "hello" << 1 << (int) QAccessible::CharBoundary << 3 << -2 << 3 << 4 << "l";
+    QTest::newRow("char after -2") << "hello" << 2 << (int) QAccessible::CharBoundary << 3 << -2 << 4 << 5 << "o";
+    QTest::newRow("char before -1") << "hello" << 0 << (int) QAccessible::CharBoundary << 3 << -1 << 4 << 5 << "o";
+    QTest::newRow("char at -1") << "hello" << 1 << (int) QAccessible::CharBoundary << 3 << -1 << -1 << -1 << "";
+    QTest::newRow("char after -1") << "hello" << 2 << (int) QAccessible::CharBoundary << 3 << -1 << -1 << -1 << "";
+    QTest::newRow("char before 0") << "hello" << 0 << (int) QAccessible::CharBoundary << 0 << 0 << -1 << -1 << "";
+    QTest::newRow("char at 0") << "hello" << 1 << (int) QAccessible::CharBoundary << 0 << 0 << 0 << 1 << "h";
+    QTest::newRow("char after 0") << "hello" << 2 << (int) QAccessible::CharBoundary << 0 << 0 << 1 << 2 << "e";
+    QTest::newRow("char before 1") << "hello" << 0 << (int) QAccessible::CharBoundary << 3 << 1 << 0 << 1 << "h";
+    QTest::newRow("char at 1") << "hello" << 1 << (int) QAccessible::CharBoundary << 3 << 1 << 1 << 2 << "e";
+    QTest::newRow("char after 1") << "hello" << 2 << (int) QAccessible::CharBoundary << 3 << 1 << 2 << 3 << "l";
+    QTest::newRow("char before 4") << "hello" << 0 << (int) QAccessible::CharBoundary << 3 << 4 << 3 << 4 << "l";
+    QTest::newRow("char at 4") << "hello" << 1 << (int) QAccessible::CharBoundary << 3 << 4 << 4 << 5 << "o";
+    QTest::newRow("char after 4") << "hello" << 2 << (int) QAccessible::CharBoundary << 3 << 4 << -1 << -1 << "";
+    QTest::newRow("char before 5") << "hello" << 0 << (int) QAccessible::CharBoundary << 3 << 5 << 4 << 5 << "o";
+    QTest::newRow("char at 5") << "hello" << 1 << (int) QAccessible::CharBoundary << 3 << 5 << -1 << -1 << "";
+    QTest::newRow("char after 5") << "hello" << 2 << (int) QAccessible::CharBoundary << 3 << 5 << -1 << -1 << "";
+    QTest::newRow("char before 6") << "hello" << 0 << (int) QAccessible::CharBoundary << 3 << 6 << -1 << -1 << "";
+    QTest::newRow("char at 6") << "hello" << 1 << (int) QAccessible::CharBoundary << 3 << 6 << -1 << -1 << "";
+    QTest::newRow("char after 6") << "hello" << 2 << (int) QAccessible::CharBoundary << 3 << 6 << -1 << -1 << "";
+
+    for (int i = -2; i < 6; ++i) {
+        QTest::newRow(QString::fromLatin1("line before %1").arg(i).toLocal8Bit().constData()) << "hello" << 0 << (int) QAccessible::LineBoundary << 3 << i << -1 << -1 << "";
+        QTest::newRow(QString::fromLatin1("line at %1").arg(i).toLocal8Bit().constData()) << "hello" << 1 << (int) QAccessible::LineBoundary << 3 << i << 0 << 5 << "hello";
+        QTest::newRow(QString::fromLatin1("line after %1").arg(i).toLocal8Bit().constData()) << "hello" << 2 << (int) QAccessible::LineBoundary << 3 << i << -1 << -1 << "";
+    }
+}
+
+void tst_QAccessibility::lineEditTextFunctions()
+{
+    {
+    QFETCH(QString, text);
+    QFETCH(int, textFunction);
+    QFETCH(int, boundaryType);
+    QFETCH(int, cursorPosition);
+    QFETCH(int, offset);
+    QFETCH(int, expectedStart);
+    QFETCH(int, expectedEnd);
+    QFETCH(QString, expectedText);
+
+    QLineEdit le;
+    le.show();
+    le.setText(text);
+    le.setCursorPosition(cursorPosition);
+
+    QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(&le);
+    QVERIFY(iface);
+    QAccessibleTextInterface *textIface = iface->textInterface();
+    QVERIFY(textIface);
+
+    int start = -33;
+    int end = -33;
+    QString result;
+    switch (textFunction) {
+    case 0:
+        result = textIface->textBeforeOffset(offset, (QAccessible::TextBoundaryType) boundaryType, &start, &end);
+        break;
+    case 1:
+        result = textIface->textAtOffset(offset, (QAccessible::TextBoundaryType) boundaryType, &start, &end);
+        break;
+    case 2:
+        result = textIface->textAfterOffset(offset, (QAccessible::TextBoundaryType) boundaryType, &start, &end);
+        break;
+    }
+    QCOMPARE(result, expectedText);
+    QCOMPARE(start, expectedStart);
+    QCOMPARE(end, expectedEnd);
+    }
+    QTestAccessibility::clearEvents();
+}
+
+void tst_QAccessibility::textInterfaceTest_data()
+{
+    lineEditTextFunctions_data();
+    QString hello = QStringLiteral("hello\nworld\nend");
+    QTest::newRow("multi line at 0") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 0 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line at 1") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 1 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line at 2") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 2 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line at 5") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 5 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line at 6") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 6 << 6 << 12 << "world\n";
+    QTest::newRow("multi line at 7") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 7 << 6 << 12 << "world\n";
+    QTest::newRow("multi line at 8") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 8 << 6 << 12 << "world\n";
+    QTest::newRow("multi line at 10") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 10 << 6 << 12 << "world\n";
+    QTest::newRow("multi line at 11") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 11 << 6 << 12 << "world\n";
+    QTest::newRow("multi line at 12") << hello << 1 << (int) QAccessible::LineBoundary << 0 << 12 << 12 << 15 << "end";
+
+    QTest::newRow("multi line before 0") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 0 << -1 << -1 << "";
+    QTest::newRow("multi line before 1") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 1 << -1 << -1 << "";
+    QTest::newRow("multi line before 2") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 2 << -1 << -1 << "";
+    QTest::newRow("multi line before 5") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 5 << -1 << -1 << "";
+    QTest::newRow("multi line before 6") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 6 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line before 7") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 7 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line before 8") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 8 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line before 10") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 10 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line before 11") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 11 << 0 << 6 << "hello\n";
+    QTest::newRow("multi line before 12") << hello << 0 << (int) QAccessible::LineBoundary << 0 << 12 << 6 << 12 << "world\n";
+
+    QTest::newRow("multi line after 0") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 0 << 6 << 12 << "world\n";
+    QTest::newRow("multi line after 1") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 1 << 6 << 12 << "world\n";
+    QTest::newRow("multi line after 2") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 2 << 6 << 12 << "world\n";
+    QTest::newRow("multi line after 5") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 5 << 6 << 12 << "world\n";
+    QTest::newRow("multi line after 6") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 6 << 12 << 15 << "end";
+    QTest::newRow("multi line after 7") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 7 << 12 << 15 << "end";
+    QTest::newRow("multi line after 8") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 8 << 12 << 15 << "end";
+    QTest::newRow("multi line after 10") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 10 << 12 << 15 << "end";
+    QTest::newRow("multi line after 11") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 11 << 12 << 15 << "end";
+    QTest::newRow("multi line after 12") << hello << 2 << (int) QAccessible::LineBoundary << 0 << 12 << -1 << -1 << "";
+
+    QTest::newRow("before 4 \\nFoo\\n") << QStringLiteral("\nFoo\n") << 0 << (int) QAccessible::LineBoundary << 0 << 4 << 0 << 1 << "\n";
+    QTest::newRow("at 4 \\nFoo\\n") << QStringLiteral("\nFoo\n") << 1 << (int) QAccessible::LineBoundary << 0 << 4 << 1 << 5 << "Foo\n";
+    QTest::newRow("after 4 \\nFoo\\n") << QStringLiteral("\nFoo\n") << 2 << (int) QAccessible::LineBoundary << 0 << 4 << 5 << 5 << "";
+    QTest::newRow("before 4 Foo\\nBar\\n") << QStringLiteral("Foo\nBar\n") << 0 << (int) QAccessible::LineBoundary << 0 << 7 << 0 << 4 << "Foo\n";
+    QTest::newRow("at 4 Foo\\nBar\\n") << QStringLiteral("Foo\nBar\n") << 1 << (int) QAccessible::LineBoundary << 0 << 7 << 4 << 8 << "Bar\n";
+    QTest::newRow("after 4 Foo\\nBar\\n") << QStringLiteral("Foo\nBar\n") << 2 << (int) QAccessible::LineBoundary << 0 << 7 << 8 << 8 << "";
+    QTest::newRow("at 0 Foo\\n") << QStringLiteral("Foo\n") << 1 << (int) QAccessible::LineBoundary << 0 << 0 << 0 << 4 << "Foo\n";
+}
+
+void tst_QAccessibility::textInterfaceTest()
+{
+    QFETCH(QString, text);
+    QFETCH(int, textFunction);
+    QFETCH(int, boundaryType);
+    QFETCH(int, cursorPosition);
+    QFETCH(int, offset);
+    QFETCH(int, expectedStart);
+    QFETCH(int, expectedEnd);
+    QFETCH(QString, expectedText);
+
+    QAccessible::installFactory(CustomTextWidgetIface::ifaceFactory);
+    CustomTextWidget *w = new CustomTextWidget();
+    w->text = text;
+    w->cursorPosition = cursorPosition;
+
+    QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(w);
+    QVERIFY(iface);
+    QCOMPARE(iface->text(QAccessible::Value), text);
+    QAccessibleTextInterface *textIface = iface->textInterface();
+    QVERIFY(textIface);
+
+    int start = -33;
+    int end = -33;
+    QString result;
+    switch (textFunction) {
+    case 0:
+        result = textIface->textBeforeOffset(offset, (QAccessible::TextBoundaryType) boundaryType, &start, &end);
+        break;
+    case 1:
+        result = textIface->textAtOffset(offset, (QAccessible::TextBoundaryType) boundaryType, &start, &end);
+        break;
+    case 2:
+        result = textIface->textAfterOffset(offset, (QAccessible::TextBoundaryType) boundaryType, &start, &end);
+        break;
+    }
+
+    QCOMPARE(result, expectedText);
+    QCOMPARE(start, expectedStart);
+    QCOMPARE(end, expectedEnd);
+
+    delete w;
+    QAccessible::removeFactory(CustomTextWidgetIface::ifaceFactory);
+    QTestAccessibility::clearEvents();
+}
+
 void tst_QAccessibility::groupBoxTest()
 {
     {
@@ -2193,7 +2557,7 @@ void tst_QAccessibility::dialogButtonBoxTest()
     for (int i = 0; i < iface->childCount(); ++i)
         buttons <<  iface->child(i);
 
-    qSort(buttons.begin(), buttons.end(), accessibleInterfaceLeftOf);
+    std::sort(buttons.begin(), buttons.end(), accessibleInterfaceLeftOf);
 
     for (int i = 0; i < buttons.count(); ++i)
         actualOrder << buttons.at(i)->text(QAccessible::Name);
@@ -2244,7 +2608,7 @@ void tst_QAccessibility::dialogButtonBoxTest()
     for (int i = 0; i < iface->childCount(); ++i)
         buttons <<  iface->child(i);
 
-    qSort(buttons.begin(), buttons.end(), accessibleInterfaceAbove);
+    std::sort(buttons.begin(), buttons.end(), accessibleInterfaceAbove);
 
     for (int i = 0; i < buttons.count(); ++i)
         actualOrder << buttons.at(i)->text(QAccessible::Name);
@@ -2334,57 +2698,67 @@ void tst_QAccessibility::abstractScrollAreaTest()
 
     // Horizontal scrollBar.
     abstractScrollArea.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
-    QCOMPARE(interface->childCount(), 2);
     QWidget *horizontalScrollBar = abstractScrollArea.horizontalScrollBar();
+
+    // On OS X >= 10.9 the scrollbar will be hidden unless explicitly enabled in the preferences
+    bool scrollBarsVisible = !horizontalScrollBar->style()->styleHint(QStyle::SH_ScrollBar_Transient, 0, horizontalScrollBar);
+    int childCount = scrollBarsVisible ? 2 : 1;
+    QCOMPARE(interface->childCount(), childCount);
     QWidget *horizontalScrollBarContainer = horizontalScrollBar->parentWidget();
-    QVERIFY(verifyChild(horizontalScrollBarContainer, interface, 1, globalGeometry));
+    if (scrollBarsVisible)
+        QVERIFY(verifyChild(horizontalScrollBarContainer, interface, 1, globalGeometry));
 
     // Horizontal scrollBar widgets.
     QLabel *secondLeftLabel = new QLabel(QLatin1String("L2"));
     abstractScrollArea.addScrollBarWidget(secondLeftLabel, Qt::AlignLeft);
-    QCOMPARE(interface->childCount(), 2);
+    QCOMPARE(interface->childCount(), childCount);
 
     QLabel *firstLeftLabel = new QLabel(QLatin1String("L1"));
     abstractScrollArea.addScrollBarWidget(firstLeftLabel, Qt::AlignLeft);
-    QCOMPARE(interface->childCount(), 2);
+    QCOMPARE(interface->childCount(), childCount);
 
     QLabel *secondRightLabel = new QLabel(QLatin1String("R2"));
     abstractScrollArea.addScrollBarWidget(secondRightLabel, Qt::AlignRight);
-    QCOMPARE(interface->childCount(), 2);
+    QCOMPARE(interface->childCount(), childCount);
 
     QLabel *firstRightLabel = new QLabel(QLatin1String("R1"));
     abstractScrollArea.addScrollBarWidget(firstRightLabel, Qt::AlignRight);
-    QCOMPARE(interface->childCount(), 2);
+    QCOMPARE(interface->childCount(), childCount);
 
     // Vertical scrollBar.
     abstractScrollArea.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
-    QCOMPARE(interface->childCount(), 3);
+    if (scrollBarsVisible)
+        ++childCount;
+    QCOMPARE(interface->childCount(), childCount);
     QWidget *verticalScrollBar = abstractScrollArea.verticalScrollBar();
     QWidget *verticalScrollBarContainer = verticalScrollBar->parentWidget();
-    QVERIFY(verifyChild(verticalScrollBarContainer, interface, 2, globalGeometry));
+    if (scrollBarsVisible)
+        QVERIFY(verifyChild(verticalScrollBarContainer, interface, 2, globalGeometry));
 
     // Vertical scrollBar widgets.
     QLabel *secondTopLabel = new QLabel(QLatin1String("T2"));
     abstractScrollArea.addScrollBarWidget(secondTopLabel, Qt::AlignTop);
-    QCOMPARE(interface->childCount(), 3);
+    QCOMPARE(interface->childCount(), childCount);
 
     QLabel *firstTopLabel = new QLabel(QLatin1String("T1"));
     abstractScrollArea.addScrollBarWidget(firstTopLabel, Qt::AlignTop);
-    QCOMPARE(interface->childCount(), 3);
+    QCOMPARE(interface->childCount(), childCount);
 
     QLabel *secondBottomLabel = new QLabel(QLatin1String("B2"));
     abstractScrollArea.addScrollBarWidget(secondBottomLabel, Qt::AlignBottom);
-    QCOMPARE(interface->childCount(), 3);
+    QCOMPARE(interface->childCount(), childCount);
 
     QLabel *firstBottomLabel = new QLabel(QLatin1String("B1"));
     abstractScrollArea.addScrollBarWidget(firstBottomLabel, Qt::AlignBottom);
-    QCOMPARE(interface->childCount(), 3);
+    QCOMPARE(interface->childCount(), childCount);
 
     // CornerWidget.
+    ++childCount;
     abstractScrollArea.setCornerWidget(new QLabel(QLatin1String("C")));
-    QCOMPARE(interface->childCount(), 4);
+    QCOMPARE(interface->childCount(), childCount);
     QWidget *cornerWidget = abstractScrollArea.cornerWidget();
-    QVERIFY(verifyChild(cornerWidget, interface, 3, globalGeometry));
+    if (scrollBarsVisible)
+        QVERIFY(verifyChild(cornerWidget, interface, 3, globalGeometry));
 
     QCOMPARE(verifyHierarchy(interface), 0);
 
@@ -2449,7 +2823,7 @@ void tst_QAccessibility::listTest()
 
     // Check for events
     QTest::mouseClick(listView->viewport(), Qt::LeftButton, 0, listView->visualItemRect(listView->item(1)).center());
-    QAccessibleEvent selectionEvent(listView, QAccessible::Selection);
+    QAccessibleEvent selectionEvent(listView, QAccessible::SelectionAdd);
     selectionEvent.setChild(1);
     QAccessibleEvent focusEvent(listView, QAccessible::Focus);
     focusEvent.setChild(1);
@@ -2457,7 +2831,7 @@ void tst_QAccessibility::listTest()
     QVERIFY(QTestAccessibility::containsEvent(&focusEvent));
     QTest::mouseClick(listView->viewport(), Qt::LeftButton, 0, listView->visualItemRect(listView->item(2)).center());
 
-    QAccessibleEvent selectionEvent2(listView, QAccessible::Selection);
+    QAccessibleEvent selectionEvent2(listView, QAccessible::SelectionAdd);
     selectionEvent2.setChild(2);
     QAccessibleEvent focusEvent2(listView, QAccessible::Focus);
     focusEvent2.setChild(2);
@@ -2600,11 +2974,23 @@ void tst_QAccessibility::treeTest()
     QCOMPARE(iface->indexOfChild(child2), 4);
     QCOMPARE(child2->text(QAccessible::Name), QString("Austria"));
 
-    treeView->setHeaderHidden(true);
-    QAccessibleInterface *accSpain = iface->child(0);
-    QCOMPARE(accSpain->role(), QAccessible::TreeItem);
-    QCOMPARE(iface->indexOfChild(accSpain), 0);
-    treeView->setHeaderHidden(false);
+    bool headerHidden = true;
+    do {
+        treeView->setHeaderHidden(headerHidden);
+        header1 = iface->child(0);
+        QCOMPARE(header1->role(), QAccessible::ColumnHeader);
+        QCOMPARE(!!header1->state().invisible, headerHidden);
+        QCOMPARE(header1->text(QAccessible::Name), QStringLiteral("Artist"));
+        header1 = iface->child(1);
+        QCOMPARE(header1->role(), QAccessible::ColumnHeader);
+        QCOMPARE(!!header1->state().invisible, headerHidden);
+        QCOMPARE(header1->text(QAccessible::Name), QStringLiteral("Work"));
+
+        QAccessibleInterface *accSpain = iface->child(2);
+        QCOMPARE(accSpain->role(), QAccessible::TreeItem);
+        QCOMPARE(iface->indexOfChild(accSpain), 2);
+        headerHidden = !headerHidden;
+    } while (!headerHidden);
 
     QTestAccessibility::clearEvents();
 
@@ -2931,8 +3317,25 @@ void tst_QAccessibility::tableTest()
     cell30_new = table2->cellAt(3, 0);
     QCOMPARE(cell30_new, cell20);
     QCOMPARE(iface->indexOfChild(cell30_new), 21);
-    delete tableView;
 
+
+    {
+        QTestAccessibility::clearEvents();
+        QModelIndex index00 = tableView->model()->index(1, 1, tableView->rootIndex());
+        tableView->setSelectionBehavior(QAbstractItemView::SelectItems);
+        tableView->setSelectionMode(QAbstractItemView::SingleSelection);
+        tableView->selectionModel()->select(index00, QItemSelectionModel::ClearAndSelect);
+        QAccessibleEvent event(tableView, QAccessible::SelectionAdd);
+        event.setChild(12);
+        QCOMPARE(QTestAccessibility::containsEvent(&event), true);
+        QTestAccessibility::clearEvents();
+        tableView->setSelectionBehavior(QAbstractItemView::SelectItems);
+        tableView->setSelectionMode(QAbstractItemView::SingleSelection);
+        tableView->selectionModel()->select(index00, QItemSelectionModel::ClearAndSelect);
+        tableView->horizontalHeader()->setVisible(false);
+
+    }
+    delete tableView;
     QVERIFY(!QAccessible::accessibleInterface(id00));
     QTestAccessibility::clearEvents();
 }
@@ -3030,60 +3433,127 @@ void tst_QAccessibility::dockWidgetTest()
     mw->setMenuBar(mb);
 
     QDockWidget *dock1 = new QDockWidget(mw);
+    dock1->setWindowTitle("Dock 1");
     mw->addDockWidget(Qt::LeftDockWidgetArea, dock1);
     QPushButton *pb1 = new QPushButton(tr("Push me"), dock1);
     dock1->setWidget(pb1);
 
     QDockWidget *dock2 = new QDockWidget(mw);
+    dock2->setWindowTitle("Dock 2");
     mw->addDockWidget(Qt::BottomDockWidgetArea, dock2);
     QPushButton *pb2 = new QPushButton(tr("Push me"), dock2);
     dock2->setWidget(pb2);
+    dock2->setFeatures(QDockWidget::DockWidgetClosable);
 
     mw->resize(600,400);
     mw->show();
-#if defined(Q_OS_UNIX)
-    QCoreApplication::processEvents();
-    QTest::qWait(100);
-#endif
+    QTest::qWaitForWindowExposed(mw);
 
     QAccessibleInterface *accMainWindow = QAccessible::queryAccessibleInterface(mw);
     // 4 children: menu bar, dock1, dock2, and central widget
     QCOMPARE(accMainWindow->childCount(), 4);
     QAccessibleInterface *accDock1 = 0;
+    QAccessibleInterface *accDock2 = 0;
     for (int i = 0; i < 4; ++i) {
-        accDock1 = accMainWindow->child(i);
-        if (accMainWindow->role() == QAccessible::Window) {
-            if (accDock1 && qobject_cast<QDockWidget*>(accDock1->object()) == dock1) {
-                break;
-            }
-        }
+        QAccessibleInterface *child = accMainWindow->child(i);
+        if (child && child->object() == dock1)
+            accDock1 = child;
+        if (child && child->object() == dock2)
+            accDock2 = child;
     }
+
+    // Dock widgets consist of
+    // 0 contents
+    // 1 close button
+    // 2 float button
     QVERIFY(accDock1);
     QCOMPARE(accDock1->role(), QAccessible::Window);
+    QCOMPARE(accDock1->text(QAccessible::Name), dock1->windowTitle());
+    QCOMPARE(accDock1->childCount(), 3);
 
-    QAccessibleInterface *dock1TitleBar = accDock1->child(0);
-    QCOMPARE(dock1TitleBar->role(), QAccessible::TitleBar);
-    QVERIFY(accDock1->rect().contains(dock1TitleBar->rect()));
+    QAccessibleInterface *dock1Widget = accDock1->child(0);
+    QCOMPARE(dock1Widget->role(), QAccessible::Button);
+    QCOMPARE(dock1Widget->text(QAccessible::Name), pb1->text());
 
-    QPoint globalPos = dock1->mapToGlobal(QPoint(0,0));
-    globalPos.rx()+=5;  //### query style
-    globalPos.ry()+=5;
-    QAccessibleInterface *childAt = accDock1->childAt(globalPos.x(), globalPos.y());    //###
-    QCOMPARE(childAt->role(), QAccessible::TitleBar);
-    int index = accDock1->indexOfChild(childAt);
-    QAccessibleInterface *accTitleBar = accDock1->child(index);
+#ifdef Q_OS_MAC
+    QEXPECT_FAIL("", "Dock Widget geometry on Mac seems broken.", Continue);
+#endif
+    QVERIFY(accDock1->rect().contains(dock1Widget->rect()));
+    QCOMPARE(accDock1->indexOfChild(dock1Widget), 0);
+    QCOMPARE(dock1Widget->parent()->object(), dock1);
 
-    QCOMPARE(accTitleBar->role(), QAccessible::TitleBar);
-    QCOMPARE(accDock1->indexOfChild(accTitleBar), 0);
-    QAccessibleInterface *acc;
-    acc = accTitleBar->parent();
-    QVERIFY(acc);
-    QCOMPARE(acc->role(), QAccessible::Window);
+    QAccessibleInterface *dock1Close = accDock1->child(1);
+    QCOMPARE(dock1Close->role(), QAccessible::Button);
+    QCOMPARE(dock1Close->text(QAccessible::Name), QDockWidget::tr("Close"));
+    QVERIFY(accDock1->rect().contains(dock1Close->rect()));
+    QCOMPARE(accDock1->indexOfChild(dock1Close), 1);
+    QCOMPARE(dock1Close->parent()->object(), dock1);
 
-    delete pb1;
-    delete pb2;
-    delete dock1;
-    delete dock2;
+    QAccessibleInterface *dock1Float = accDock1->child(2);
+    QCOMPARE(dock1Float->role(), QAccessible::Button);
+    QCOMPARE(dock1Float->text(QAccessible::Name), QDockWidget::tr("Float"));
+    QVERIFY(accDock1->rect().contains(dock1Float->rect()));
+    QCOMPARE(accDock1->indexOfChild(dock1Float), 2);
+    QVERIFY(!dock1Float->state().invisible);
+
+    QVERIFY(accDock2);
+    QCOMPARE(accDock2->role(), QAccessible::Window);
+    QCOMPARE(accDock2->text(QAccessible::Name), dock2->windowTitle());
+    QCOMPARE(accDock2->childCount(), 3);
+
+    QAccessibleInterface *dock2Widget = accDock2->child(0);
+    QCOMPARE(dock2Widget->role(), QAccessible::Button);
+    QCOMPARE(dock2Widget->text(QAccessible::Name), pb1->text());
+#ifdef Q_OS_MAC
+    QEXPECT_FAIL("", "Dock Widget geometry on Mac seems broken.", Continue);
+#endif
+    QVERIFY(accDock2->rect().contains(dock2Widget->rect()));
+    QCOMPARE(accDock2->indexOfChild(dock2Widget), 0);
+
+    QAccessibleInterface *dock2Close = accDock2->child(1);
+    QCOMPARE(dock2Close->role(), QAccessible::Button);
+    QCOMPARE(dock2Close->text(QAccessible::Name), QDockWidget::tr("Close"));
+    QVERIFY(accDock2->rect().contains(dock2Close->rect()));
+    QCOMPARE(accDock2->indexOfChild(dock2Close), 1);
+    QVERIFY(!dock2Close->state().invisible);
+
+    QAccessibleInterface *dock2Float = accDock2->child(2);
+    QCOMPARE(dock2Float->role(), QAccessible::Button);
+    QCOMPARE(dock2Float->text(QAccessible::Name), QDockWidget::tr("Float"));
+    QCOMPARE(accDock2->indexOfChild(dock2Float), 2);
+    QVERIFY(dock2Float->state().invisible);
+
+    QPoint buttonPoint = pb2->mapToGlobal(QPoint(pb2->width()/2, pb2->height()/2));
+    QAccessibleInterface *childAt = accDock2->childAt(buttonPoint.x(), buttonPoint.y());
+    QVERIFY(childAt);
+    QVERIFY(childAt->object() == pb2);
+
+    QWidget *close1 = qobject_cast<QWidget*>(dock1Close->object());
+    QPoint close1ButtonPoint = close1->mapToGlobal(QPoint(close1->width()/2, close1->height()/2));
+    QAccessibleInterface *childAt2 = accDock1->childAt(close1ButtonPoint.x(), close1ButtonPoint.y());
+    QVERIFY(childAt2);
+    QVERIFY(childAt2->object() == close1);
+
+    // custom title bar widget
+    QDockWidget *dock3 = new QDockWidget(mw);
+    dock3->setWindowTitle("Dock 3");
+    mw->addDockWidget(Qt::LeftDockWidgetArea, dock3);
+    QPushButton *pb3 = new QPushButton(tr("Push me"), dock3);
+    dock3->setWidget(pb3);
+    QLabel *titleLabel = new QLabel("I am a title widget");
+    dock3->setTitleBarWidget(titleLabel);
+
+    QAccessibleInterface *accDock3 = accMainWindow->child(4);
+    QVERIFY(accDock3);
+    QCOMPARE(accDock3->role(), QAccessible::Window);
+    QCOMPARE(accDock3->text(QAccessible::Name), dock3->windowTitle());
+    QCOMPARE(accDock3->childCount(), 2);
+    QAccessibleInterface *titleWidget = accDock3->child(1);
+    QVERIFY(titleWidget);
+    QCOMPARE(titleWidget->text(QAccessible::Name), titleLabel->text());
+    QAccessibleInterface *dock3Widget = accDock3->child(0);
+    QCOMPARE(dock3Widget->text(QAccessible::Name), pb3->text());
+
     delete mw;
     QTestAccessibility::clearEvents();
 #endif // QT_NO_DOCKWIDGET
@@ -3125,7 +3595,7 @@ void tst_QAccessibility::comboBoxTest()
 
     QVERIFY(!combo.view()->isVisible());
     QVERIFY(iface->actionInterface());
-    QCOMPARE(iface->actionInterface()->actionNames(), QStringList() << QAccessibleActionInterface::showMenuAction());
+    QCOMPARE(iface->actionInterface()->actionNames(), QStringList() << QAccessibleActionInterface::showMenuAction() << QAccessibleActionInterface::pressAction());
     iface->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     QTRY_VERIFY(combo.view()->isVisible());
 
@@ -3155,11 +3625,16 @@ void tst_QAccessibility::comboBoxTest()
 
 void tst_QAccessibility::labelTest()
 {
+    QWidget *window = new QWidget;
     QString text = "Hello World";
-    QLabel *label = new QLabel(text);
+    QLabel *label = new QLabel(text, window);
     setFrameless(label);
-    label->show();
+    QLineEdit *buddy = new QLineEdit(window);
+    label->setBuddy(buddy);
+    window->resize(320, 200);
+    window->show();
 
+    QTest::qWaitForWindowExposed(window);
 #if defined(Q_OS_UNIX)
     QCoreApplication::processEvents();
 #endif
@@ -3170,7 +3645,15 @@ void tst_QAccessibility::labelTest()
 
     QCOMPARE(acc_label->text(QAccessible::Name), text);
 
-    delete label;
+    QVector<QPair<QAccessibleInterface *, QAccessible::Relation> > rels =  acc_label->relations();
+    QCOMPARE(rels.count(), 1);
+    QAccessibleInterface *iface = rels.first().first;
+    QAccessible::Relation rel = rels.first().second;
+
+    QCOMPARE(rel, QAccessible::Labelled);
+    QCOMPARE(iface->role(), QAccessible::EditableText);
+
+    delete window;
     QTestAccessibility::clearEvents();
 
     QPixmap testPixmap(50, 50);
@@ -3189,7 +3672,7 @@ void tst_QAccessibility::labelTest()
     QCOMPARE(imageInterface->imageSize(), testPixmap.size());
     QCOMPARE(imageInterface->imageDescription(), QString::fromLatin1("Test Description"));
     const QPoint labelPos = imageLabel.mapToGlobal(QPoint(0,0));
-    QCOMPARE(imageInterface->imagePosition().topLeft(), labelPos);
+    QCOMPARE(imageInterface->imagePosition(), labelPos);
 
     QTestAccessibility::clearEvents();
 }
@@ -3260,7 +3743,7 @@ void tst_QAccessibility::bridgeTest()
 {
     // For now this is a simple test to see if the bridge is working at all.
     // Ideally it should be extended to test all aspects of the bridge.
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     // First, test MSAA part of bridge
     QWidget *window = new QWidget;
     QVBoxLayout *lay = new QVBoxLayout(window);
@@ -3287,9 +3770,13 @@ void tst_QAccessibility::bridgeTest()
 
     tableWidget->setFixedSize(600, 600);
 
+    QLabel *label = new QLabel(tr("Push my buddy"));
+    label->setBuddy(button);
+
     lay->addWidget(button);
     lay->addWidget(te);
     lay->addWidget(tableWidget);
+    lay->addWidget(label);
 
     window->show();
     QVERIFY(QTest::qWaitForWindowExposed(window));
@@ -3361,9 +3848,47 @@ void tst_QAccessibility::bridgeTest()
         BSTR actionName;
         ia2Action->get_name(0, &actionName);
         QString name((QChar*)actionName);
+        ::SysFreeString(actionName);
         QCOMPARE(name, QAccessibleActionInterface::pressAction());
         ia2Action->Release();
 
+        /***** Test IAccessibleRelation *****/
+        long nRelations = 0;
+        hr = ia2Button->get_nRelations(&nRelations);
+        QVERIFY(SUCCEEDED(hr));
+        QCOMPARE(nRelations, (long)1);
+
+        IAccessibleRelation **relations = (IAccessibleRelation **)::CoTaskMemAlloc(sizeof(IAccessibleRelation *) * 4);
+        hr = ia2Button->get_relations(4, relations, &nRelations);
+        QVERIFY(SUCCEEDED(hr));
+        QCOMPARE(nRelations, (long)1);
+
+        IAccessibleRelation *relation = relations[0];
+        BSTR relType;
+        hr = relation->get_relationType(&relType);
+        QCOMPARE(QString::fromWCharArray(relType), QLatin1String("labelFor"));
+        ::SysFreeString(relType);
+
+        long nTargets;
+        relation->get_nTargets(&nTargets);
+        QCOMPARE(nTargets, (long)1);
+        IAccessible *target;    // target is the label
+        hr = relation->get_target(0, (IUnknown**)&target);
+        QVERIFY(SUCCEEDED(hr));
+
+        VARIANT varRole;
+        hr = target->get_accRole(varSELF, &varRole);
+        QVERIFY(SUCCEEDED(hr));
+        Q_ASSERT(varRole.vt == (VARTYPE)VT_I4);
+        QCOMPARE(varRole.lVal, (LONG)ROLE_SYSTEM_STATICTEXT);
+
+        BSTR buttonName;
+        hr = target->get_accName(varSELF, &buttonName);
+        QVERIFY(SUCCEEDED(hr));
+
+        QCOMPARE(QString::fromWCharArray(buttonName), QLatin1String("Push my buddy"));
+        ::SysFreeString(buttonName);
+        ::CoTaskMemFree(relations);
 
         // Done testing
         ia2Button->Release();
@@ -3390,7 +3915,7 @@ void tst_QAccessibility::bridgeTest()
     long nChildren;
     hr = iaccWindow->get_accChildCount(&nChildren);
     QVERIFY(SUCCEEDED(hr));
-    QCOMPARE(nChildren, (long)3);
+    QCOMPARE(nChildren, (long)4);
 
     /**************************************************
      *   QTextEdit
@@ -3455,8 +3980,13 @@ void tst_QAccessibility::bridgeTest()
         BSTR bstrDescription;
         hr = ia2Table->get_columnDescription(0, &bstrDescription);
         QVERIFY(SUCCEEDED(hr));
-        const QString description((QChar*)bstrDescription);
-        QCOMPARE(description, QLatin1String("h1"));
+        QCOMPARE(QString::fromWCharArray(bstrDescription), QLatin1String("h1"));
+        ::SysFreeString(bstrDescription);
+
+        hr = ia2Table->get_rowDescription(1, &bstrDescription);
+        QVERIFY(SUCCEEDED(hr));
+        QCOMPARE(QString::fromWCharArray(bstrDescription), QLatin1String("v2"));
+        ::SysFreeString(bstrDescription);
 
         IAccessible *accTableCell = 0;
         hr = ia2Table->get_cellAt(1, 2, (IUnknown**)&accTableCell);

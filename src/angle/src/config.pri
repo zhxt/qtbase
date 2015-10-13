@@ -37,38 +37,26 @@ DEFINES +=  _WINDOWS \
             NOMINMAX \
             WIN32_LEAN_AND_MEAN=1
 
-# Defines specifying the API version (0x0600 = Vista)
-DEFINES +=  _WIN32_WINNT=0x0600 WINVER=0x0600
+CONFIG += angle_d3d11 # Remove to disable D3D11 renderer
 
-# ANGLE specific defines
-DEFINES +=  ANGLE_DISABLE_TRACE \
-            ANGLE_DISABLE_PERF \
-            ANGLE_COMPILE_OPTIMIZATION_LEVEL=D3DCOMPILE_OPTIMIZATION_LEVEL0 \
-            ANGLE_USE_NEW_PREPROCESSOR=1
+equals(QMAKE_TARGET_OS, xp): CONFIG -= angle_d3d11
 
 angle_d3d11 {
-    DEFINES += ANGLE_ENABLE_D3D11
+    DEFINES += ANGLE_ENABLE_D3D11 ANGLE_DEFAULT_D3D11=1
     !build_pass: message("Enabling D3D11 mode for ANGLE")
 }
 
 CONFIG(debug, debug|release) {
     DEFINES += _DEBUG
 } else {
-    CONFIG += rtti_off
+    !static: CONFIG += rtti_off
     DEFINES += NDEBUG
 }
 
 # c++11 is needed by MinGW to get support for unordered_map.
-CONFIG -= qt
 CONFIG += stl exceptions c++11
 
-contains(QT_CONFIG, debug_and_release):CONFIG += debug_and_release
-contains(QT_CONFIG, build_all):CONFIG += build_all
-
 INCLUDEPATH += . .. $$PWD/../include
-
-DESTDIR = $$QT_BUILD_TREE/lib
-DLLDESTDIR = $$QT_BUILD_TREE/bin
 
 msvc {
     # Disabled Warnings:
@@ -78,10 +66,14 @@ msvc {
     #   4239: nonstandard extension used : 'token' : conversion from 'type' to 'type'
     #   4244: 'argument' : conversion from 'type1' to 'type2', possible loss of data
     #   4245: 'conversion' : conversion from 'type1' to 'type2', signed/unsigned mismatch
+    #   4267: coversion from 'size_t' to 'int', possible loss of data
+    #   4275: non - DLL-interface classkey 'identifier' used as base for DLL-interface classkey 'identifier'
+    #   4480: nonstandard extension used: specifying underlying type for enum
     #   4512: 'class' : assignment operator could not be generated
     #   4702: unreachable code
+    #   4996: Function call with parameters that may be unsafe
     QMAKE_CFLAGS_WARN_ON    -= -W3
-    QMAKE_CFLAGS_WARN_ON    += -W4 -wd"4100" -wd"4127" -wd"4189" -wd"4239" -wd"4244" -wd"4245" -wd"4512" -wd"4702"
+    QMAKE_CFLAGS_WARN_ON    += -W4 -wd"4100" -wd"4127" -wd"4189" -wd"4239" -wd"4244" -wd"4245" -wd"4267" -wd"4275" -wd"4512" -wd"4702" -wd"4996" -wd"4480"
     # Optimizations
     #   /Oy:   Omits frame pointer (x86 only).
     #   /Gy:   Enables function-level linking.
@@ -99,10 +91,14 @@ gcc {
     QMAKE_CFLAGS_WARN_ON += -Wno-unknown-pragmas -Wno-comment -Wno-missing-field-initializers \
                             -Wno-switch -Wno-unused-parameter -Wno-write-strings -Wno-sign-compare -Wno-missing-braces \
                             -Wno-unused-but-set-variable -Wno-unused-variable -Wno-narrowing -Wno-maybe-uninitialized \
-                            -Wno-strict-aliasing -Wno-type-limits
+                            -Wno-strict-aliasing -Wno-type-limits -Wno-unused-local-typedefs
 
     QMAKE_CXXFLAGS_WARN_ON = $$QMAKE_CFLAGS_WARN_ON -Wno-reorder -Wno-conversion-null -Wno-delete-non-virtual-dtor
+
+    sse2: QMAKE_CXXFLAGS += -march=native
 }
 
 QMAKE_CXXFLAGS_DEBUG = $$QMAKE_CFLAGS_DEBUG
 QMAKE_CXXFLAGS_RELEASE = $$QMAKE_CFLAGS_RELEASE
+
+load(qt_helper_lib)

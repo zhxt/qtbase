@@ -33,9 +33,17 @@ android {
 }
 
 win32: {
-    HEADERS += kernel/qnetworkinterface_win_p.h
-    SOURCES += kernel/qdnslookup_win.cpp kernel/qhostinfo_win.cpp kernel/qnetworkinterface_win.cpp
-    LIBS += -ldnsapi
+    !winrt {
+        HEADERS += kernel/qnetworkinterface_win_p.h
+        SOURCES += kernel/qdnslookup_win.cpp \
+                   kernel/qhostinfo_win.cpp \
+                   kernel/qnetworkinterface_win.cpp
+        LIBS_PRIVATE += -ldnsapi
+    } else {
+        SOURCES += kernel/qdnslookup_winrt.cpp \
+                   kernel/qhostinfo_winrt.cpp \
+                   kernel/qnetworkinterface_winrt.cpp
+    }
 }
 integrity:SOURCES += kernel/qdnslookup_unix.cpp kernel/qhostinfo_unix.cpp kernel/qnetworkinterface_unix.cpp
 
@@ -46,7 +54,12 @@ mac {
 
 mac:!ios:SOURCES += kernel/qnetworkproxy_mac.cpp
 else:win32:SOURCES += kernel/qnetworkproxy_win.cpp
-else:blackberry:SOURCES += kernel/qnetworkproxy_blackberry.cpp
+else:blackberry {
+    SOURCES += kernel/qnetworkproxy_blackberry.cpp
+    LIBS_PRIVATE += -lbps
+}
+else:contains(QT_CONFIG, libproxy) {
+    SOURCES += kernel/qnetworkproxy_libproxy.cpp
+    LIBS_PRIVATE += -lproxy
+}
 else:SOURCES += kernel/qnetworkproxy_generic.cpp
-
-blackberry: LIBS_PRIVATE += -lbps

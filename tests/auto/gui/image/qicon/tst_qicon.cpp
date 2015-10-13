@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +37,8 @@
 #include <qicon.h>
 #include <qiconengine.h>
 
+#include <algorithm>
+
 
 class tst_QIcon : public QObject
 {
@@ -53,6 +47,7 @@ public:
     tst_QIcon();
 
 private slots:
+    void initTestCase();
     void actualSize_data(); // test with 1 pixmap
     void actualSize();
     void actualSize2_data(); // test with 2 pixmaps with different aspect ratio
@@ -77,6 +72,10 @@ private slots:
 private:
     bool haveImageFormat(QByteArray const&);
 
+    const QString m_pngImageFileName;
+    const QString m_pngRectFileName;
+    const QString m_sourceFileName;
+
     const static QIcon staticIcon;
 };
 
@@ -90,7 +89,17 @@ bool tst_QIcon::haveImageFormat(QByteArray const& desiredFormat)
 }
 
 tst_QIcon::tst_QIcon()
+    : m_pngImageFileName(QFINDTESTDATA("image.png"))
+    , m_pngRectFileName(QFINDTESTDATA("rect.png"))
+    , m_sourceFileName(QFINDTESTDATA(__FILE__))
 {
+}
+
+void tst_QIcon::initTestCase()
+{
+    QVERIFY(!m_pngImageFileName.isEmpty());
+    QVERIFY(!m_pngRectFileName.isEmpty());
+    QVERIFY(!m_sourceFileName.isEmpty());
 }
 
 void tst_QIcon::actualSize_data()
@@ -113,14 +122,13 @@ void tst_QIcon::actualSize_data()
     QTest::newRow("resource9") << ":/rect.png" << QSize( 15,  50) << QSize( 15,  30);
     QTest::newRow("resource10") << ":/rect.png" << QSize( 25,  50) << QSize( 20,  40);
 
-    const QString prefix = QFileInfo(QFINDTESTDATA("icons")).absolutePath() + "/";
-    QTest::newRow("external0") << prefix + "image.png" << QSize(128, 128) << QSize(128, 128);
-    QTest::newRow("external1") << prefix + "image.png" << QSize( 64,  64) << QSize( 64,  64);
-    QTest::newRow("external2") << prefix + "image.png" << QSize( 32,  64) << QSize( 32,  32);
-    QTest::newRow("external3") << prefix + "image.png" << QSize( 16,  64) << QSize( 16,  16);
-    QTest::newRow("external4") << prefix + "image.png" << QSize( 16,  128) << QSize( 16,  16);
-    QTest::newRow("external5") << prefix + "image.png" << QSize( 128,  16) << QSize( 16,  16);
-    QTest::newRow("external6") << prefix + "image.png" << QSize( 150,  150) << QSize( 128,  128);
+    QTest::newRow("external0") << m_pngImageFileName << QSize(128, 128) << QSize(128, 128);
+    QTest::newRow("external1") << m_pngImageFileName << QSize( 64,  64) << QSize( 64,  64);
+    QTest::newRow("external2") << m_pngImageFileName << QSize( 32,  64) << QSize( 32,  32);
+    QTest::newRow("external3") << m_pngImageFileName << QSize( 16,  64) << QSize( 16,  16);
+    QTest::newRow("external4") << m_pngImageFileName << QSize( 16, 128) << QSize( 16,  16);
+    QTest::newRow("external5") << m_pngImageFileName << QSize(128,  16) << QSize( 16,  16);
+    QTest::newRow("external6") << m_pngImageFileName << QSize(150, 150) << QSize(128,  128);
     // rect image
     QTest::newRow("external7") << ":/rect.png" << QSize( 20,  40) << QSize( 20,  40);
     QTest::newRow("external8") << ":/rect.png" << QSize( 10,  20) << QSize( 10,  20);
@@ -168,10 +176,8 @@ void tst_QIcon::actualSize2_data()
 void tst_QIcon::actualSize2()
 {
     QIcon icon;
-    const QString prefix = QFileInfo(QFINDTESTDATA("icons")).absolutePath() + "/";
-
-    icon.addPixmap(QPixmap(prefix + "image.png"));
-    icon.addPixmap(QPixmap(prefix + "rect.png"));
+    icon.addPixmap(m_pngImageFileName);
+    icon.addPixmap(m_pngRectFileName);
 
     QFETCH(QSize, argument);
     QFETCH(QSize, result);
@@ -207,14 +213,13 @@ void tst_QIcon::isNull() {
     QVERIFY(!iconNoFileSuffix.isNull());
     QVERIFY(!iconNoFileSuffix.actualSize(QSize(32, 32)).isValid());
 
-    const QString prefix = QFileInfo(QFINDTESTDATA("icons")).absolutePath() + "/";
     // test string constructor with existing file but unsupported format
-    QIcon iconUnsupportedFormat = QIcon(prefix + "tst_qicon.cpp");
+    QIcon iconUnsupportedFormat = QIcon(m_sourceFileName);
     QVERIFY(!iconUnsupportedFormat.isNull());
     QVERIFY(!iconUnsupportedFormat.actualSize(QSize(32, 32)).isValid());
 
     // test string constructor with existing file and supported format
-    QIcon iconSupportedFormat = QIcon(prefix + "image.png");
+    QIcon iconSupportedFormat = QIcon(m_pngImageFileName);
     QVERIFY(!iconSupportedFormat.isNull());
     QVERIFY(iconSupportedFormat.actualSize(QSize(32, 32)).isValid());
 }
@@ -345,7 +350,7 @@ void tst_QIcon::bestMatch()
 
 void tst_QIcon::cacheKey()
 {
-    QIcon icon1("image.png");
+    QIcon icon1(m_pngImageFileName);
     qint64 icon1_key = icon1.cacheKey();
     QIcon icon2 = icon1;
 
@@ -361,7 +366,7 @@ void tst_QIcon::detach()
     img.fill(0xffff0000);
     QIcon icon1(QPixmap::fromImage(img));
     QIcon icon2 = icon1;
-    icon2.addFile(QFINDTESTDATA("image.png"), QSize(64, 64));
+    icon2.addFile(m_pngImageFileName, QSize(64, 64));
 
     QImage img1 = icon1.pixmap(64, 64).toImage();
     QImage img2 = icon2.pixmap(64, 64).toImage();
@@ -375,32 +380,32 @@ void tst_QIcon::detach()
 void tst_QIcon::addFile()
 {
     QIcon icon;
-    icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-16.png"));
-    icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-32.png"));
-    icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-128.png"));
-    icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-save-16.png"), QSize(), QIcon::Selected);
-    icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-save-32.png"), QSize(), QIcon::Selected);
-    icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-save-128.png"), QSize(), QIcon::Selected);
+    icon.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-open-16.png"));
+    icon.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-open-32.png"));
+    icon.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-open-128.png"));
+    icon.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-save-16.png"), QSize(), QIcon::Selected);
+    icon.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-save-32.png"), QSize(), QIcon::Selected);
+    icon.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-save-128.png"), QSize(), QIcon::Selected);
 
 #ifndef Q_OS_WINCE
     QVERIFY(icon.pixmap(16, QIcon::Normal).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-16.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-open-16.png")).toImage());
     QVERIFY(icon.pixmap(32, QIcon::Normal).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-32.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-open-32.png")).toImage());
     QVERIFY(icon.pixmap(128, QIcon::Normal).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-128.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-open-128.png")).toImage());
     QVERIFY(icon.pixmap(16, QIcon::Selected).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-save-16.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-save-16.png")).toImage());
     QVERIFY(icon.pixmap(32, QIcon::Selected).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-save-32.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-save-32.png")).toImage());
     QVERIFY(icon.pixmap(128, QIcon::Selected).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-save-128.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-save-128.png")).toImage());
 #else
     // WinCE only includes the 16x16 images for size reasons
     QVERIFY(icon.pixmap(16, QIcon::Normal).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-16.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-open-16.png")).toImage());
     QVERIFY(icon.pixmap(16, QIcon::Selected).toImage() ==
-            QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-save-16.png")).toImage());
+            QPixmap(QLatin1String(":/styles/commonstyle/images/standardbutton-save-16.png")).toImage());
 #endif
 }
 
@@ -413,15 +418,15 @@ void tst_QIcon::availableSizes()
 {
     {
         QIcon icon;
-        icon.addFile("image.png", QSize(32,32));
-        icon.addFile("image.png", QSize(64,64));
-        icon.addFile("image.png", QSize(128,128));
-        icon.addFile("image.png", QSize(256,256), QIcon::Disabled);
-        icon.addFile("image.png", QSize(16,16), QIcon::Normal, QIcon::On);
+        icon.addFile(m_pngImageFileName, QSize(32,32));
+        icon.addFile(m_pngImageFileName, QSize(64,64));
+        icon.addFile(m_pngImageFileName, QSize(128,128));
+        icon.addFile(m_pngImageFileName, QSize(256,256), QIcon::Disabled);
+        icon.addFile(m_pngImageFileName, QSize(16,16), QIcon::Normal, QIcon::On);
 
         QList<QSize> availableSizes = icon.availableSizes();
         QCOMPARE(availableSizes.size(), 3);
-        qSort(availableSizes.begin(), availableSizes.end(), sizeLess);
+        std::sort(availableSizes.begin(), availableSizes.end(), sizeLess);
         QCOMPARE(availableSizes.at(0), QSize(32,32));
         QCOMPARE(availableSizes.at(1), QSize(64,64));
         QCOMPARE(availableSizes.at(2), QSize(128,128));
@@ -437,7 +442,7 @@ void tst_QIcon::availableSizes()
 
     {
         // we try to load an icon from resources
-        QIcon icon(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-16.png"));
+        QIcon icon(QLatin1String(":/styles/commonstyle/images/standardbutton-open-16.png"));
         QList<QSize> availableSizes = icon.availableSizes();
         QCOMPARE(availableSizes.size(), 1);
         QCOMPARE(availableSizes.at(0), QSize(16, 16));
@@ -446,7 +451,7 @@ void tst_QIcon::availableSizes()
     {
         // load an icon from binary data.
         QPixmap pix;
-        QFile file(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-16.png"));
+        QFile file(QLatin1String(":/styles/commonstyle/images/standardbutton-open-16.png"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         uchar *data = file.map(0, file.size());
         QVERIFY(data != 0);
@@ -540,7 +545,7 @@ static inline bool operator<(const QSize &lhs, const QSize &rhs)
 #ifndef QT_NO_WIDGETS
 void tst_QIcon::task184901_badCache()
 {
-    QPixmap pm(QFINDTESTDATA("image.png"));
+    QPixmap pm(m_pngImageFileName);
     QIcon icon(pm);
 
     //the disabled icon must have an effect (grayed)
@@ -554,10 +559,12 @@ void tst_QIcon::task184901_badCache()
 
 void tst_QIcon::fromTheme()
 {
-    QString searchPath = QLatin1String(":/icons");
-    QIcon::setThemeSearchPaths(QStringList() << searchPath);
-    QVERIFY(QIcon::themeSearchPaths().size() == 1);
-    QCOMPARE(searchPath, QIcon::themeSearchPaths()[0]);
+    QString firstSearchPath = QLatin1String(":/icons");
+    QString secondSearchPath = QLatin1String(":/second_icons");
+    QIcon::setThemeSearchPaths(QStringList() << firstSearchPath << secondSearchPath);
+    QVERIFY(QIcon::themeSearchPaths().size() == 2);
+    QCOMPARE(firstSearchPath, QIcon::themeSearchPaths()[0]);
+    QCOMPARE(secondSearchPath, QIcon::themeSearchPaths()[1]);
 
     QString themeName("testtheme");
     QIcon::setThemeName(themeName);
@@ -570,6 +577,14 @@ void tst_QIcon::fromTheme()
     QVERIFY(appointmentIcon.availableSizes().contains(QSize(16, 16)));
     QVERIFY(appointmentIcon.availableSizes().contains(QSize(32, 32)));
     QVERIFY(appointmentIcon.availableSizes().contains(QSize(22, 22)));
+
+    // Test fallback to less specific icon
+    QIcon specificAppointmentIcon = QIcon::fromTheme("appointment-new-specific");
+    QVERIFY(!QIcon::hasThemeIcon("appointment-new-specific"));
+    QVERIFY(QIcon::hasThemeIcon("appointment-new"));
+    QCOMPARE(specificAppointmentIcon.name(), QString::fromLatin1("appointment-new"));
+    QCOMPARE(specificAppointmentIcon.availableSizes(), appointmentIcon.availableSizes());
+    QCOMPARE(specificAppointmentIcon.pixmap(32).cacheKey(), appointmentIcon.pixmap(32).cacheKey());
 
     // Test icon from parent theme
     QIcon abIcon = QIcon::fromTheme("address-book-new");
@@ -594,7 +609,9 @@ void tst_QIcon::fromTheme()
     QCOMPARE(appointmentIcon.pixmap(22).size(), QSize(22, 22)); // exact
     QCOMPARE(appointmentIcon.pixmap(32).size(), QSize(32, 32)); // exact
     QCOMPARE(appointmentIcon.pixmap(48).size(), QSize(32, 32)); // smaller
+    QCOMPARE(appointmentIcon.pixmap(16).size(), QSize(16, 16)); // scaled down
     QCOMPARE(appointmentIcon.pixmap(8).size(), QSize(8, 8)); // scaled down
+    QCOMPARE(appointmentIcon.pixmap(16).size(), QSize(16, 16)); // scaled down
 
     QByteArray ba;
     // write to QByteArray
@@ -626,12 +643,12 @@ void tst_QIcon::fromTheme()
 void tst_QIcon::task223279_inconsistentAddFile()
 {
     QIcon icon1;
-    icon1.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-16.png"));
+    icon1.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-open-16.png"));
     icon1.addFile(QLatin1String("IconThatDoesntExist"), QSize(32, 32));
     QPixmap pm1 = icon1.pixmap(32, 32);
 
     QIcon icon2;
-    icon2.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-open-16.png"));
+    icon2.addFile(QLatin1String(":/styles/commonstyle/images/standardbutton-open-16.png"));
     icon2.addFile(QLatin1String("IconThatDoesntExist"));
     QPixmap pm2 = icon1.pixmap(32, 32);
 

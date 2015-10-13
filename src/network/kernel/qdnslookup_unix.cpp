@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Jeremy Lainé <jeremy.laine@m4x.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -51,6 +43,10 @@
 #include <arpa/nameser.h>
 #include <arpa/nameser_compat.h>
 #include <resolv.h>
+
+#if defined(__GNU_LIBRARY__) && !defined(__UCLIBC__)
+#  include <gnu/lib-names.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -77,9 +73,16 @@ struct QDnsLookupStateDeleter
 
 static void resolveLibrary()
 {
-    QLibrary lib(QLatin1String("resolv"));
+    QLibrary lib;
+#ifdef LIBRESOLV_SO
+    lib.setFileName(QStringLiteral(LIBRESOLV_SO));
     if (!lib.load())
-        return;
+#endif
+    {
+        lib.setFileName(QLatin1String("resolv"));
+        if (!lib.load())
+            return;
+    }
 
     local_dn_expand = dn_expand_proto(lib.resolve("__dn_expand"));
     if (!local_dn_expand)
@@ -104,7 +107,7 @@ static void resolveLibrary()
         local_res_nquery = res_nquery_proto(lib.resolve("res_nquery"));
 }
 
-void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, QDnsLookupReply *reply)
+void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply)
 {
     // Load dn_expand, res_ninit and res_nquery on demand.
     static QBasicAtomicInt triedResolve = Q_BASIC_ATOMIC_INITIALIZER(false);
@@ -130,6 +133,45 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
         reply->error = QDnsLookup::ResolverError;
         reply->errorString = tr("Resolver initialization failed");
         return;
+    }
+
+    //Check if a nameserver was set. If so, use it
+    if (!nameserver.isNull()) {
+        if (nameserver.protocol() == QAbstractSocket::IPv4Protocol) {
+            state.nsaddr_list[0].sin_addr.s_addr = htonl(nameserver.toIPv4Address());
+            state.nscount = 1;
+        } else if (nameserver.protocol() == QAbstractSocket::IPv6Protocol) {
+#if defined(Q_OS_LINUX)
+            struct sockaddr_in6 *ns;
+            ns = state._u._ext.nsaddrs[0];
+            // nsaddrs will be NULL if no nameserver is set in /etc/resolv.conf
+            if (!ns) {
+                // Memory allocated here will be free'd in res_close() as we
+                // have done res_init() above.
+                ns = (struct sockaddr_in6*) calloc(1, sizeof(struct sockaddr_in6));
+                Q_CHECK_PTR(ns);
+                state._u._ext.nsaddrs[0] = ns;
+            }
+#ifndef __UCLIBC__
+            // Set nsmap[] to indicate that nsaddrs[0] is an IPv6 address
+            // See: https://sourceware.org/ml/libc-hacker/2002-05/msg00035.html
+            state._u._ext.nsmap[0] = MAXNS + 1;
+#endif
+            state._u._ext.nscount6 = 1;
+            ns->sin6_family = AF_INET6;
+            ns->sin6_port = htons(53);
+
+            Q_IPV6ADDR ipv6Address = nameserver.toIPv6Address();
+            for (int i=0; i<16; i++) {
+                ns->sin6_addr.s6_addr[i] = ipv6Address[i];
+            }
+#else
+            qWarning() << Q_FUNC_INFO << "IPv6 addresses for nameservers is currently not supported";
+            reply->error = QDnsLookup::ResolverError;
+            reply->errorString = tr("IPv6 addresses for nameservers is currently not supported");
+            return;
+#endif
+        }
     }
 #ifdef QDNSLOOKUP_DEBUG
     state.options |= RES_DEBUG;
@@ -322,11 +364,11 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
 }
 
 #else
-
-void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, QDnsLookupReply *reply)
+void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply)
 {
     Q_UNUSED(requestType)
     Q_UNUSED(requestName)
+    Q_UNUSED(nameserver)
     reply->error = QDnsLookup::ResolverError;
     reply->errorString = tr("Resolver library can't be loaded: No runtime library loading support");
     return;

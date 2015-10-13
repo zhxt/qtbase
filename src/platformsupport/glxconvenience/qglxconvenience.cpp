@@ -1,43 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+
+// We have to include this before the X11 headers dragged in by
+// qglxconvenience_p.h.
+#include <QtCore/QByteArray>
 
 #include "qglxconvenience_p.h"
 
@@ -116,6 +112,27 @@ QVector<int> qglx_buildSpec(const QSurfaceFormat &format, int drawableBit)
 
 GLXFBConfig qglx_findConfig(Display *display, int screen , const QSurfaceFormat &format, int drawableBit)
 {
+    // Allow forcing LIBGL_ALWAYS_SOFTWARE for Qt 5 applications only.
+    // This is most useful with drivers that only support OpenGL 1.
+    // We need OpenGL 2, but the user probably doesn't want
+    // LIBGL_ALWAYS_SOFTWARE in OpenGL 1 apps.
+    static bool checkedForceSoftwareOpenGL = false;
+    static bool forceSoftwareOpenGL = false;
+    if (!checkedForceSoftwareOpenGL) {
+        // If LIBGL_ALWAYS_SOFTWARE is already set, don't mess with it.
+        // We want to unset LIBGL_ALWAYS_SOFTWARE at the end so it does not
+        // get inherited by other processes, of course only if it wasn't
+        // already set before.
+        if (!qEnvironmentVariableIsEmpty("QT_XCB_FORCE_SOFTWARE_OPENGL")
+            && !qEnvironmentVariableIsSet("LIBGL_ALWAYS_SOFTWARE"))
+            forceSoftwareOpenGL = true;
+
+        checkedForceSoftwareOpenGL = true;
+    }
+
+    if (forceSoftwareOpenGL)
+        qputenv("LIBGL_ALWAYS_SOFTWARE", QByteArrayLiteral("1"));
+
     bool reduced = true;
     GLXFBConfig chosenConfig = 0;
     QSurfaceFormat reducedFormat = format;
@@ -158,6 +175,10 @@ GLXFBConfig qglx_findConfig(Display *display, int screen , const QSurfaceFormat 
         if (!chosenConfig)
             reducedFormat = qglx_reduceSurfaceFormat(reducedFormat,&reduced);
     }
+
+    // unset LIBGL_ALWAYS_SOFTWARE now so other processes don't inherit it
+    if (forceSoftwareOpenGL)
+        qunsetenv("LIBGL_ALWAYS_SOFTWARE");
 
     return chosenConfig;
 }
@@ -221,7 +242,7 @@ XVisualInfo *qglx_findVisualInfo(Display *display, int screen, QSurfaceFormat *f
     return visualInfo;
 }
 
-void qglx_surfaceFormatFromGLXFBConfig(QSurfaceFormat *format, Display *display, GLXFBConfig config, GLXContext)
+void qglx_surfaceFormatFromGLXFBConfig(QSurfaceFormat *format, Display *display, GLXFBConfig config)
 {
     int redSize     = 0;
     int greenSize   = 0;
@@ -233,8 +254,6 @@ void qglx_surfaceFormatFromGLXFBConfig(QSurfaceFormat *format, Display *display,
     int sampleCount = 0;
     int stereo      = 0;
 
-    XVisualInfo *vi = glXGetVisualFromFBConfig(display,config);
-    XFree(vi);
     glXGetFBConfigAttrib(display, config, GLX_RED_SIZE,     &redSize);
     glXGetFBConfigAttrib(display, config, GLX_GREEN_SIZE,   &greenSize);
     glXGetFBConfigAttrib(display, config, GLX_BLUE_SIZE,    &blueSize);
@@ -252,6 +271,41 @@ void qglx_surfaceFormatFromGLXFBConfig(QSurfaceFormat *format, Display *display,
     format->setStencilBufferSize(stencilSize);
     if (sampleBuffers) {
         glXGetFBConfigAttrib(display, config, GLX_SAMPLES_ARB, &sampleCount);
+        format->setSamples(sampleCount);
+    }
+
+    format->setStereo(stereo);
+}
+
+void qglx_surfaceFormatFromVisualInfo(QSurfaceFormat *format, Display *display, XVisualInfo *visualInfo)
+{
+    int redSize     = 0;
+    int greenSize   = 0;
+    int blueSize    = 0;
+    int alphaSize   = 0;
+    int depthSize   = 0;
+    int stencilSize = 0;
+    int sampleBuffers = 0;
+    int sampleCount = 0;
+    int stereo      = 0;
+
+    glXGetConfig(display, visualInfo, GLX_RED_SIZE,     &redSize);
+    glXGetConfig(display, visualInfo, GLX_GREEN_SIZE,   &greenSize);
+    glXGetConfig(display, visualInfo, GLX_BLUE_SIZE,    &blueSize);
+    glXGetConfig(display, visualInfo, GLX_ALPHA_SIZE,   &alphaSize);
+    glXGetConfig(display, visualInfo, GLX_DEPTH_SIZE,   &depthSize);
+    glXGetConfig(display, visualInfo, GLX_STENCIL_SIZE, &stencilSize);
+    glXGetConfig(display, visualInfo, GLX_SAMPLES_ARB,  &sampleBuffers);
+    glXGetConfig(display, visualInfo, GLX_STEREO,       &stereo);
+
+    format->setRedBufferSize(redSize);
+    format->setGreenBufferSize(greenSize);
+    format->setBlueBufferSize(blueSize);
+    format->setAlphaBufferSize(alphaSize);
+    format->setDepthBufferSize(depthSize);
+    format->setStencilBufferSize(stencilSize);
+    if (sampleBuffers) {
+        glXGetConfig(display, visualInfo, GLX_SAMPLES_ARB, &sampleCount);
         format->setSamples(sampleCount);
     }
 

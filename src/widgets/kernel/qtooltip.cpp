@@ -1,44 +1,36 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 # include <private/qcore_mac_p.h>
 #endif
 
@@ -59,7 +51,7 @@
 #include <private/qstylesheetstyle_p.h>
 #ifndef QT_NO_TOOLTIP
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 # include <private/qcore_mac_p.h>
 #include <private/qt_cocoa_helpers_mac_p.h>
 #endif
@@ -107,7 +99,7 @@ QT_BEGIN_NAMESPACE
 
     The default tool tip color and font can be customized with
     setPalette() and setFont(). When a tooltip is currently on
-    display, isVisible() returns true and text() the currently visible
+    display, isVisible() returns \c true and text() the currently visible
     text.
 
     \note Tool tips use the inactive color group of QPalette, because tool
@@ -120,30 +112,30 @@ class QTipLabel : public QLabel
 {
     Q_OBJECT
 public:
-    QTipLabel(const QString &text, QWidget *w);
+    QTipLabel(const QString &text, QWidget *w, int msecDisplayTime);
     ~QTipLabel();
     static QTipLabel *instance;
 
-    bool eventFilter(QObject *, QEvent *);
+    bool eventFilter(QObject *, QEvent *) Q_DECL_OVERRIDE;
 
     QBasicTimer hideTimer, expireTimer;
 
     bool fadingOut;
 
-    void reuseTip(const QString &text);
+    void reuseTip(const QString &text, int msecDisplayTime);
     void hideTip();
     void hideTipImmediately();
     void setTipRect(QWidget *w, const QRect &r);
-    void restartExpireTimer();
+    void restartExpireTimer(int msecDisplayTime);
     bool tipChanged(const QPoint &pos, const QString &text, QObject *o);
     void placeTip(const QPoint &pos, QWidget *w);
 
     static int getTipScreen(const QPoint &pos, QWidget *w);
 protected:
-    void timerEvent(QTimerEvent *e);
-    void paintEvent(QPaintEvent *e);
-    void mouseMoveEvent(QMouseEvent *e);
-    void resizeEvent(QResizeEvent *e);
+    void timerEvent(QTimerEvent *e) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent *e) Q_DECL_OVERRIDE;
+    void mouseMoveEvent(QMouseEvent *e) Q_DECL_OVERRIDE;
+    void resizeEvent(QResizeEvent *e) Q_DECL_OVERRIDE;
 
 #ifndef QT_NO_STYLE_STYLESHEET
 public slots:
@@ -166,7 +158,7 @@ private:
 
 QTipLabel *QTipLabel::instance = 0;
 
-QTipLabel::QTipLabel(const QString &text, QWidget *w)
+QTipLabel::QTipLabel(const QString &text, QWidget *w, int msecDisplayTime)
 #ifndef QT_NO_STYLE_STYLESHEET
     : QLabel(w, Qt::ToolTip | Qt::BypassGraphicsProxyWidget), styleSheetParent(0), widget(0)
 #else
@@ -187,17 +179,19 @@ QTipLabel::QTipLabel(const QString &text, QWidget *w)
     setWindowOpacity(style()->styleHint(QStyle::SH_ToolTipLabel_Opacity, 0, this) / 255.0);
     setMouseTracking(true);
     fadingOut = false;
-    reuseTip(text);
+    reuseTip(text, msecDisplayTime);
 }
 
-void QTipLabel::restartExpireTimer()
+void QTipLabel::restartExpireTimer(int msecDisplayTime)
 {
     int time = 10000 + 40 * qMax(0, text().length()-100);
+    if (msecDisplayTime > 0)
+        time = msecDisplayTime;
     expireTimer.start(time, this);
     hideTimer.stop();
 }
 
-void QTipLabel::reuseTip(const QString &text)
+void QTipLabel::reuseTip(const QString &text, int msecDisplayTime)
 {
 #ifndef QT_NO_STYLE_STYLESHEET
     if (styleSheetParent){
@@ -215,7 +209,7 @@ void QTipLabel::reuseTip(const QString &text)
     if (fm.descent() == 2 && fm.ascent() >= 11)
         ++extra.rheight();
     resize(sizeHint() + extra);
-    restartExpireTimer();
+    restartExpireTimer(msecDisplayTime);
 }
 
 void QTipLabel::paintEvent(QPaintEvent *ev)
@@ -271,7 +265,7 @@ void QTipLabel::hideTipImmediately()
 
 void QTipLabel::setTipRect(QWidget *w, const QRect &r)
 {
-    if (!rect.isNull() && !w)
+    if (!r.isNull() && !w)
         qWarning("QToolTip::setTipRect: Cannot pass null widget if rect is set");
     else{
         widget = w;
@@ -285,7 +279,7 @@ void QTipLabel::timerEvent(QTimerEvent *e)
         || e->timerId() == expireTimer.timerId()){
         hideTimer.stop();
         expireTimer.stop();
-#if defined(Q_WS_MAC) && !defined(QT_NO_EFFECTS)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC) && !defined(QT_NO_EFFECTS)
         if (QApplication::isEffectEnabled(Qt::UI_FadeTooltip)){
             // Fade out tip on mac (makes it invisible).
             // The tip will not be deleted until a new tip is shown.
@@ -305,7 +299,7 @@ void QTipLabel::timerEvent(QTimerEvent *e)
 bool QTipLabel::eventFilter(QObject *o, QEvent *e)
 {
     switch (e->type()) {
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     case QEvent::KeyPress:
     case QEvent::KeyRelease: {
         int key = static_cast<QKeyEvent *>(e)->key();
@@ -320,13 +314,32 @@ bool QTipLabel::eventFilter(QObject *o, QEvent *e)
     case QEvent::Leave:
         hideTip();
         break;
+
+
+#if defined (Q_OS_QNX) // On QNX the window activate and focus events are delayed and will appear
+                       // after the window is shown.
+    case QEvent::WindowActivate:
+    case QEvent::FocusIn:
+        return false;
+    case QEvent::WindowDeactivate:
+        if (o != this)
+            return false;
+        hideTipImmediately();
+        break;
+    case QEvent::FocusOut:
+        if (reinterpret_cast<QWindow*>(o) != windowHandle())
+            return false;
+        hideTipImmediately();
+        break;
+#else
     case QEvent::WindowActivate:
     case QEvent::WindowDeactivate:
+    case QEvent::FocusIn:
+    case QEvent::FocusOut:
+#endif
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
     case QEvent::MouseButtonDblClick:
-    case QEvent::FocusIn:
-    case QEvent::FocusOut:
     case QEvent::Wheel:
         hideTipImmediately();
         break;
@@ -367,7 +380,7 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
 #endif //QT_NO_STYLE_STYLESHEET
 
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // When in full screen mode, there is no Dock nor Menu so we can use
     // the whole screen for displaying the tooltip. However when not in
     // full screen mode we need to save space for the dock, so we use
@@ -384,7 +397,7 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
 
     QPoint p = pos;
     p += QPoint(2,
-#ifdef Q_WS_WIN
+#ifdef Q_DEAD_CODE_FROM_QT4_WIN
                 21
 #else
                 16
@@ -440,6 +453,18 @@ bool QTipLabel::tipChanged(const QPoint &pos, const QString &text, QObject *o)
 
 void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, const QRect &rect)
 {
+    showText(pos, text, w, rect, -1);
+}
+
+/*!
+   \since 5.2
+   \overload
+   This is similar to QToolTip::showText(\a pos, \a text, \a w, \a rect) but with an extra parameter \a msecDisplayTime
+   that specifies how long the tool tip will be displayed, in milliseconds.
+*/
+
+void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, const QRect &rect, int msecDisplayTime)
+{
     if (QTipLabel::instance && QTipLabel::instance->isVisible()){ // a tip does already exist
         if (text.isEmpty()){ // empty text means hide current tip
             QTipLabel::instance->hideTip();
@@ -452,7 +477,7 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, cons
             if (w)
                 localPos = w->mapFromGlobal(pos);
             if (QTipLabel::instance->tipChanged(localPos, text, w)){
-                QTipLabel::instance->reuseTip(text);
+                QTipLabel::instance->reuseTip(text, msecDisplayTime);
                 QTipLabel::instance->setTipRect(w, rect);
                 QTipLabel::instance->placeTip(pos, w);
             }
@@ -461,27 +486,27 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, cons
     }
 
     if (!text.isEmpty()){ // no tip can be reused, create new tip:
-#ifndef Q_WS_WIN
-        new QTipLabel(text, w); // sets QTipLabel::instance to itself
+#ifndef Q_DEAD_CODE_FROM_QT4_WIN
+        new QTipLabel(text, w, msecDisplayTime); // sets QTipLabel::instance to itself
 #else
         // On windows, we can't use the widget as parent otherwise the window will be
         // raised when the tooltip will be shown
-        new QTipLabel(text, QApplication::desktop()->screen(QTipLabel::getTipScreen(pos, w)));
+        new QTipLabel(text, QApplication::desktop()->screen(QTipLabel::getTipScreen(pos, w)), msecDisplayTime);
 #endif
         QTipLabel::instance->setTipRect(w, rect);
         QTipLabel::instance->placeTip(pos, w);
         QTipLabel::instance->setObjectName(QLatin1String("qtooltip_label"));
 
 
-#if !defined(QT_NO_EFFECTS) && !defined(Q_WS_MAC)
+#if !defined(QT_NO_EFFECTS) && !defined(Q_DEAD_CODE_FROM_QT4_MAC)
         if (QApplication::isEffectEnabled(Qt::UI_FadeTooltip))
             qFadeEffect(QTipLabel::instance);
         else if (QApplication::isEffectEnabled(Qt::UI_AnimateTooltip))
             qScrollEffect(QTipLabel::instance);
         else
-            QTipLabel::instance->show();
+            QTipLabel::instance->showNormal();
 #else
-        QTipLabel::instance->show();
+        QTipLabel::instance->showNormal();
 #endif
     }
 }
@@ -512,7 +537,7 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w)
 /*!
   \since 4.4
 
-  Returns true if this tooltip is currently shown.
+  Returns \c true if this tooltip is currently shown.
 
   \sa showText()
  */

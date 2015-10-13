@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -90,7 +82,7 @@ Q_CORE_EXPORT bool isBuiltinType(const QByteArray &type)
 } // namespace QtPrivate
 
 // copied from qmetaobject.cpp
-static inline const QMetaObjectPrivate *priv(const uint* data)
+static inline Q_DECL_UNUSED const QMetaObjectPrivate *priv(const uint* data)
 { return reinterpret_cast<const QMetaObjectPrivate*>(data); }
 
 class QMetaMethodBuilderPrivate
@@ -510,7 +502,7 @@ QMetaMethodBuilder QMetaObjectBuilder::addSignal(const QByteArray& signature)
 {
     int index = d->methods.size();
     d->methods.append(QMetaMethodBuilderPrivate
-        (QMetaMethod::Signal, signature, QByteArray("void"), QMetaMethod::Protected));
+        (QMetaMethod::Signal, signature, QByteArray("void"), QMetaMethod::Public));
     return QMetaMethodBuilder(this, index);
 }
 
@@ -741,7 +733,7 @@ void QMetaObjectBuilder::addMetaObject
 
     if ((members & RelatedMetaObjects) != 0) {
         Q_ASSERT(priv(prototype->d.data)->revision >= 2);
-        const QMetaObject **objects = prototype->d.relatedMetaObjects;
+        const QMetaObject * const *objects = prototype->d.relatedMetaObjects;
         if (objects) {
             while (*objects != 0) {
                 addRelatedMetaObject(*objects);
@@ -1075,8 +1067,14 @@ int QMetaObjectBuilder::indexOfClassInfo(const QByteArray& name)
     \brief The QMetaStringTable class can generate a meta-object string table at runtime.
 */
 
-QMetaStringTable::QMetaStringTable()
-    : m_index(0) {}
+QMetaStringTable::QMetaStringTable(const QByteArray &className)
+    : m_index(0)
+    , m_className(className)
+{
+    const int index = enter(m_className);
+    Q_ASSERT(index == 0);
+    Q_UNUSED(index);
+}
 
 // Enters the given value into the string table (if it hasn't already been
 // entered). Returns the index of the string.
@@ -1106,30 +1104,45 @@ int QMetaStringTable::blobSize() const
     return size;
 }
 
+static void writeString(char *out, int i, const QByteArray &str,
+                        const int offsetOfStringdataMember, int &stringdataOffset)
+{
+    int size = str.size();
+    qptrdiff offset = offsetOfStringdataMember + stringdataOffset
+            - i * sizeof(QByteArrayData);
+    const QByteArrayData data =
+        Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(size, offset);
+
+    memcpy(out + i * sizeof(QByteArrayData), &data, sizeof(QByteArrayData));
+
+    memcpy(out + offsetOfStringdataMember + stringdataOffset, str.constData(), size);
+    out[offsetOfStringdataMember + stringdataOffset + size] = '\0';
+
+    stringdataOffset += size + 1;
+}
+
 // Writes strings to string data struct.
 // The struct consists of an array of QByteArrayData, followed by a char array
 // containing the actual strings. This format must match the one produced by
 // moc (see generator.cpp).
-void QMetaStringTable::writeBlob(char *out)
+void QMetaStringTable::writeBlob(char *out) const
 {
     Q_ASSERT(!(reinterpret_cast<quintptr>(out) & (preferredAlignment()-1)));
 
     int offsetOfStringdataMember = m_entries.size() * sizeof(QByteArrayData);
     int stringdataOffset = 0;
-    for (int i = 0; i < m_entries.size(); ++i) {
-        const QByteArray &str = m_entries.key(i);
-        int size = str.size();
-        qptrdiff offset = offsetOfStringdataMember + stringdataOffset
-                - i * sizeof(QByteArrayData);
-        const QByteArrayData data =
-            Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(size, offset);
 
-        memcpy(out + i * sizeof(QByteArrayData), &data, sizeof(QByteArrayData));
+    // qt_metacast expects the first string in the string table to be the class name.
+    writeString(out, /*index*/0, m_className, offsetOfStringdataMember, stringdataOffset);
 
-        memcpy(out + offsetOfStringdataMember + stringdataOffset, str.constData(), size);
-        out[offsetOfStringdataMember + stringdataOffset + size] = '\0';
+    for (Entries::ConstIterator it = m_entries.constBegin(), end = m_entries.constEnd();
+         it != end; ++it) {
+        const int i = it.value();
+        if (i == 0)
+            continue;
+        const QByteArray &str = it.key();
 
-        stringdataOffset += size + 1;
+        writeString(out, i, str, offsetOfStringdataMember, stringdataOffset);
     }
 }
 
@@ -1270,8 +1283,7 @@ static int buildMetaObject(QMetaObjectBuilderPrivate *d, char *buf,
     // Reset the current data position to just past the QMetaObjectPrivate.
     dataIndex = MetaObjectPrivateFieldCount;
 
-    QMetaStringTable strings;
-    strings.enter(d->className);
+    QMetaStringTable strings(d->className);
 
     // Output the class infos,
     Q_ASSERT(!buf || dataIndex == pmeta->classInfoData);
@@ -2005,8 +2017,7 @@ void QMetaMethodBuilder::setTag(const QByteArray& value)
 /*!
     Returns the access specification of this method (private, protected,
     or public).  The default value is QMetaMethod::Public for methods,
-    slots, and constructors.  The default value is QMetaMethod::Protected
-    for signals.
+    slots, signals and constructors.
 
     \sa setAccess()
 */
@@ -2145,7 +2156,7 @@ QByteArray QMetaPropertyBuilder::type() const
 }
 
 /*!
-    Returns true if this property has a notify signal; false otherwise.
+    Returns \c true if this property has a notify signal; false otherwise.
 
     \sa notifySignal(), setNotifySignal(), removeNotifySignal()
 */
@@ -2206,7 +2217,7 @@ void QMetaPropertyBuilder::removeNotifySignal()
 }
 
 /*!
-    Returns true if this property is readable; otherwise returns false.
+    Returns \c true if this property is readable; otherwise returns \c false.
     The default value is true.
 
     \sa setReadable(), isWritable()
@@ -2221,7 +2232,7 @@ bool QMetaPropertyBuilder::isReadable() const
 }
 
 /*!
-    Returns true if this property is writable; otherwise returns false.
+    Returns \c true if this property is writable; otherwise returns \c false.
     The default value is true.
 
     \sa setWritable(), isReadable()
@@ -2236,8 +2247,8 @@ bool QMetaPropertyBuilder::isWritable() const
 }
 
 /*!
-    Returns true if this property can be reset to a default value; otherwise
-    returns false.  The default value is false.
+    Returns \c true if this property can be reset to a default value; otherwise
+    returns \c false.  The default value is false.
 
     \sa setResettable()
 */
@@ -2251,7 +2262,7 @@ bool QMetaPropertyBuilder::isResettable() const
 }
 
 /*!
-    Returns true if this property is designable; otherwise returns false.
+    Returns \c true if this property is designable; otherwise returns \c false.
     This default value is false.
 
     \sa setDesignable(), isScriptable(), isStored()
@@ -2266,7 +2277,7 @@ bool QMetaPropertyBuilder::isDesignable() const
 }
 
 /*!
-    Returns true if the property is scriptable; otherwise returns false.
+    Returns \c true if the property is scriptable; otherwise returns \c false.
     This default value is true.
 
     \sa setScriptable(), isDesignable(), isStored()
@@ -2281,7 +2292,7 @@ bool QMetaPropertyBuilder::isScriptable() const
 }
 
 /*!
-    Returns true if the property is stored; otherwise returns false.
+    Returns \c true if the property is stored; otherwise returns \c false.
     This default value is false.
 
     \sa setStored(), isDesignable(), isScriptable()
@@ -2296,7 +2307,7 @@ bool QMetaPropertyBuilder::isStored() const
 }
 
 /*!
-    Returns true if the property is editable; otherwise returns false.
+    Returns \c true if the property is editable; otherwise returns \c false.
     This default value is false.
 
     \sa setEditable(), isDesignable(), isScriptable(), isStored()
@@ -2311,7 +2322,7 @@ bool QMetaPropertyBuilder::isEditable() const
 }
 
 /*!
-    Returns true if this property is designated as the \c USER
+    Returns \c true if this property is designated as the \c USER
     property, i.e., the one that the user can edit or that is
     significant in some other way.  Otherwise it returns
     false.  This default value is false.
@@ -2328,7 +2339,7 @@ bool QMetaPropertyBuilder::isUser() const
 }
 
 /*!
-    Returns true if the property has a C++ setter function that
+    Returns \c true if the property has a C++ setter function that
     follows Qt's standard "name" / "setName" pattern. Designer and uic
     query hasStdCppSet() in order to avoid expensive
     QObject::setProperty() calls. All properties in Qt [should] follow
@@ -2346,8 +2357,8 @@ bool QMetaPropertyBuilder::hasStdCppSet() const
 }
 
 /*!
-    Returns true if the property is an enumerator or flag type;
-    otherwise returns false.  This default value is false.
+    Returns \c true if the property is an enumerator or flag type;
+    otherwise returns \c false.  This default value is false.
 
     \sa setEnumOrFlag()
 */
@@ -2361,7 +2372,7 @@ bool QMetaPropertyBuilder::isEnumOrFlag() const
 }
 
 /*!
-    Returns true if the property is constant; otherwise returns false.
+    Returns \c true if the property is constant; otherwise returns \c false.
     The default value is false.
 */
 bool QMetaPropertyBuilder::isConstant() const
@@ -2374,7 +2385,7 @@ bool QMetaPropertyBuilder::isConstant() const
 }
 
 /*!
-    Returns true if the property is final; otherwise returns false.
+    Returns \c true if the property is final; otherwise returns \c false.
     The default value is false.
 */
 bool QMetaPropertyBuilder::isFinal() const
@@ -2601,7 +2612,7 @@ QByteArray QMetaEnumBuilder::name() const
 }
 
 /*!
-    Returns true if this enumerator is used as a flag; otherwise returns
+    Returns \c true if this enumerator is used as a flag; otherwise returns
     false.
 
     \sa setIsFlag()

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -367,23 +367,6 @@ public:
 };
 //! [35]
 
-
-//! [36]
-Q_PROPERTY(type name
-           READ getFunction
-           [WRITE setFunction]
-           [RESET resetFunction]
-           [NOTIFY notifySignal]
-           [REVISION int]
-           [DESIGNABLE bool]
-           [SCRIPTABLE bool]
-           [STORED bool]
-           [USER bool]
-           [CONSTANT]
-           [FINAL])
-//! [36]
-
-
 //! [37]
 Q_PROPERTY(QString title READ title WRITE setTitle USER true)
 //! [37]
@@ -393,38 +376,37 @@ Q_PROPERTY(QString title READ title WRITE setTitle USER true)
 class MyClass : public QObject
 {
     Q_OBJECT
-    Q_ENUMS(Priority)
 
 public:
     MyClass(QObject *parent = 0);
     ~MyClass();
 
     enum Priority { High, Low, VeryHigh, VeryLow };
+    Q_ENUM(Priority)
     void setPriority(Priority priority);
     Priority priority() const;
 };
 //! [38]
 
 
-//! [39a]
+//! [39]
 class QLibrary : public QObject
 {
-    ...
-    Q_FLAGS(LoadHint LoadHints)
-    ...
-//! [39a]
+    Q_OBJECT
 
-//! [39b]
-    ...
 public:
+    ...
+
     enum LoadHint {
         ResolveAllSymbolsHint = 0x01,
         ExportExternalSymbolsHint = 0x02,
         LoadArchiveMemberHint = 0x04
     };
     Q_DECLARE_FLAGS(LoadHints, LoadHint)
+    Q_FLAG(LoadHints)
     ...
-//! [39b]
+}
+//! [39]
 
 
 //! [40]
@@ -488,6 +470,21 @@ if (isSignalConnected(valueChangedSignal)) {
     emit valueChanged(data);
 }
 //! [49]
+
+//! [50]
+void someFunction();
+QPushButton *button = new QPushButton;
+QObject::connect(button, &QPushButton::clicked, this, someFunction, Qt::QueuedConnection);
+//! [50]
+
+//! [51]
+QByteArray page = ...;
+QTcpSocket *socket = new QTcpSocket;
+socket->connectToHost("qt-project.org", 80);
+QObject::connect(socket, &QTcpSocket::connected, this, [=] () {
+        socket->write("GET " + page + "\r\n");
+    }, Qt::AutoConnection);
+//! [51]
 
 //! [meta data]
 //: This is a comment for the translator.

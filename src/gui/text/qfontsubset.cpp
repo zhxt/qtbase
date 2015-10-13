@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,9 +36,10 @@
 #include <qendian.h>
 #include <qpainterpath.h>
 #include "private/qpdf_p.h"
-#include "private/qfunctions_p.h"
 
 #include "qfontsubset_agl.cpp"
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -91,14 +84,16 @@ static const unsigned short symbol_map[0x100] = {
 
 // ---------------------------- PS/PDF helper methods -----------------------------------
 
+#ifndef QT_NO_PDF
+
 QByteArray QFontSubset::glyphName(unsigned short unicode, bool symbol)
 {
     if (symbol && unicode < 0x100)
         // map from latin1 to symbol
         unicode = symbol_map[unicode];
 
-    const AGLEntry *r = qBinaryFind(unicode_to_agl_map, unicode_to_agl_map + unicode_to_agl_map_size, unicode);
-    if (r != unicode_to_agl_map + unicode_to_agl_map_size)
+    const AGLEntry *r = std::lower_bound(unicode_to_agl_map, unicode_to_agl_map + unicode_to_agl_map_size, unicode);
+    if ((r != unicode_to_agl_map + unicode_to_agl_map_size) && !(unicode < *r))
         return glyph_names + r->index;
 
     char buffer[8];
@@ -197,12 +192,8 @@ static void checkRanges(QPdf::ByteStream &ts, QByteArray &ranges, int &nranges)
 QVector<int> QFontSubset::getReverseMap() const
 {
     QVector<int> reverseMap(0x10000, 0);
-    QGlyphLayoutArray<10> glyphs;
     for (uint uc = 0; uc < 0x10000; ++uc) {
-        QChar ch(uc);
-        int nglyphs = 10;
-        fontEngine->stringToCMap(&ch, 1, &glyphs, &nglyphs, QFontEngine::GlyphIndicesOnly);
-        int idx = glyph_indices.indexOf(glyphs.glyphs[0]);
+        int idx = glyph_indices.indexOf(fontEngine->glyphIndex(uc));
         if (idx >= 0 && !reverseMap.at(idx))
             reverseMap[idx] = uc;
     }
@@ -311,6 +302,7 @@ int QFontSubset::addGlyph(int index)
     return idx;
 }
 
+#endif // QT_NO_PDF
 
 // ------------------------------ Truetype generation ----------------------------------------------
 
@@ -428,7 +420,7 @@ static quint32 checksum(const QByteArray &table)
 {
     quint32 sum = 0;
     int offset = 0;
-    const uchar *d = (uchar *)table.constData();
+    const uchar *d = (const uchar *)table.constData();
     while (offset <= table.size()-3) {
         sum += qFromBigEndian<quint32>(d + offset);
         offset += 4;
@@ -986,7 +978,7 @@ static QTtfGlyph generateGlyph(int index, const QPainterPath &path, qreal advanc
     return glyph;
 }
 
-Q_STATIC_GLOBAL_OPERATOR bool operator <(const QTtfGlyph &g1, const QTtfGlyph &g2)
+static bool operator <(const QTtfGlyph &g1, const QTtfGlyph &g2)
 {
     return g1.index < g2.index;
 }
@@ -995,7 +987,7 @@ static QList<QTtfTable> generateGlyphTables(qttf_font_tables &tables, const QLis
 {
     const int max_size_small = 65536*2;
     QList<QTtfGlyph> glyphs = _glyphs;
-    qSort(glyphs);
+    std::sort(glyphs.begin(), glyphs.end());
 
     Q_ASSERT(tables.maxp.numGlyphs == glyphs.at(glyphs.size()-1).index + 1);
     int nGlyphs = tables.maxp.numGlyphs;
@@ -1064,7 +1056,7 @@ static QList<QTtfTable> generateGlyphTables(qttf_font_tables &tables, const QLis
     return list;
 }
 
-Q_STATIC_GLOBAL_OPERATOR bool operator <(const QTtfTable &t1, const QTtfTable &t2)
+static bool operator <(const QTtfTable &t1, const QTtfTable &t2)
 {
     return t1.tag < t2.tag;
 }
@@ -1073,7 +1065,7 @@ static QByteArray bindFont(const QList<QTtfTable>& _tables)
 {
     QList<QTtfTable> tables = _tables;
 
-    qSort(tables);
+    std::sort(tables.begin(), tables.end());
 
     QByteArray font;
     const int header_size = sizeof(qint32) + 4*sizeof(quint16);

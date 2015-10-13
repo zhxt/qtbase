@@ -13,12 +13,15 @@ HEADERS += \
         painting/qdrawhelper_x86_p.h \
         painting/qdrawingprimitive_sse2_p.h \
         painting/qemulationpaintengine_p.h \
+        painting/qfixed_p.h \
         painting/qgrayraster_p.h \
         painting/qmatrix.h \
         painting/qmemrotate_p.h \
         painting/qoutlinemapper_p.h \
         painting/qpagedpaintdevice.h \
         painting/qpagedpaintdevice_p.h \
+        painting/qpagelayout.h \
+        painting/qpagesize.h \
         painting/qpaintdevice.h \
         painting/qpaintengine.h \
         painting/qpaintengine_p.h \
@@ -39,11 +42,11 @@ HEADERS += \
         painting/qrasterdefs_p.h \
         painting/qrasterizer_p.h \
         painting/qregion.h \
+        painting/qrgb.h \
         painting/qstroker_p.h \
         painting/qtextureglyphcache_p.h \
         painting/qtransform.h \
         painting/qplatformbackingstore.h \
-        painting/qpaintbuffer_p.h \
         painting/qpathsimplifier_p.h
 
 
@@ -66,6 +69,8 @@ SOURCES += \
         painting/qmemrotate.cpp \
         painting/qoutlinemapper.cpp \
         painting/qpagedpaintdevice.cpp \
+        painting/qpagelayout.cpp \
+        painting/qpagesize.cpp \
         painting/qpaintdevice.cpp \
         painting/qpaintengine.cpp \
         painting/qpaintengineex.cpp \
@@ -84,16 +89,20 @@ SOURCES += \
         painting/qtextureglyphcache.cpp \
         painting/qtransform.cpp \
         painting/qplatformbackingstore.cpp \
-        painting/qpaintbuffer.cpp \
         painting/qpathsimplifier.cpp
 
 SSE2_SOURCES += painting/qdrawhelper_sse2.cpp
 SSSE3_SOURCES += painting/qdrawhelper_ssse3.cpp
-IWMMXT_SOURCES += painting/qdrawhelper_iwmmxt.cpp
-AVX_SOURCES += painting/qdrawhelper_avx.cpp
-NEON_SOURCES += painting/qdrawhelper_neon.cpp
-NEON_HEADERS += painting/qdrawhelper_neon_p.h
-NEON_ASM += ../3rdparty/pixman/pixman-arm-neon-asm.S painting/qdrawhelper_neon_asm.S
+SSE4_1_SOURCES += painting/qdrawhelper_sse4.cpp \
+                  painting/qimagescale_sse4.cpp
+AVX2_SOURCES += painting/qdrawhelper_avx2.cpp
+
+!ios {
+    CONFIG += no_clang_integrated_as
+    NEON_SOURCES += painting/qdrawhelper_neon.cpp
+    NEON_HEADERS += painting/qdrawhelper_neon_p.h
+    NEON_ASM += ../3rdparty/pixman/pixman-arm-neon-asm.S painting/qdrawhelper_neon_asm.S
+}
 
 MIPS_DSP_SOURCES += painting/qdrawhelper_mips_dsp.cpp
 MIPS_DSP_HEADERS += painting/qdrawhelper_mips_dsp_p.h painting/qt_mips_asm_dsp_p.h

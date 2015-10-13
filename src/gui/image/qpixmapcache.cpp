@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -132,7 +124,7 @@ QPixmapCache::Key::~Key()
 /*!
     \internal
 
-    Returns true if this key is the same as the given \a key; otherwise returns
+    Returns \c true if this key is the same as the given \a key; otherwise returns
     false.
 */
 bool QPixmapCache::Key::operator ==(const Key &key) const
@@ -167,7 +159,7 @@ public:
     QPMCache();
     ~QPMCache();
 
-    void timerEvent(QTimerEvent *);
+    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE;
     bool insert(const QString& key, const QPixmap &pixmap, int cost);
     QPixmapCache::Key insert(const QPixmap &pixmap, int cost);
     bool replace(const QPixmapCache::Key &key, const QPixmap &pixmap, int cost);
@@ -234,7 +226,7 @@ QPMCache::~QPMCache()
   the timer is not restarted when the pixmap becomes unused, but it does
   restart once something else is added (i.e. the cache space is actually needed).
 
-  Returns true if any were removed.
+  Returns \c true if any were removed.
 */
 bool QPMCache::flushDetachedPixmaps(bool nt)
 {
@@ -493,7 +485,7 @@ bool QPixmapCache::find(const QString &key, QPixmap& pixmap)
 /*!
     Looks for a cached pixmap associated with the given \a key in the cache.
     If the pixmap is found, the function sets \a pixmap to that pixmap and
-    returns true; otherwise it leaves \a pixmap alone and returns false.
+    returns \c true; otherwise it leaves \a pixmap alone and returns \c false.
 
     \since 4.6
 
@@ -512,7 +504,7 @@ bool QPixmapCache::find(const QString &key, QPixmap* pixmap)
 /*!
     Looks for a cached pixmap associated with the given \a key in the cache.
     If the pixmap is found, the function sets \a pixmap to that pixmap and
-    returns true; otherwise it leaves \a pixmap alone and returns false. If
+    returns \c true; otherwise it leaves \a pixmap alone and returns \c false. If
     the pixmap is not found, it means that the \a key is no longer valid,
     so it will be released for the next insertion.
 
@@ -543,8 +535,8 @@ bool QPixmapCache::find(const Key &key, QPixmap* pixmap)
     The oldest pixmaps (least recently accessed in the cache) are
     deleted when more space is needed.
 
-    The function returns true if the object was inserted into the
-    cache; otherwise it returns false.
+    The function returns \c true if the object was inserted into the
+    cache; otherwise it returns \c false.
 
     \sa setCacheLimit()
 */
@@ -576,8 +568,8 @@ QPixmapCache::Key QPixmapCache::insert(const QPixmap &pixmap)
 
 /*!
     Replaces the pixmap associated with the given \a key with the \a pixmap
-    specified. Returns true if the \a pixmap has been correctly inserted into
-    the cache; otherwise returns false.
+    specified. Returns \c true if the \a pixmap has been correctly inserted into
+    the cache; otherwise returns \c false.
 
     \sa setCacheLimit(), insert()
 
@@ -668,5 +660,19 @@ QList< QPair<QString,QPixmap> > QPixmapCache::allPixmaps()
 {
     return pm_cache()->allPixmaps();
 }
+/*!
+   \fn QPixmapCache::KeyData::KeyData()
 
+   \internal
+*/
+/*!
+   \fn QPixmapCache::KeyData::KeyData(const KeyData &other)
+
+   \internal
+*/
+/*!
+   \fn QPixmapCache::KeyData::~KeyData()
+
+   \internal
+*/
 QT_END_NAMESPACE

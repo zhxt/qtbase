@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -125,6 +117,15 @@ const QLinkedListData QLinkedListData::shared_null = {
     Constructs an empty list.
 */
 
+/*!
+    \fn QLinkedList::QLinkedList(QLinkedList<T> &&other)
+
+    Move-constructs a QLinkedList instance, making it point at the same
+    object that \a other was pointing to.
+
+    \since 5.2
+*/
+
 /*! \fn QLinkedList::QLinkedList(const QLinkedList<T> &other)
 
     Constructs a copy of \a other.
@@ -135,6 +136,15 @@ const QLinkedListData QLinkedListData::shared_null = {
     be copied (copy-on-write), and this takes \l{linear time}.
 
     \sa operator=()
+*/
+
+/*! \fn QLinkedList::QLinkedList(std::initializer_list<T> list)
+    \since 5.2
+
+    Constructs a list from the std::initializer_list specified by \a list.
+
+    This constructor is only enabled if the compiler supports C++11
+    initializer lists.
 */
 
 /*! \fn QLinkedList::~QLinkedList()
@@ -158,7 +168,7 @@ const QLinkedListData QLinkedListData::shared_null = {
 
 /*! \fn bool QLinkedList::operator==(const QLinkedList<T> &other) const
 
-    Returns true if \a other is equal to this list; otherwise returns
+    Returns \c true if \a other is equal to this list; otherwise returns
     false.
 
     Two lists are considered equal if they contain the same values in
@@ -172,8 +182,8 @@ const QLinkedListData QLinkedListData::shared_null = {
 
 /*! \fn bool QLinkedList::operator!=(const QLinkedList<T> &other) const
 
-    Returns true if \a other is not equal to this list; otherwise
-    returns false.
+    Returns \c true if \a other is not equal to this list; otherwise
+    returns \c false.
 
     Two lists are considered equal if they contain the same values in
     the same order.
@@ -213,7 +223,7 @@ const QLinkedListData QLinkedListData::shared_null = {
 
 /*! \fn bool QLinkedList::isEmpty() const
 
-    Returns true if the list contains no items; otherwise returns
+    Returns \c true if the list contains no items; otherwise returns
     false.
 
     \sa size()
@@ -267,8 +277,8 @@ const QLinkedListData QLinkedListData::shared_null = {
     \fn bool QLinkedList::removeOne(const T &value)
     \since 4.4
 
-    Removes the first occurrences of \a value in the list. Returns true on
-    success; otherwise returns false.
+    Removes the first occurrences of \a value in the list. Returns \c true on
+    success; otherwise returns \c false.
 
     Example:
     \snippet code/src_corelib_tools_qlinkedlist.cpp 6
@@ -281,8 +291,8 @@ const QLinkedListData QLinkedListData::shared_null = {
 
 /*! \fn bool QLinkedList::contains(const T &value) const
 
-    Returns true if the list contains an occurrence of \a value;
-    otherwise returns false.
+    Returns \c true if the list contains an occurrence of \a value;
+    otherwise returns \c false.
 
     This function requires the value type to have an implementation of
     \c operator==().
@@ -303,8 +313,8 @@ const QLinkedListData QLinkedListData::shared_null = {
 /*! \fn bool QLinkedList::startsWith(const T &value) const
     \since 4.5
 
-    Returns true if the list is not empty and its first
-    item is equal to \a value; otherwise returns false.
+    Returns \c true if the list is not empty and its first
+    item is equal to \a value; otherwise returns \c false.
 
     \sa isEmpty(), first()
 */
@@ -312,8 +322,8 @@ const QLinkedListData QLinkedListData::shared_null = {
 /*! \fn bool QLinkedList::endsWith(const T &value) const
     \since 4.5
 
-    Returns true if the list is not empty and its last
-    item is equal to \a value; otherwise returns false.
+    Returns \c true if the list is not empty and its last
+    item is equal to \a value; otherwise returns \c false.
 
     \sa isEmpty(), last()
 */
@@ -571,7 +581,7 @@ const QLinkedListData QLinkedListData::shared_null = {
 /*! \fn bool QLinkedList::empty() const
 
     This function is provided for STL compatibility. It is equivalent
-    to isEmpty() and returns true if the list is empty.
+    to isEmpty() and returns \c true if the list is empty.
 */
 
 /*! \fn QLinkedList<T> &QLinkedList::operator+=(const QLinkedList<T> &other)
@@ -673,9 +683,12 @@ const QLinkedListData QLinkedListData::shared_null = {
     Multiple iterators can be used on the same list. If you add items
     to the list, existing iterators will remain valid. If you remove
     items from the list, iterators that point to the removed items
-    will become dangling iterators. However, because of how \l{implicit
-    sharing} works, you must not take a copy of a container while
-    iterators are active on that container.
+    will become dangling iterators.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
 
     \sa QLinkedList::const_iterator, QMutableLinkedListIterator
 */
@@ -731,6 +744,14 @@ const QLinkedListData QLinkedListData::shared_null = {
     Assigns \a other to this iterator.
 */
 
+/*!
+    \fn QLinkedList<T> &QLinkedList::operator=(QLinkedList<T> &&other)
+
+    Move-assigns \a other to this QLinkedList instance.
+
+    \since 5.2
+*/
+
 /*! \fn T &QLinkedList::iterator::operator*() const
 
     Returns a modifiable reference to the current item.
@@ -754,8 +775,8 @@ const QLinkedListData QLinkedListData::shared_null = {
     \fn bool QLinkedList::iterator::operator==(const iterator &other) const
     \fn bool QLinkedList::iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same item as this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
@@ -764,8 +785,8 @@ const QLinkedListData QLinkedListData::shared_null = {
     \fn bool QLinkedList::iterator::operator!=(const iterator &other) const
     \fn bool QLinkedList::iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different item than this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
 
     \sa operator==()
 */
@@ -884,6 +905,11 @@ const QLinkedListData QLinkedListData::shared_null = {
     items from the list, iterators that point to the removed items
     will become dangling iterators.
 
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
     \sa QLinkedList::iterator, QLinkedListIterator
 */
 
@@ -960,16 +986,16 @@ const QLinkedListData QLinkedListData::shared_null = {
 
 /*! \fn bool QLinkedList::const_iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same item as this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
 
 /*! \fn bool QLinkedList::const_iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different item than this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
 
     \sa operator==()
 */

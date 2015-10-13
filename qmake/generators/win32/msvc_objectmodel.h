@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -63,7 +55,9 @@ enum DotNET {
     NET2005 = 0x80,
     NET2008 = 0x90,
     NET2010 = 0xa0,
-    NET2012 = 0xb0
+    NET2012 = 0xb0,
+    NET2013 = 0xc0,
+    NET2015 = 0xd0
 };
 
 /*
@@ -79,12 +73,6 @@ enum DotNET {
     forcing the tool to utilize default values.
     False/True values will be in the output...
 */
-enum customBuildCheck {
-    none,
-    mocSrc,
-    mocHdr,
-    lexyacc
-};
 enum triState {
     unset = -1,
     _False = 0,
@@ -510,6 +498,7 @@ public:
     callingConventionOption CallingConvention;
     CompileAsOptions        CompileAs;
     compileAsManagedOptions CompileAsManaged;
+    triState                CompileAsWinRT;
     triState                CompileOnly;
     debugOption             DebugInformationFormat;
     triState                DefaultCharIsUnsigned;
@@ -613,6 +602,7 @@ public:
     QStringList             IgnoreDefaultLibraryNames;
     triState                IgnoreEmbeddedIDL;
     triState                IgnoreImportLibrary;
+    triState                ImageHasSafeExceptionHandlers;
     QString                 ImportLibrary;
     addressAwarenessType    LargeAddressAware;
     triState                LinkDLL;
@@ -672,7 +662,21 @@ public:
     QString                 KeyFile;
     QString                 LinkErrorReporting;
 
+    // VS2012
+    triState                GenerateWindowsMetadata;
+    QString                 WindowsMetadataFile;
+
     VCConfiguration*        config;
+};
+
+class VCManifestTool : public VCToolBase
+{
+public:
+    VCManifestTool();
+    ~VCManifestTool();
+    bool parseOption(const char* option);
+
+    triState                EmbedManifest;
 };
 
 class VCMIDLTool : public VCToolBase
@@ -843,6 +847,24 @@ public:
     ~VCPreLinkEventTool(){}
 };
 
+class VCWinDeployQtTool : public VCToolBase
+{
+public:
+    VCWinDeployQtTool() {}
+    ~VCWinDeployQtTool() {}
+
+protected:
+    bool parseOption(const char *) { return false; }
+
+public:
+    // Variables
+    QString                 Record;
+    QString                 CommandLine;
+    bool                    ExcludedFromBuild;
+
+    VCConfiguration *       config;
+};
+
 class VCConfiguration
 {
 public:
@@ -850,7 +872,9 @@ public:
     VCConfiguration();
     ~VCConfiguration(){}
 
+    bool                    suppressUnknownOptionWarnings;
     DotNET                  CompilerVersion;
+    bool                    WinRT, WinPhone;
 
     // Variables
     triState                ATLMinimizesCRunTimeLibraryUsage;
@@ -864,7 +888,9 @@ public:
     QString                 ConfigurationName;
     QString                 OutputDirectory;
     QString                 PrimaryOutput;
+    QString                 PrimaryOutputExtension;
     QString                 ProgramDatabase;
+    QString                 PlatformToolSet;
     triState                RegisterOutput;
     useOfATL                UseOfATL;
     useOfMfc                UseOfMfc;
@@ -874,6 +900,7 @@ public:
     VCCLCompilerTool        compiler;
     VCLinkerTool            linker;
     VCLibrarianTool         librarian;
+    VCManifestTool          manifestTool;
     VCCustomBuildTool       custom;
     VCMIDLTool              idl;
     VCPostBuildEventTool    postBuild;
@@ -881,6 +908,7 @@ public:
     VCDeploymentTool        deployment;
     VCPreLinkEventTool      preLink;
     VCResourceCompilerTool  resource;
+    VCWinDeployQtTool       windeployqt;
 };
 
 struct VCFilterFile
@@ -926,6 +954,7 @@ public:
     void addFiles(const ProStringList& fileList);
     bool addExtraCompiler(const VCFilterFile &info);
     void modifyPCHstage(QString str);
+    VCFilterFile findFile(const QString &filePath, bool *found) const;
 
     // Variables
     QString                 Name;
@@ -935,8 +964,6 @@ public:
     VcprojGenerator*        Project;
     VCConfiguration*        Config;
     QList<VCFilterFile>     Files;
-
-    customBuildCheck	    CustomBuild;
 
     bool                    useCustomBuildTool;
     VCCustomBuildTool       CustomBuildTool;
@@ -971,6 +998,7 @@ public:
     QString                 SccProjectName;
     QString                 SccLocalPath;
     QString                 PlatformName;
+    QString                 SdkVersion;
 
     // XML sub-parts
     VCConfiguration         Configuration;
@@ -982,12 +1010,14 @@ public:
     VCFilter                TranslationFiles;
     VCFilter                FormFiles;
     VCFilter                ResourceFiles;
+    VCFilter                DeploymentFiles;
+    VCFilter                DistributionFiles;
     VCFilterList            ExtraCompilersFiles;
 
     bool                    flat_files;
 
-    // Accessor for extracompilers
-    VCFilter               &filterForExtraCompiler(const QString &compilerName);
+    const VCFilter &filterByName(const QString &name) const;
+    const VCFilter &filterForExtraCompiler(const QString &compilerName) const;
 };
 
 // Tree & Flat view of files --------------------------------------------------
@@ -1109,6 +1139,7 @@ public:
     QString                 SccProjectName;
     QString                 SccLocalPath;
     QString                 PlatformName;
+    QString                 SdkVersion;
 
     // Single projects
     QList<VCProjectSingleConfig>  SingleProjects;
@@ -1127,12 +1158,14 @@ public:
 
     virtual void write(XmlOutput &, const VCCLCompilerTool &);
     virtual void write(XmlOutput &, const VCLinkerTool &);
+    virtual void write(XmlOutput &, const VCManifestTool &);
     virtual void write(XmlOutput &, const VCMIDLTool &);
     virtual void write(XmlOutput &, const VCCustomBuildTool &);
     virtual void write(XmlOutput &, const VCLibrarianTool &);
     virtual void write(XmlOutput &, const VCResourceCompilerTool &);
     virtual void write(XmlOutput &, const VCEventTool &);
     virtual void write(XmlOutput &, const VCDeploymentTool &);
+    virtual void write(XmlOutput &, const VCWinDeployQtTool &);
     virtual void write(XmlOutput &, const VCConfiguration &);
     virtual void write(XmlOutput &, VCFilter &);
 

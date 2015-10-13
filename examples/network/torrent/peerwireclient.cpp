@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -49,7 +49,6 @@ static const int ConnectTimeout = 60 * 1000;
 static const int KeepAliveInterval = 30 * 1000;
 static const int RateControlTimerDelay = 2000;
 static const int MinimalHeaderSize = 48;
-static const int FullHeaderSize = 68;
 static const char ProtocolId[] = "BitTorrent protocol";
 static const char ProtocolIdSize = 19;
 
@@ -216,7 +215,7 @@ void PeerWireClient::sendPieceList(const QBitArray &bitField)
 
     // Don't send the bitfield if it's all zeros.
     if (bitField.count(true) == 0)
-	return;
+        return;
 
     int bitFieldSize = bitField.size();
     int size = (bitFieldSize + 7) / 8;

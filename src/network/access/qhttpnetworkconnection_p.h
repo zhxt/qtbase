@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -73,7 +65,9 @@
 #ifndef QT_NO_HTTP
 
 #ifndef QT_NO_SSL
-#    include <private/qsslcontext_p.h>
+#ifndef QT_NO_OPENSSL
+#    include <private/qsslcontext_openssl_p.h>
+#endif
 #    include <private/qsslsocket_p.h>
 #    include <QtNetwork/qsslsocket.h>
 #    include <QtNetwork/qsslerror.h>
@@ -85,6 +79,7 @@ QT_BEGIN_NAMESPACE
 
 class QHttpNetworkRequest;
 class QHttpNetworkReply;
+class QHttpThreadDelegate;
 class QByteArray;
 class QHostInfo;
 
@@ -94,12 +89,27 @@ class Q_AUTOTEST_EXPORT QHttpNetworkConnection : public QObject
     Q_OBJECT
 public:
 
+    enum ConnectionType {
+        ConnectionTypeHTTP,
+        ConnectionTypeSPDY
+    };
+
 #ifndef QT_NO_BEARERMANAGEMENT
-    explicit QHttpNetworkConnection(const QString &hostName, quint16 port = 80, bool encrypt = false, QObject *parent = 0, QSharedPointer<QNetworkSession> networkSession = QSharedPointer<QNetworkSession>());
-    QHttpNetworkConnection(quint16 channelCount, const QString &hostName, quint16 port = 80, bool encrypt = false, QObject *parent = 0, QSharedPointer<QNetworkSession> networkSession = QSharedPointer<QNetworkSession>());
+    explicit QHttpNetworkConnection(const QString &hostName, quint16 port = 80, bool encrypt = false,
+                                    ConnectionType connectionType = ConnectionTypeHTTP,
+                                    QObject *parent = 0, QSharedPointer<QNetworkSession> networkSession
+                                    = QSharedPointer<QNetworkSession>());
+    QHttpNetworkConnection(quint16 channelCount, const QString &hostName, quint16 port = 80,
+                           bool encrypt = false, QObject *parent = 0,
+                           QSharedPointer<QNetworkSession> networkSession = QSharedPointer<QNetworkSession>(),
+                           ConnectionType connectionType = ConnectionTypeHTTP);
 #else
-    explicit QHttpNetworkConnection(const QString &hostName, quint16 port = 80, bool encrypt = false, QObject *parent = 0);
-    QHttpNetworkConnection(quint16 channelCount, const QString &hostName, quint16 port = 80, bool encrypt = false, QObject *parent = 0);
+    explicit QHttpNetworkConnection(const QString &hostName, quint16 port = 80, bool encrypt = false,
+                                    ConnectionType connectionType = ConnectionTypeHTTP,
+                                    QObject *parent = 0);
+    QHttpNetworkConnection(quint16 channelCount, const QString &hostName, quint16 port = 80,
+                           bool encrypt = false, QObject *parent = 0,
+                           ConnectionType connectionType = ConnectionTypeHTTP);
 #endif
     ~QHttpNetworkConnection();
 
@@ -123,6 +133,9 @@ public:
 
     QHttpNetworkConnectionChannel *channels() const;
 
+    ConnectionType connectionType();
+    void setConnectionType(ConnectionType type);
+
 #ifndef QT_NO_SSL
     void setSslConfiguration(const QSslConfiguration &config);
     void ignoreSslErrors(int channel = -1);
@@ -131,12 +144,17 @@ public:
     void setSslContext(QSharedPointer<QSslContext> context);
 #endif
 
+    void preConnectFinished();
+
 private:
     Q_DECLARE_PRIVATE(QHttpNetworkConnection)
     Q_DISABLE_COPY(QHttpNetworkConnection)
+    friend class QHttpThreadDelegate;
     friend class QHttpNetworkReply;
     friend class QHttpNetworkReplyPrivate;
     friend class QHttpNetworkConnectionChannel;
+    friend class QHttpProtocolHandler;
+    friend class QSpdyProtocolHandler;
 
     Q_PRIVATE_SLOT(d_func(), void _q_startNextRequest())
     Q_PRIVATE_SLOT(d_func(), void _q_hostLookupFinished(QHostInfo))
@@ -152,7 +170,7 @@ class QHttpNetworkConnectionPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QHttpNetworkConnection)
 public:
-    static const int defaultChannelCount;
+    static const int defaultHttpChannelCount;
     static const int defaultPipelineLength;
     static const int defaultRePipelineLength;
 
@@ -163,13 +181,16 @@ public:
 
     enum NetworkLayerPreferenceState {
         Unknown,
-        InProgress,
+        HostLookupPending,
         IPv4,
-        IPv6
+        IPv6,
+        IPv4or6
     };
 
-    QHttpNetworkConnectionPrivate(const QString &hostName, quint16 port, bool encrypt);
-    QHttpNetworkConnectionPrivate(quint16 channelCount, const QString &hostName, quint16 port, bool encrypt);
+    QHttpNetworkConnectionPrivate(const QString &hostName, quint16 port, bool encrypt,
+                                  QHttpNetworkConnection::ConnectionType type);
+    QHttpNetworkConnectionPrivate(quint16 channelCount, const QString &hostName, quint16 port, bool encrypt,
+                                  QHttpNetworkConnection::ConnectionType type);
     ~QHttpNetworkConnectionPrivate();
     void init();
 
@@ -238,6 +259,10 @@ public:
     //The request queues
     QList<HttpMessagePair> highPriorityQueue;
     QList<HttpMessagePair> lowPriorityQueue;
+
+    int preConnectRequests;
+
+    QHttpNetworkConnection::ConnectionType connectionType;
 
 #ifndef QT_NO_SSL
     QSharedPointer<QSslContext> sslContext;

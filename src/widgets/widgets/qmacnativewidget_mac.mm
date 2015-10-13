@@ -1,59 +1,54 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #import <Cocoa/Cocoa.h>
-#import <private/qcocoaview_mac_p.h>
 #include "qmacnativewidget_mac.h"
-#include <private/qwidget_p.h>
+
+#include <QtCore/qdebug.h>
+#include <QtGui/qwindow.h>
+#include <QtGui/qguiapplication.h>
+#include <qpa/qplatformnativeinterface.h>
 
 /*!
     \class QMacNativeWidget
     \since 4.5
-    \brief The QMacNativeWidget class provides a widget for Mac OS X that provides a way to put Qt widgets into Carbon
-    or Cocoa hierarchies depending on how Qt was configured.
+    \brief The QMacNativeWidget class provides a widget for OS X that provides
+    a way to put Qt widgets into Cocoa hierarchies.
 
     \ingroup advanced
     \inmodule QtWidgets
 
-    On Mac OS X, there is a difference between a window and view;
+    On OS X, there is a difference between a window and view;
     normally expressed as widgets in Qt.  Qt makes assumptions about its
     parent-child hierarchy that make it complex to put an arbitrary Qt widget
     into a hierarchy of "normal" views from Apple frameworks. QMacNativeWidget
@@ -80,29 +75,52 @@
 
 QT_BEGIN_NAMESPACE
 
-class QMacNativeWidgetPrivate : public QWidgetPrivate
+namespace {
+// TODO use QtMacExtras copy of this function when available.
+inline QPlatformNativeInterface::NativeResourceForIntegrationFunction resolvePlatformFunction(const QByteArray &functionName)
 {
-};
+    QPlatformNativeInterface *nativeInterface = QGuiApplication::platformNativeInterface();
+    QPlatformNativeInterface::NativeResourceForIntegrationFunction function =
+        nativeInterface->nativeResourceFunctionForIntegration(functionName);
+    if (!function)
+         qWarning() << "Qt could not resolve function" << functionName
+                    << "from QGuiApplication::platformNativeInterface()->nativeResourceFunctionForIntegration()";
+    return function;
+}
+} //namespsace
 
-extern OSViewRef qt_mac_create_widget(QWidget *widget, QWidgetPrivate *widgetPrivate, OSViewRef parent);
+NSView *getEmbeddableView(QWindow *qtWindow)
+{
+    // Make sure the platform window is created
+    qtWindow->create();
 
+    // Inform the window that it's a subwindow of a non-Qt window. This must be
+    // done after create() because we need to have a QPlatformWindow instance.
+    // The corresponding NSWindow will not be shown and can be deleted later.
+    typedef void (*SetEmbeddedInForeignViewFunction)(QPlatformWindow *window, bool embedded);
+    reinterpret_cast<SetEmbeddedInForeignViewFunction>(resolvePlatformFunction("setEmbeddedInForeignView"))(qtWindow->handle(), true);
+
+    // Get the Qt content NSView for the QWindow from the Qt platform plugin
+    QPlatformNativeInterface *platformNativeInterface = QGuiApplication::platformNativeInterface();
+    NSView *qtView = (NSView *)platformNativeInterface->nativeResourceForWindow("nsview", qtWindow);
+    return qtView; // qtView is ready for use.
+}
 
 /*!
     Create a QMacNativeWidget with \a parentView as its "superview" (i.e.,
-    parent). The \a parentView is either an HIViewRef if Qt is using Carbon or
-    a NSView pointer if Qt is using Cocoa.
+    parent). The \a parentView is  a NSView pointer.
 */
-QMacNativeWidget::QMacNativeWidget(void *parentView)
-    : QWidget(*new QMacNativeWidgetPrivate, 0, Qt::Window)
+QMacNativeWidget::QMacNativeWidget(NSView *parentView)
+    : QWidget(0)
 {
-    Q_D(QMacNativeWidget);
-    OSViewRef myView = qt_mac_create_widget(this, d, OSViewRef(parentView));
+    Q_UNUSED(parentView);
 
-    d->topData()->embedded = true;
-    create(WId(myView), false, false);
+    //d_func()->topData()->embedded = true;
     setPalette(QPalette(Qt::transparent));
     setAttribute(Qt::WA_SetPalette, false);
     setAttribute(Qt::WA_LayoutUsesWidgetRect);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_NoSystemBackground, false);
 }
 
 /*!
@@ -117,8 +135,24 @@ QMacNativeWidget::~QMacNativeWidget()
 */
 QSize QMacNativeWidget::sizeHint() const
 {
-    return QSize(200, 200);
+    // QMacNativeWidget really does not have any other choice
+    // than to fill its designated area.
+    if (windowHandle())
+        return windowHandle()->size();
+    return QWidget::sizeHint();
 }
+
+/*! \fn NSView *QMacNativeWidget::nativeView() const
+
+    Returns the native view backing the QMacNativeWidget.
+
+*/
+NSView *QMacNativeWidget::nativeView() const
+{
+    winId();
+    return getEmbeddableView(windowHandle());
+}
+
 /*!
     \reimp
 */

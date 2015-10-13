@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -84,6 +76,8 @@ private slots:
     void fetchAndAdd_data();
     void fetchAndAdd();
 
+    void operators();
+
     // stress tests
     void testAndSet_loop();
     void fetchAndAdd_loop();
@@ -98,10 +92,6 @@ static inline void assemblyMarker(void *ptr = 0)
 {
     puts((char *)ptr + I);
 }
-
-QT_BEGIN_NAMESPACE
-template <typename T> class QBasicAtomicInteger; // even if it this class isn't supported
-QT_END_NAMESPACE
 
 template <typename  T, typename Atomic>
 static void warningFreeHelperTemplate()
@@ -185,7 +175,7 @@ void tst_QAtomicInt::warningFreeHelper()
     qFatal("This code is bogus, and shouldn't be run. We're looking for compiler warnings only.");
     warningFreeHelperTemplate<int, QBasicAtomicInt>();
 
-#ifdef Q_ATOMIC_INT32_IS_SUPPORTED
+    // 32-bit are always supported:
     warningFreeHelperTemplate<int, QBasicAtomicInteger<int> >();
     warningFreeHelperTemplate<unsigned int, QBasicAtomicInteger<unsigned int> >();
     constexprFunctionsHelperTemplate<QBasicAtomicInteger<int> >();
@@ -194,7 +184,18 @@ void tst_QAtomicInt::warningFreeHelper()
     warningFreeHelperTemplate<qint16, QBasicAtomicInteger<char32_t> >();
     constexprFunctionsHelperTemplate<QBasicAtomicInteger<char32_t> >();
 # endif
-#endif
+
+    // pointer-sized integers are always supported:
+    warningFreeHelperTemplate<int, QBasicAtomicInteger<qptrdiff> >();
+    warningFreeHelperTemplate<unsigned int, QBasicAtomicInteger<quintptr> >();
+    constexprFunctionsHelperTemplate<QBasicAtomicInteger<qptrdiff> >();
+    constexprFunctionsHelperTemplate<QBasicAtomicInteger<quintptr> >();
+
+    // long is always supported because it's either 32-bit or pointer-sized:
+    warningFreeHelperTemplate<int, QBasicAtomicInteger<long int> >();
+    warningFreeHelperTemplate<unsigned int, QBasicAtomicInteger<unsigned long int> >();
+    constexprFunctionsHelperTemplate<QBasicAtomicInteger<long int> >();
+    constexprFunctionsHelperTemplate<QBasicAtomicInteger<unsigned long int> >();
 
 #ifdef Q_ATOMIC_INT16_IS_SUPPORTED
     warningFreeHelperTemplate<qint16, QBasicAtomicInteger<qint16> >();
@@ -533,6 +534,43 @@ void tst_QAtomicInt::testAndSet()
         QAtomicInt atomic = value;
         QTEST(atomic.testAndSetOrdered(expected, newval) ? 1 : 0, "result");
     }
+
+#ifdef Q_ATOMIC_INT32_IS_SUPPORTED
+    QFETCH(int, result);
+    // the new implementation has the version that loads the current value
+
+    {
+        QAtomicInt atomic = value;
+        int currentval = 0xdeadbeef;
+        QCOMPARE(atomic.testAndSetRelaxed(expected, newval, currentval), result);
+        if (!result)
+            QCOMPARE(currentval, value);
+    }
+
+    {
+        QAtomicInt atomic = value;
+        int currentval = 0xdeadbeef;
+        QCOMPARE(atomic.testAndSetAcquire(expected, newval, currentval), result);
+        if (!result)
+            QCOMPARE(currentval, value);
+    }
+
+    {
+        QAtomicInt atomic = value;
+        int currentval = 0xdeadbeef;
+        QCOMPARE(atomic.testAndSetRelease(expected, newval, currentval), result);
+        if (!result)
+            QCOMPARE(currentval, value);
+    }
+
+    {
+        QAtomicInt atomic = value;
+        int currentval = 0xdeadbeef;
+        QCOMPARE(atomic.testAndSetOrdered(expected, newval, currentval), result);
+        if (!result)
+            QCOMPARE(currentval, value);
+    }
+#endif
 }
 
 void tst_QAtomicInt::isFetchAndStoreNative()
@@ -761,6 +799,58 @@ void tst_QAtomicInt::fetchAndAdd()
         QCOMPARE(result, value1);
         QCOMPARE(atomic.load(), value1 + value2);
     }
+}
+
+void tst_QAtomicInt::operators()
+{
+    {
+        // Test that QBasicAtomicInt also has operator= and cast operators
+        // We've been using them for QAtomicInt elsewhere
+        QBasicAtomicInt atomic = Q_BASIC_ATOMIC_INITIALIZER(0);
+        atomic = 1;
+        QCOMPARE(int(atomic), 1);
+    }
+
+    QAtomicInt atomic = 0;
+    int x = ++atomic;
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 1);
+
+    x = atomic++;
+    QCOMPARE(int(atomic), x + 1);
+    QCOMPARE(int(atomic), 2);
+
+    x = atomic--;
+    QCOMPARE(int(atomic), x - 1);
+    QCOMPARE(int(atomic), 1);
+
+    x = --atomic;
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 0);
+
+    x = (atomic += 1);
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 1);
+
+    x = (atomic -= 1);
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 0);
+
+    x = (atomic |= 0xf);
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 0xf);
+
+    x = (atomic &= 0x17);
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 7);
+
+    x = (atomic ^= 0x14);
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 0x13);
+
+    x = (atomic ^= atomic);
+    QCOMPARE(int(atomic), x);
+    QCOMPARE(int(atomic), 0);
 }
 
 void tst_QAtomicInt::testAndSet_loop()

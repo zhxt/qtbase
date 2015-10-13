@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDBus module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,7 +46,7 @@ QT_BEGIN_NAMESPACE
 
 static inline bool isValidCharacterNoDash(QChar c)
 {
-    register ushort u = c.unicode();
+    ushort u = c.unicode();
     return (u >= 'a' && u <= 'z')
             || (u >= 'A' && u <= 'Z')
             || (u >= '0' && u <= '9')
@@ -63,7 +55,7 @@ static inline bool isValidCharacterNoDash(QChar c)
 
 static inline bool isValidCharacter(QChar c)
 {
-    register ushort u = c.unicode();
+    ushort u = c.unicode();
     return (u >= 'a' && u <= 'z')
             || (u >= 'A' && u <= 'Z')
             || (u >= '0' && u <= '9')
@@ -72,7 +64,7 @@ static inline bool isValidCharacter(QChar c)
 
 static inline bool isValidNumber(QChar c)
 {
-    register ushort u = c.unicode();
+    ushort u = c.unicode();
     return (u >= '0' && u <= '9');
 }
 
@@ -259,7 +251,7 @@ static bool isFixedType(int c)
 // returns NULL if it isn't valid.
 static const char *validateSingleType(const char *signature)
 {
-    register char c = *signature;
+    char c = *signature;
     if (c == DBUS_TYPE_INVALID)
         return 0;
 
@@ -350,7 +342,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidInterfaceName(const QString &ifaceName)
-        Returns true if this is \a ifaceName is a valid interface name.
+        Returns \c true if this is \a ifaceName is a valid interface name.
 
         Valid interface names must:
         \list
@@ -379,7 +371,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidUniqueConnectionName(const QString &connName)
-        Returns true if \a connName is a valid unique connection name.
+        Returns \c true if \a connName is a valid unique connection name.
 
         Unique connection names start with a colon (":") and are followed by a list of dot-separated
         components composed of ASCII letters, digits, the hyphen or the underscore ("_") character.
@@ -410,7 +402,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidBusName(const QString &busName)
-        Returns true if \a busName is a valid bus name.
+        Returns \c true if \a busName is a valid bus name.
 
         A valid bus name is either a valid unique connection name or follows the rules:
         \list
@@ -453,7 +445,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidMemberName(const QString &memberName)
-        Returns true if \a memberName is a valid member name. A valid member name does not exceed
+        Returns \c true if \a memberName is a valid member name. A valid member name does not exceed
         255 characters in length, is not empty, is composed only of ASCII letters, digits and
         underscores, but does not start with a digit.
     */
@@ -473,7 +465,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidErrorName(const QString &errorName)
-        Returns true if \a errorName is a valid error name. Valid error names are valid interface
+        Returns \c true if \a errorName is a valid error name. Valid error names are valid interface
         names and vice-versa, so this function is actually an alias for isValidInterfaceName.
     */
     bool isValidErrorName(const QString &errorName)
@@ -483,7 +475,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidObjectPath(const QString &path)
-        Returns true if \a path is valid object path.
+        Returns \c true if \a path is valid object path.
 
         Valid object paths follow the rules:
         \list
@@ -516,7 +508,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidBasicType(int type)
-        Returns true if \a c is a valid, basic D-Bus type.
+        Returns \c true if \a c is a valid, basic D-Bus type.
      */
     bool isValidBasicType(int c)
     {
@@ -525,7 +517,7 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidFixedType(int type)
-        Returns true if \a c is a valid, fixed D-Bus type.
+        Returns \c true if \a c is a valid, fixed D-Bus type.
      */
     bool isValidFixedType(int c)
     {
@@ -535,8 +527,8 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidSignature(const QString &signature)
-        Returns true if \a signature is a valid D-Bus type signature for one or more types.
-        This function returns true if it can all of \a signature into valid, individual types and no
+        Returns \c true if \a signature is a valid D-Bus type signature for one or more types.
+        This function returns \c true if it can all of \a signature into valid, individual types and no
         characters remain in \a signature.
 
         \sa isValidSingleSignature()
@@ -556,9 +548,9 @@ namespace QDBusUtil
 
     /*!
         \fn bool QDBusUtil::isValidSingleSignature(const QString &signature)
-        Returns true if \a signature is a valid D-Bus type signature for exactly one full type. This
+        Returns \c true if \a signature is a valid D-Bus type signature for exactly one full type. This
         function tries to convert the type signature into a D-Bus type and, if it succeeds and no
-        characters remain in the signature, it returns true.
+        characters remain in the signature, it returns \c true.
     */
     bool isValidSingleSignature(const QString &signature)
     {

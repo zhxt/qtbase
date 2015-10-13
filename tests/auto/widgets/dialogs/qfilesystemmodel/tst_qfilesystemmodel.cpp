@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -56,6 +48,8 @@
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
 # include <qt_windows.h> // for SetFileAttributes
 #endif
+
+#include <algorithm>
 
 #define WAITTIME 1000
 
@@ -115,6 +109,7 @@ private slots:
     void sort();
 
     void mkdir();
+    void deleteFile();
 
     void caseSensitivity();
 
@@ -163,12 +158,12 @@ void tst_QFileSystemModel::cleanup()
         for (int i = 0; i < list.count(); ++i) {
             QFileInfo fi(dir.path() + '/' + list.at(i));
             if (fi.exists() && fi.isFile()) {
-		        QFile p(fi.absoluteFilePath());
+                QFile p(fi.absoluteFilePath());
                 p.setPermissions(QFile::ReadUser | QFile::ReadOwner | QFile::ExeOwner | QFile::ExeUser | QFile::WriteUser | QFile::WriteOwner | QFile::WriteOther);
-		        QFile dead(dir.path() + '/' + list.at(i));
-		        dead.remove();
-	        }
-	        if (fi.exists() && fi.isDir())
+                QFile dead(dir.path() + '/' + list.at(i));
+                dead.remove();
+            }
+            if (fi.exists() && fi.isDir())
                 QVERIFY(dir.rmdir(list.at(i)));
         }
         list = dir.entryList(QDir::AllEntries | QDir::System | QDir::Hidden | QDir::NoDotAndDotDot);
@@ -211,7 +206,14 @@ void tst_QFileSystemModel::rootPath()
     QString oldRootPath = model->rootPath();
     const QStringList documentPaths = QStandardPaths::standardLocations(QStandardPaths::DocumentsLocation);
     QVERIFY(!documentPaths.isEmpty());
-    const QString documentPath = documentPaths.front();
+    QString documentPath = documentPaths.front();
+    // In particular on Linux, ~/Documents (the first
+    // DocumentsLocation) may not exist, so choose ~ in that case:
+    if (!QFile::exists(documentPath)) {
+        documentPath = QDir::homePath();
+        qWarning("%s: first documentPath \"%s\" does not exist. Using ~ (\"%s\") instead.",
+                 Q_FUNC_INFO, qPrintable(documentPaths.front()), qPrintable(documentPath));
+    }
     root = model->setRootPath(documentPath);
 
     QTRY_VERIFY(model->rowCount(root) >= 0);
@@ -416,7 +418,14 @@ bool tst_QFileSystemModel::createFiles(const QString &test_path, const QStringLi
             wchar_t nativeHiddenFile[MAX_PATH];
             memset(nativeHiddenFile, 0, sizeof(nativeHiddenFile));
             hiddenFile.toWCharArray(nativeHiddenFile);
+#ifndef Q_OS_WINRT
             DWORD currentAttributes = ::GetFileAttributes(nativeHiddenFile);
+#else // !Q_OS_WINRT
+            WIN32_FILE_ATTRIBUTE_DATA attributeData;
+            if (!::GetFileAttributesEx(nativeHiddenFile, GetFileExInfoStandard, &attributeData))
+                attributeData.dwFileAttributes = 0xFFFFFFFF;
+            DWORD currentAttributes = attributeData.dwFileAttributes;
+#endif // Q_OS_WINRT
             if (currentAttributes == 0xFFFFFFFF) {
                 qErrnoWarning("failed to get file attributes: %s", qPrintable(hiddenFile));
                 return false;
@@ -459,11 +468,17 @@ void tst_QFileSystemModel::rowCount()
 void tst_QFileSystemModel::rowsInserted_data()
 {
     QTest::addColumn<int>("count");
-    QTest::addColumn<int>("assending");
+    QTest::addColumn<int>("ascending");
     for (int i = 0; i < 4; ++i) {
         QTest::newRow(QString("Qt::AscendingOrder %1").arg(i).toLocal8Bit().constData())  << i << (int)Qt::AscendingOrder;
         QTest::newRow(QString("Qt::DescendingOrder %1").arg(i).toLocal8Bit().constData()) << i << (int)Qt::DescendingOrder;
     }
+}
+
+static inline QString lastEntry(const QModelIndex &root)
+{
+    const QAbstractItemModel *model = root.model();
+    return model->index(model->rowCount(root) - 1, 0, root).data().toString();
 }
 
 void tst_QFileSystemModel::rowsInserted()
@@ -475,9 +490,9 @@ void tst_QFileSystemModel::rowsInserted()
     rowCount();
     QModelIndex root = model->index(model->rootPath());
 
-    QFETCH(int, assending);
+    QFETCH(int, ascending);
     QFETCH(int, count);
-    model->sort(0, (Qt::SortOrder)assending);
+    model->sort(0, (Qt::SortOrder)ascending);
 
     QSignalSpy spy0(model, SIGNAL(rowsInserted(QModelIndex,int,int)));
     QSignalSpy spy1(model, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)));
@@ -488,7 +503,6 @@ void tst_QFileSystemModel::rowsInserted()
     QVERIFY(createFiles(tmp, files, 5));
     TRY_WAIT(model->rowCount(root) == oldCount + count);
     QTRY_COMPARE(model->rowCount(root), oldCount + count);
-    QTest::qWait(100); // Let the sort settle.
     int totalRowsInserted = 0;
     for (int i = 0; i < spy0.count(); ++i) {
         int start = spy0[i].value(1).toInt();
@@ -496,12 +510,9 @@ void tst_QFileSystemModel::rowsInserted()
         totalRowsInserted += end - start + 1;
     }
     QCOMPARE(totalRowsInserted, count);
-    if (assending == (Qt::SortOrder)Qt::AscendingOrder) {
-        QString letter = model->index(model->rowCount(root) - 1, 0, root).data().toString();
-        QCOMPARE(letter, QString("j"));
-    } else {
-        QCOMPARE(model->index(model->rowCount(root) - 1, 0, root).data().toString(), QString("b"));
-    }
+    const QString expected = ascending == Qt::AscendingOrder ? QStringLiteral("j") : QStringLiteral("b");
+    QTRY_COMPARE(lastEntry(root), expected);
+
     if (spy0.count() > 0) {
         if (count == 0)
             QCOMPARE(spy0.count(), 0);
@@ -531,8 +542,8 @@ void tst_QFileSystemModel::rowsRemoved()
     QModelIndex root = model->index(model->rootPath());
 
     QFETCH(int, count);
-    QFETCH(int, assending);
-    model->sort(0, (Qt::SortOrder)assending);
+    QFETCH(int, ascending);
+    model->sort(0, (Qt::SortOrder)ascending);
     QTest::qWait(WAITTIME);
 
     QSignalSpy spy0(model, SIGNAL(rowsRemoved(QModelIndex,int,int)));
@@ -702,8 +713,8 @@ void tst_QFileSystemModel::filters()
     for (int i = 0; i < rowCount; ++i)
         modelEntries.append(model->data(model->index(i, 0, root), QFileSystemModel::FileNameRole).toString());
 
-    qSort(dirEntries);
-    qSort(modelEntries);
+    std::sort(dirEntries.begin(), dirEntries.end());
+    std::sort(modelEntries.begin(), modelEntries.end());
     QCOMPARE(dirEntries, modelEntries);
 
 #ifdef Q_OS_LINUX
@@ -921,12 +932,29 @@ void tst_QFileSystemModel::mkdir()
     int oldRow = idx.row();
     QTest::qWait(WAITTIME);
     idx = model->index(newFolderPath);
-    QDir cleanup(tmp);
-    QVERIFY(cleanup.rmdir(QLatin1String("NewFoldermkdirtest3")));
-    QVERIFY(cleanup.rmdir(QLatin1String("NewFoldermkdirtest5")));
-    bestatic.rmdir(newFolderPath);
+    QVERIFY(model->remove(idx));
+    QVERIFY(!bestatic.exists());
     QVERIFY(0 != idx.row());
     QCOMPARE(oldRow, idx.row());
+}
+
+void tst_QFileSystemModel::deleteFile()
+{
+    QString newFilePath = QDir::temp().filePath("NewFileDeleteTest");
+    QFile newFile(newFilePath);
+    if (newFile.exists()) {
+        if (!newFile.remove())
+            qWarning() << "unable to remove" << newFilePath;
+        QTest::qWait(WAITTIME);
+    }
+    if (!newFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "unable to create" << newFilePath;
+    }
+    newFile.close();
+    QModelIndex idx = model->index(newFilePath);
+    QVERIFY(idx.isValid());
+    QVERIFY(model->remove(idx));
+    QVERIFY(!newFile.exists());
 }
 
 void tst_QFileSystemModel::caseSensitivity()
@@ -1033,6 +1061,14 @@ void tst_QFileSystemModel::roleNames()
     QVERIFY(values.contains(roleName));
 }
 
+static inline QByteArray permissionRowName(bool readOnly, int permission)
+{
+    QByteArray result = readOnly ? QByteArrayLiteral("ro") : QByteArrayLiteral("rw");
+    result += QByteArrayLiteral("-0");
+    result += QByteArray::number(permission, 16);
+    return result;
+}
+
 void tst_QFileSystemModel::permissions_data()
 {
     QTest::addColumn<int>("permissions");
@@ -1043,11 +1079,10 @@ void tst_QFileSystemModel::permissions_data()
         QFile::ReadOwner,
         QFile::WriteOwner|QFile::ReadOwner,
     };
-#define ROW_NAME(i) qPrintable(QString().sprintf("%s-0%04x", readOnly ? "ro" : "rw", permissions[i]))
-    for (int readOnly = false ; readOnly <= true; ++readOnly)
-        for (size_t i = 0; i < sizeof permissions / sizeof *permissions; ++i)
-            QTest::newRow(ROW_NAME(i)) << permissions[i] << bool(readOnly);
-#undef ROW_NAME
+    for (size_t i = 0; i < sizeof permissions / sizeof *permissions; ++i) {
+        QTest::newRow(permissionRowName(false, permissions[i]).constData()) << permissions[i] << false;
+        QTest::newRow(permissionRowName(true, permissions[i]).constData()) << permissions[i] << true;
+    }
 }
 
 void tst_QFileSystemModel::permissions() // checks QTBUG-20503

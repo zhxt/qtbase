@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -151,6 +143,10 @@ class tst_QGraphicsView : public QObject
 {
     Q_OBJECT
 
+public:
+    tst_QGraphicsView()
+        : platformName(qApp->platformName().toLower())
+    { }
 private slots:
     void initTestCase();
     void cleanup();
@@ -168,6 +164,8 @@ private slots:
     void dragMode_scrollHand();
     void dragMode_rubberBand();
     void rubberBandSelectionMode();
+    void rubberBandExtendSelection();
+    void rotated_rubberBand();
     void backgroundBrush();
     void foregroundBrush();
     void matrix();
@@ -200,7 +198,9 @@ private slots:
     void mapFromScenePoly();
     void mapFromScenePath();
     void sendEvent();
+#ifndef QT_NO_WHEELEVENT
     void wheelEvent();
+#endif
 #ifndef QTEST_NO_CURSOR
     void cursor();
     void cursor2();
@@ -221,6 +221,9 @@ private slots:
     void scrollBarRanges_data();
     void scrollBarRanges();
     void acceptMousePressEvent();
+    void acceptMouseDoubleClickEvent();
+    void forwardMousePress();
+    void forwardMouseDoubleClick();
     void replayMouseMove();
     void itemsUnderMouse();
     void embeddedViews();
@@ -271,12 +274,25 @@ private slots:
 
 public slots:
     void dummySlot() {}
+
+private:
+#if defined Q_OS_BLACKBERRY
+    QScopedPointer<QWidget> rootWindow;
+#endif
+    QString platformName;
 };
 
 void tst_QGraphicsView::initTestCase()
 {
 #ifdef Q_OS_WINCE_WM
     qApp->setAutoMaximizeThreshold(-1);
+#endif
+
+#if defined Q_OS_BLACKBERRY
+    // On BlackBerry first window is always shown full screen. However, many tests rely on specific
+    // window sizes. Create a dummy full screen window, so subsequent windows have correct size.
+    rootWindow.reset(new QWidget);
+    rootWindow->show();
 #endif
 }
 
@@ -928,6 +944,103 @@ void tst_QGraphicsView::rubberBandSelectionMode()
     QCOMPARE(scene.selectedItems(), QList<QGraphicsItem *>() << rect);
 }
 
+void tst_QGraphicsView::rubberBandExtendSelection()
+{
+   QWidget toplevel;
+   setFrameless(&toplevel);
+
+   QGraphicsScene scene(0, 0, 1000, 1000);
+
+   QGraphicsView view(&scene, &toplevel);
+   view.setDragMode(QGraphicsView::RubberBandDrag);
+   toplevel.show();
+
+   // Disable mouse tracking to prevent the window system from sending mouse
+   // move events to the viewport while we are synthesizing events. If
+   // QGraphicsView gets a mouse move event with no buttons down, it'll
+   // terminate the rubber band.
+   view.viewport()->setMouseTracking(false);
+
+   QGraphicsItem *item1 = scene.addRect(10, 10, 100, 100);
+   QGraphicsItem *item2 = scene.addRect(10, 120, 100, 100);
+   QGraphicsItem *item3 = scene.addRect(10, 230, 100, 100);
+
+   item1->setFlag(QGraphicsItem::ItemIsSelectable);
+   item2->setFlag(QGraphicsItem::ItemIsSelectable);
+   item3->setFlag(QGraphicsItem::ItemIsSelectable);
+
+   // select first item
+   item1->setSelected(true);
+   QCOMPARE(scene.selectedItems(), QList<QGraphicsItem *>() << item1);
+
+   // first rubberband without modifier key
+   sendMousePress(view.viewport(), view.mapFromScene(20, 115), Qt::LeftButton);
+   sendMouseMove(view.viewport(), view.mapFromScene(20, 300), Qt::LeftButton, Qt::LeftButton);
+   QVERIFY(!item1->isSelected());
+   QVERIFY(item2->isSelected());
+   QVERIFY(item3->isSelected());
+   sendMouseRelease(view.viewport(), QPoint(), Qt::LeftButton);
+
+   scene.clearSelection();
+
+   // select first item
+   item1->setSelected(true);
+   QVERIFY(item1->isSelected());
+
+   // now rubberband with modifier key
+   {
+      QPoint clickPoint = view.mapFromScene(20, 115);
+      QMouseEvent event(QEvent::MouseButtonPress, clickPoint, view.viewport()->mapToGlobal(clickPoint), Qt::LeftButton, 0, Qt::ControlModifier);
+      QApplication::sendEvent(view.viewport(), &event);
+   }
+   sendMouseMove(view.viewport(), view.mapFromScene(20, 300), Qt::LeftButton, Qt::LeftButton);
+   QVERIFY(item1->isSelected());
+   QVERIFY(item2->isSelected());
+   QVERIFY(item3->isSelected());
+}
+
+void tst_QGraphicsView::rotated_rubberBand()
+{
+    QWidget toplevel;
+    setFrameless(&toplevel);
+
+    QGraphicsScene scene;
+    const int dim = 3;
+    for (int i = 0; i < dim; i++) {
+        for (int j = 0; j < dim; j ++) {
+            QGraphicsRectItem *rect = new QGraphicsRectItem(i * 20, j * 20, 10, 10);
+            rect->setFlag(QGraphicsItem::ItemIsSelectable);
+            rect->setData(0, (i == j));
+            scene.addItem(rect);
+        }
+    }
+
+    QGraphicsView view(&scene, &toplevel);
+    QCOMPARE(view.rubberBandSelectionMode(), Qt::IntersectsItemShape);
+    view.setDragMode(QGraphicsView::RubberBandDrag);
+    view.resize(120, 120);
+    view.rotate(45);
+    toplevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&toplevel));
+
+    // Disable mouse tracking to prevent the window system from sending mouse
+    // move events to the viewport while we are synthesizing events. If
+    // QGraphicsView gets a mouse move event with no buttons down, it'll
+    // terminate the rubber band.
+    view.viewport()->setMouseTracking(false);
+
+    QCOMPARE(scene.selectedItems(), QList<QGraphicsItem *>());
+    int midWidth = view.viewport()->width() / 2;
+    sendMousePress(view.viewport(), QPoint(midWidth - 2, 0), Qt::LeftButton);
+    sendMouseMove(view.viewport(), QPoint(midWidth + 2, view.viewport()->height()),
+                  Qt::LeftButton, Qt::LeftButton);
+    QCOMPARE(scene.selectedItems().count(), dim);
+    foreach (const QGraphicsItem *item, scene.items()) {
+        QCOMPARE(item->isSelected(), item->data(0).toBool());
+    }
+    sendMouseRelease(view.viewport(), QPoint(), Qt::LeftButton);
+}
+
 void tst_QGraphicsView::backgroundBrush()
 {
     QGraphicsScene scene;
@@ -1297,7 +1410,7 @@ void tst_QGraphicsView::fitInView()
     view.setFixedSize(400, 200);
 #endif
 
-    view.show();
+    view.showNormal();
     view.fitInView(scene.itemsBoundingRect(), Qt::IgnoreAspectRatio);
     qApp->processEvents();
 
@@ -1409,7 +1522,7 @@ void tst_QGraphicsView::itemsAtPosition()
     view.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     view.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     view.setScene(&scene);
-    view.show();
+    view.showNormal();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     QPoint screenPos = view.viewport()->mapToGlobal(viewPos);
@@ -1527,7 +1640,7 @@ void tst_QGraphicsView::itemsInRect_cosmeticAdjust()
     view.setRenderHint(QPainter::Antialiasing, adjustForAntialiasing);
     view.setFrameStyle(0);
     view.resize(300, 300);
-    view.show();
+    view.showNormal();
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(rect->numPaints > 0);
 
@@ -2055,13 +2168,13 @@ void tst_QGraphicsView::sendEvent()
     QCOMPARE(item->events.at(item->events.size() - 2), QEvent::GraphicsSceneMouseRelease);
     QCOMPARE(item->events.at(item->events.size() - 1), QEvent::UngrabMouse);
 
-    QKeyEvent keyPress(QEvent::KeyPress, Qt::Key_Space, 0);
-    QApplication::sendEvent(view.viewport(), &keyPress);
+    QTest::keyPress(view.viewport(), Qt::Key_Space);
     QCOMPARE(item->events.size(), 9);
     QCOMPARE(item->events.at(item->events.size() - 2), QEvent::ShortcutOverride);
     QCOMPARE(item->events.last(), QEvent::KeyPress);
 }
 
+#ifndef QT_NO_WHEELEVENT
 class MouseWheelScene : public QGraphicsScene
 {
 public:
@@ -2118,6 +2231,7 @@ void tst_QGraphicsView::wheelEvent()
     QCOMPARE(spy.count(), 2);
     QVERIFY(widget->hasFocus());
 }
+#endif // !QT_NO_WHEELEVENT
 
 #ifndef QTEST_NO_CURSOR
 void tst_QGraphicsView::cursor()
@@ -2521,9 +2635,9 @@ public:
 
     bool dirtyPainter;
 
-    void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *)
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *w)
     {
-        dirtyPainter = (painter->pen().color() != Qt::black);
+        dirtyPainter = (painter->pen().color() != w->palette().color(w->foregroundRole()));
         painter->setPen(Qt::red);
     }
 };
@@ -2569,7 +2683,7 @@ void tst_QGraphicsView::optimizationFlags_dontSavePainterState()
     view.viewport()->repaint();
 
 #ifdef Q_OS_MAC
-    // Repaint on Mac OS X actually does require spinning the event loop.
+    // Repaint on OS X actually does require spinning the event loop.
     QTest::qWait(100);
 #endif
     QVERIFY(!parent->dirtyPainter);
@@ -2778,6 +2892,8 @@ void tst_QGraphicsView::scrollBarRanges()
     if (style == QLatin1String("GTK+") && useStyledPanel)
         QSKIP("GTK + style test skipped, see QTBUG-29002");
 
+    if (useStyledPanel && style == QStringLiteral("Macintosh") && platformName == QStringLiteral("cocoa"))
+        QSKIP("Insignificant on OSX");
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.setRenderHint(QPainter::Antialiasing);
@@ -2798,7 +2914,7 @@ void tst_QGraphicsView::scrollBarRanges()
     view.setHorizontalScrollBarPolicy(hbarpolicy);
     view.setVerticalScrollBarPolicy(vbarpolicy);
 
-    view.show();
+    view.showNormal();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     const int offset = view.style()->pixelMetric(QStyle::PM_ScrollBarExtent, 0, 0);
@@ -2832,16 +2948,22 @@ class TestView : public QGraphicsView
 {
 public:
     TestView(QGraphicsScene *scene)
-        : QGraphicsView(scene), accepted(false)
+        : QGraphicsView(scene), pressAccepted(false), doubleClickAccepted(false)
     { }
 
-    bool accepted;
+    bool pressAccepted;
+    bool doubleClickAccepted;
 
 protected:
     void mousePressEvent(QMouseEvent *event)
     {
         QGraphicsView::mousePressEvent(event);
-        accepted = event->isAccepted();
+        pressAccepted = event->isAccepted();
+    }
+    void mouseDoubleClickEvent(QMouseEvent *event)
+    {
+        QGraphicsView::mouseDoubleClickEvent(event);
+        doubleClickAccepted = event->isAccepted();
     }
 };
 
@@ -2859,14 +2981,109 @@ void tst_QGraphicsView::acceptMousePressEvent()
                       Qt::LeftButton, 0, 0);
     event.setAccepted(false);
     QApplication::sendEvent(view.viewport(), &event);
-    QVERIFY(!view.accepted);
+    QVERIFY(!view.pressAccepted);
 
     scene.addRect(0, 0, 2000, 2000)->setFlag(QGraphicsItem::ItemIsMovable);
 
     qApp->processEvents(); // ensure scene rect is updated
 
     QApplication::sendEvent(view.viewport(), &event);
-    QVERIFY(view.accepted);
+    QVERIFY(view.pressAccepted);
+}
+
+void tst_QGraphicsView::acceptMouseDoubleClickEvent()
+{
+    QGraphicsScene scene;
+
+    TestView view(&scene);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    QMouseEvent event(QEvent::MouseButtonDblClick,
+                      view.viewport()->rect().center(),
+                      view.viewport()->mapToGlobal(view.viewport()->rect().center()),
+                      Qt::LeftButton, 0, 0);
+    event.setAccepted(false);
+    QApplication::sendEvent(view.viewport(), &event);
+    QVERIFY(!view.doubleClickAccepted);
+
+    scene.addRect(0, 0, 2000, 2000)->setFlag(QGraphicsItem::ItemIsMovable);
+
+    qApp->processEvents(); // ensure scene rect is updated
+
+    QApplication::sendEvent(view.viewport(), &event);
+    QVERIFY(view.doubleClickAccepted);
+}
+
+class TestWidget : public QWidget
+{
+public:
+    TestWidget()
+        : QWidget(), pressForwarded(false), doubleClickForwarded(false)
+    { }
+
+    bool pressForwarded;
+    bool doubleClickForwarded;
+
+protected:
+    void mousePressEvent(QMouseEvent *event)
+    {
+        QWidget::mousePressEvent(event);
+        pressForwarded = true;
+    }
+    void mouseDoubleClickEvent(QMouseEvent *event)
+    {
+        QWidget::mouseDoubleClickEvent(event);
+        doubleClickForwarded = true;
+    }
+};
+
+void tst_QGraphicsView::forwardMousePress()
+{
+    TestWidget widget;
+    QGraphicsScene scene;
+    QGraphicsView view(&scene);
+    QHBoxLayout layout;
+    widget.setLayout(&layout);
+    layout.addWidget(&view);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    widget.pressForwarded = false;
+    QTest::mouseClick(view.viewport(), Qt::LeftButton);
+    QVERIFY(widget.pressForwarded);
+
+    scene.addRect(0, 0, 2000, 2000);
+
+    qApp->processEvents(); // ensure scene rect is updated
+
+    widget.pressForwarded = false;
+    QTest::mouseClick(view.viewport(), Qt::LeftButton);
+    QVERIFY(widget.pressForwarded);
+}
+
+void tst_QGraphicsView::forwardMouseDoubleClick()
+{
+    TestWidget widget;
+    QGraphicsScene scene;
+    QGraphicsView view(&scene);
+    QHBoxLayout layout;
+    widget.setLayout(&layout);
+    layout.addWidget(&view);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    widget.doubleClickForwarded = false;
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton);
+    QVERIFY(widget.doubleClickForwarded);
+
+    scene.addRect(0, 0, 2000, 2000);
+
+    qApp->processEvents(); // ensure scene rect is updated
+
+    widget.doubleClickForwarded = false;
+    QTest::mouseDClick(view.viewport(), Qt::LeftButton);
+    QVERIFY(widget.doubleClickForwarded);
 }
 
 void tst_QGraphicsView::replayMouseMove()
@@ -3425,7 +3642,7 @@ void tst_QGraphicsView::moveItemWhileScrolling()
         view.setOptimizationFlag(QGraphicsView::DontAdjustForAntialiasing);
     view.resize(200, 200);
     view.painted = false;
-    view.show();
+    view.showNormal();
     if (changedConnected)
         QObject::connect(view.scene(), SIGNAL(changed(QList<QRectF>)), this, SLOT(dummySlot()));
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -4518,7 +4735,7 @@ void tst_QGraphicsView::QTBUG_5859_exposedRect()
 
     QGraphicsView view(&scene);
     view.scale(4.15, 4.15);
-    view.show();
+    view.showNormal();
     qApp->setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
@@ -4583,30 +4800,39 @@ public:
 
 void tst_QGraphicsView::hoverLeave()
 {
+    if (platformName == QStringLiteral("cocoa"))
+        QSKIP("Insignificant on OSX");
+    const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     QGraphicsScene scene;
     QGraphicsView view(&scene);
+    view.resize(160, 160);
+    view.move(availableGeometry.center() - QPoint(80, 80));
     GraphicsItemWithHover *item = new GraphicsItemWithHover;
     scene.addItem(item);
 
     // move the cursor out of the way
-    QCursor::setPos(1,1);
+    const QPoint outOfWindow = view.geometry().topRight() + QPoint(50, 0);
+    QCursor::setPos(outOfWindow);
 
-    view.show();
+    view.showNormal();
     qApp->setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QPoint pos = view.viewport()->mapToGlobal(view.mapFromScene(item->mapToScene(10, 10)));
     QCursor::setPos(pos);
-    QTest::qWait(200);
-    QVERIFY(item->receivedEnterEvent);
+
+#if defined(Q_OS_QNX)
+    QEXPECT_FAIL("", "QCursor does not set native cursor on QNX", Abort);
+#endif
+
+    QTRY_VERIFY(item->receivedEnterEvent);
     QCOMPARE(item->enterWidget, view.viewport());
 
-    QCursor::setPos(1,1);
-    QTest::qWait(200);
+    QCursor::setPos(outOfWindow);
 #ifdef Q_OS_MAC
     QEXPECT_FAIL("", "QTBUG-26274 - behaviour regression", Abort);
 #endif
-    QVERIFY(item->receivedLeaveEvent);
+    QTRY_VERIFY(item->receivedLeaveEvent);
     QCOMPARE(item->leaveWidget, view.viewport());
 }
 

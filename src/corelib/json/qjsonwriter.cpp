@@ -1,39 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2013 Intel Corporation
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +34,7 @@
 
 #include "qjsonwriter_p.h"
 #include "qjson_p.h"
+#include "private/qutfcodec_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -59,15 +53,12 @@ static QByteArray escapedString(const QString &s)
     const uchar replacement = '?';
     QByteArray ba(s.length(), Qt::Uninitialized);
 
-    uchar *cursor = (uchar *)ba.data();
+    uchar *cursor = reinterpret_cast<uchar *>(const_cast<char *>(ba.constData()));
     const uchar *ba_end = cursor + ba.length();
+    const ushort *src = reinterpret_cast<const ushort *>(s.constBegin());
+    const ushort *const end = reinterpret_cast<const ushort *>(s.constEnd());
 
-    const QChar *ch = (const QChar *)s.constData();
-    const QChar *end = ch + s.length();
-
-    int surrogate_high = -1;
-
-    while (ch < end) {
+    while (src != end) {
         if (cursor >= ba_end - 6) {
             // ensure we have enough space
             int pos = cursor - (const uchar *)ba.constData();
@@ -76,29 +67,7 @@ static QByteArray escapedString(const QString &s)
             ba_end = (const uchar *)ba.constData() + ba.length();
         }
 
-        uint u = ch->unicode();
-        if (surrogate_high >= 0) {
-            if (ch->isLowSurrogate()) {
-                u = QChar::surrogateToUcs4(surrogate_high, u);
-                surrogate_high = -1;
-            } else {
-                // high surrogate without low
-                *cursor = replacement;
-                ++ch;
-                surrogate_high = -1;
-                continue;
-            }
-        } else if (ch->isLowSurrogate()) {
-            // low surrogate without high
-            *cursor = replacement;
-            ++ch;
-            continue;
-        } else if (ch->isHighSurrogate()) {
-            surrogate_high = u;
-            ++ch;
-            continue;
-        }
-
+        uint u = *src++;
         if (u < 0x80) {
             if (u < 0x20 || u == 0x22 || u == 0x5c) {
                 *cursor++ = '\\';
@@ -135,27 +104,9 @@ static QByteArray escapedString(const QString &s)
                 *cursor++ = (uchar)u;
             }
         } else {
-            if (u < 0x0800) {
-                *cursor++ = 0xc0 | ((uchar) (u >> 6));
-            } else {
-                // is it one of the Unicode non-characters?
-                if (QChar::isNonCharacter(u)) {
-                    *cursor++ = replacement;
-                    ++ch;
-                    continue;
-                }
-
-                if (QChar::requiresSurrogates(u)) {
-                    *cursor++ = 0xf0 | ((uchar) (u >> 18));
-                    *cursor++ = 0x80 | (((uchar) (u >> 12)) & 0x3f);
-                } else {
-                    *cursor++ = 0xe0 | (((uchar) (u >> 12)) & 0x3f);
-                }
-                *cursor++ = 0x80 | (((uchar) (u >> 6)) & 0x3f);
-            }
-            *cursor++ = 0x80 | ((uchar) (u&0x3f));
+            if (QUtf8Functions::toUtf8<QUtf8BaseTraits>(u, cursor, src, end) < 0)
+                *cursor++ = replacement;
         }
-        ++ch;
     }
 
     ba.resize(cursor - (const uchar *)ba.constData());
@@ -169,9 +120,14 @@ static void valueToJson(const QJsonPrivate::Base *b, const QJsonPrivate::Value &
     case QJsonValue::Bool:
         json += v.toBoolean() ? "true" : "false";
         break;
-    case QJsonValue::Double:
-        json += QByteArray::number(v.toDouble(b), 'g', 13);
+    case QJsonValue::Double: {
+        const double d = v.toDouble(b);
+        if (qIsFinite(d)) // +2 to format to ensure the expected precision
+            json += QByteArray::number(d, 'g', std::numeric_limits<double>::digits10 + 2); // ::digits10 is 15
+        else
+            json += "null"; // +INF || -INF || NaN (see RFC4627#section2.4)
         break;
+    }
     case QJsonValue::String:
         json += '"';
         json += escapedString(v.toString(b));
@@ -231,7 +187,7 @@ static void objectContentToJson(const QJsonPrivate::Object *o, QByteArray &json,
         json += indentString;
         json += '"';
         json += escapedString(e->key());
-        json += "\": ";
+        json += compact ? "\":" : "\": ";
         valueToJson(o, e->value, json, indent, compact);
 
         if (++i == o->length) {

@@ -14,20 +14,22 @@ win32-msvc*:QMAKE_CFLAGS_DEBUG -= -Zi
 win32-msvc*:QMAKE_CXXFLAGS_DEBUG -= -Zi
 win32-msvc*:QMAKE_CFLAGS_DEBUG *= -Z7
 win32-msvc*:QMAKE_CXXFLAGS_DEBUG *= -Z7
-win32-g++*: DEFINES += QT_NEEDS_QMAIN
+mingw: DEFINES += QT_NEEDS_QMAIN
 
-SOURCES = qtmain_win.cpp
+winrt {
+    SOURCES = qtmain_winrt.cpp
+} else {
+    SOURCES = qtmain_win.cpp
+
+    !wince: LIBS += -lshell32
+}
 
 load(qt_installs)
 
 TARGET = $$qtLibraryTarget($$TARGET$$QT_LIBINFIX) #do this towards the end
 
 load(qt_targets)
+load(qt_build_paths)
+load(qt_common)
 
-wince*:QMAKE_POST_LINK =
-
-unix|win32-g++* {
-    lib_replace.match = $$[QT_INSTALL_LIBS/get]
-    lib_replace.replace = $$[QT_INSTALL_LIBS/raw]
-    QMAKE_PRL_INSTALL_REPLACE += lib_replace
-}
+wince: QMAKE_POST_LINK =

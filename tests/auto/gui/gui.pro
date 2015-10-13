@@ -1,10 +1,16 @@
 TEMPLATE=subdirs
-SUBDIRS=\
+
+SUBDIRS = \
+    kernel
+
+!ios: SUBDIRS += \
     image \
-    kernel \
     math3d \
     painting \
+    qopenglconfig \
     qopengl \
     text \
     util \
     itemmodels \
+
+!contains(QT_CONFIG, opengl(es2)?): SUBDIRS -= qopengl qopenglconfig

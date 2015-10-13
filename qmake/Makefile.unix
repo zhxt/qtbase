@@ -4,21 +4,23 @@ QMKGENSRC = $(QMKSRC)/generators
 
 #qmake code
 OBJS=project.o option.o property.o main.o ioutils.o proitems.o \
-     qmakeglobals.o qmakeparser.o qmakeevaluator.o qmakebuiltins.o \
+     qmakevfs.o qmakeglobals.o qmakeparser.o qmakeevaluator.o qmakebuiltins.o \
      makefile.o unixmake2.o unixmake.o  \
      mingw_make.o winmakefile.o projectgenerator.o \
      meta.o makefiledeps.o metamakefile.o xmloutput.o pbuilder_pbx.o \
      msvc_vcproj.o msvc_vcxproj.o msvc_nmake.o msvc_objectmodel.o msbuild_objectmodel.o \
-     gbuild.o cesdkhandler.o
+     cesdkhandler.o
 
 #qt code
-QOBJS=qtextcodec.o qutfcodec.o qstring.o qstringbuilder.o qtextstream.o qiodevice.o qmalloc.o qglobal.o \
+QOBJS=qtextcodec.o qutfcodec.o qstring.o qstring_compat.o qstringbuilder.o qtextstream.o qiodevice.o \
+      qdebug.o qmalloc.o qglobal.o \
       qarraydata.o qbytearray.o qbytearraymatcher.o qdatastream.o qbuffer.o qlist.o qfiledevice.o qfile.o \
       qfilesystementry.o qfilesystemengine.o qfsfileengine.o qfsfileengine_iterator.o qregexp.o qvector.o \
       qbitarray.o qdir.o qdiriterator.o quuid.o qhash.o qfileinfo.o qdatetime.o qstringlist.o \
       qabstractfileengine.o qtemporaryfile.o qmap.o qmetatype.o qsettings.o qsystemerror.o qlibraryinfo.o \
       qvariant.o qvsnprintf.o qlocale.o qlocale_tools.o qlinkedlist.o qnumeric.o \
       qcryptographichash.o qxmlstream.o qxmlutils.o qlogging.o \
+      qjson.o qjsondocument.o qjsonparser.o qjsonarray.o qjsonobject.o qjsonvalue.o \
       $(QTOBJS)
 
 
@@ -31,7 +33,7 @@ DEPEND_SRC = \
 	   $(QMKGENSRC)/makefiledeps.cpp $(QMKGENSRC)/metamakefile.cpp \
 	   $(QMKGENSRC)/projectgenerator.cpp $(QMKGENSRC)/makefile.cpp \
 	   $(QMKGENSRC)/unix/unixmake.cpp $(QMKGENSRC)/unix/unixmake2.cpp \
-	   $(QMKGENSRC)/mac/pbuilder_pbx.cpp $(QMKGENSRC)/integrity/gbuild.cpp \
+	   $(QMKGENSRC)/mac/pbuilder_pbx.cpp \
 	   $(QMKGENSRC)/win32/winmakefile.cpp \
 	   $(QMKGENSRC)/win32/mingw_make.cpp $(QMKGENSRC)/win32/msvc_nmake.cpp \
 	   $(QMKGENSRC)/win32/cesdkhandler.cpp $(QMKGENSRC)/mac/xmloutput.cpp  \
@@ -39,8 +41,10 @@ DEPEND_SRC = \
 	   $(QMKGENSRC)/win32/msvc_objectmodel.cpp $(QMKGENSRC)/win32/msbuild_objectmodel.cpp \
 	   $(SOURCE_PATH)/src/corelib/codecs/qtextcodec.cpp $(SOURCE_PATH)/src/corelib/codecs/qutfcodec.cpp \
 	   $(SOURCE_PATH)/src/corelib/tools/qstring.cpp $(SOURCE_PATH)/src/corelib/io/qfile.cpp \
+	   $(SOURCE_PATH)/src/corelib/tools/qstring_compat.cpp \
 	   $(SOURCE_PATH)/src/corelib/io/qfiledevice.cpp \
 	   $(SOURCE_PATH)/src/corelib/io/qtextstream.cpp $(SOURCE_PATH)/src/corelib/io/qiodevice.cpp \
+	   $(SOURCE_PATH)/src/corelib/io/qdebug.cpp \
 	   $(SOURCE_PATH)/src/corelib/global/qmalloc.cpp \
 	   $(SOURCE_PATH)/src/corelib/global/qglobal.cpp $(SOURCE_PATH)/src/corelib/tools/qregexp.cpp \
 	   $(SOURCE_PATH)/src/corelib/tools/qarraydata.cpp $(SOURCE_PATH)/src/corelib/tools/qbytearray.cpp\
@@ -70,6 +74,7 @@ DEPEND_SRC = \
 	   $(SOURCE_PATH)/src/corelib/tools/qlocale_win.cpp \
 	   $(SOURCE_PATH)/src/corelib/tools/qlinkedlist.cpp \
 	   $(SOURCE_PATH)/src/corelib/tools/qhash.cpp $(SOURCE_PATH)/src/corelib/kernel/qcore_mac.cpp \
+	   $(SOURCE_PATH)/src/corelib/kernel/qcore_mac_objc.mm \
 	   $(SOURCE_PATH)/src/corelib/io/qtemporaryfile.cpp $(SOURCE_PATH)/src/corelib/kernel/qmetatype.cpp \
 	   $(SOURCE_PATH)/src/corelib/io/qsettings.cpp $(SOURCE_PATH)/src/corelib/kernel/qvariant.cpp \
 	   $(SOURCE_PATH)/src/corelib/global/qlibraryinfo.cpp $(SOURCE_PATH)/src/corelib/tools/qcryptographichash.cpp \
@@ -80,6 +85,12 @@ DEPEND_SRC = \
 	   $(SOURCE_PATH)/src/corelib/global/qlogging.cpp \
 	   $(SOURCE_PATH)/src/corelib/plugin/qsystemlibrary.cpp \
 	   $(SOURCE_PATH)/tools/shared/windows/registry.cpp \
+	   $(SOURCE_PATH)/src/corelib/json/qjson.cpp \
+	   $(SOURCE_PATH)/src/corelib/json/qjsondocument.cpp \
+	   $(SOURCE_PATH)/src/corelib/json/qjsonparser.cpp \
+	   $(SOURCE_PATH)/src/corelib/json/qjsonarray.cpp \
+	   $(SOURCE_PATH)/src/corelib/json/qjsonobject.cpp \
+	   $(SOURCE_PATH)/src/corelib/json/qjsonvalue.cpp \
 	   $(QTSRCS)
 
 CPPFLAGS = -g $(EXTRA_CPPFLAGS) \
@@ -90,9 +101,10 @@ CPPFLAGS = -g $(EXTRA_CPPFLAGS) \
 	   -I$(BUILD_PATH)/src/corelib/global -DHAVE_QCONFIG_CPP \
 	   -I$(QMAKESPEC) \
 	   -I$(SOURCE_PATH)/tools/shared \
-	   -DQT_BUILD_QMAKE -DQT_BOOTSTRAPPED -DPROEVALUATOR_FULL -DPROEVALUATOR_DEBUG \
+	   -DQT_BUILD_QMAKE -DQT_BOOTSTRAPPED -DPROEVALUATOR_FULL \
 	   -DQT_NO_TEXTCODEC -DQT_NO_UNICODETABLES -DQT_NO_COMPONENT -DQT_NO_COMPRESS \
-	   -DQT_NO_THREAD -DQT_NO_QOBJECT -DQT_NO_GEOM_VARIANT -DQT_NO_DATASTREAM
+	   -DQT_NO_THREAD -DQT_NO_QOBJECT -DQT_NO_GEOM_VARIANT -DQT_NO_DATASTREAM \
+	   -DQT_CRYPTOGRAPHICHASH_ONLY_SHA1 -DQT_JSON_READONLY -DQT_NO_STANDARDPATHS
 
 CXXFLAGS = $(EXTRA_CXXFLAGS) $(CPPFLAGS)
 
@@ -111,9 +123,11 @@ clean::
 distclean:: clean
 	$(RM_RF) .deps
 	$(RM_F) $(BUILD_PATH)/bin/qmake$(EXEEXT)
+	$(RM_F) Makefile
 
 depend:
 	makedepend -D__MAKEDEPEND__ $(CPPFLAGS) $(DEPEND_SRC)
+	$(RM_F) Makefile.bak
 
 
 ioutils.o: $(QMKLIBSRC)/ioutils.cpp
@@ -123,6 +137,9 @@ proitems.o: $(QMKLIBSRC)/proitems.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
 qmakeglobals.o: $(QMKLIBSRC)/qmakeglobals.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $<
+
+qmakevfs.o: $(QMKLIBSRC)/qmakevfs.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
 qmakeparser.o: $(QMKLIBSRC)/qmakeparser.cpp
@@ -194,9 +211,6 @@ cesdkhandler.o: $(QMKSRC)/generators/win32/cesdkhandler.cpp
 pbuilder_pbx.o: $(QMKSRC)/generators/mac/pbuilder_pbx.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
-gbuild.o: $(QMKSRC)/generators/integrity/gbuild.cpp
-	$(CXX) -c -o $@ $(CXXFLAGS) $<
-
 projectgenerator.o: $(QMKSRC)/generators/projectgenerator.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $<
 
@@ -213,7 +227,7 @@ qsettings.o: $(SOURCE_PATH)/src/corelib/io/qsettings.cpp
 qsystemerror.o: $(SOURCE_PATH)/src/corelib/kernel/qsystemerror.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/kernel/qsystemerror.cpp
 
-qlibraryinfo.o: $(SOURCE_PATH)/src/corelib/global/qlibraryinfo.cpp
+qlibraryinfo.o: $(SOURCE_PATH)/src/corelib/global/qlibraryinfo.cpp $(BUILD_PATH)/src/corelib/global/qconfig.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/global/qlibraryinfo.cpp
 
 qnumeric.o: $(SOURCE_PATH)/src/corelib/global/qnumeric.cpp
@@ -227,6 +241,9 @@ qsettings_win.o: $(SOURCE_PATH)/src/corelib/io/qsettings_win.cpp
 
 qiodevice.o: $(SOURCE_PATH)/src/corelib/io/qiodevice.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/io/qiodevice.cpp
+
+qdebug.o: $(SOURCE_PATH)/src/corelib/io/qdebug.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/io/qdebug.cpp
 
 qmalloc.o: $(SOURCE_PATH)/src/corelib/global/qmalloc.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/global/qmalloc.cpp
@@ -252,6 +269,9 @@ qmetatype.o: $(SOURCE_PATH)/src/corelib/kernel/qmetatype.cpp
 qcore_mac.o: $(SOURCE_PATH)/src/corelib/kernel/qcore_mac.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/kernel/qcore_mac.cpp
 
+qcore_mac_objc.o: $(SOURCE_PATH)/src/corelib/kernel/qcore_mac_objc.mm
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/kernel/qcore_mac_objc.mm
+
 qutfcodec.o: $(SOURCE_PATH)/src/corelib/codecs/qutfcodec.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/codecs/qutfcodec.cpp
 
@@ -260,6 +280,9 @@ qtextcodec.o: $(SOURCE_PATH)/src/corelib/codecs/qtextcodec.cpp
 
 qstring.o: $(SOURCE_PATH)/src/corelib/tools/qstring.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/tools/qstring.cpp
+
+qstring_compat.o: $(SOURCE_PATH)/src/corelib/tools/qstring_compat.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/tools/qstring_compat.cpp
 
 qstringbuilder.o: $(SOURCE_PATH)/src/corelib/tools/qstringbuilder.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/tools/qstringbuilder.cpp
@@ -380,5 +403,23 @@ qsystemlibrary.o: $(SOURCE_PATH)/src/corelib/plugin/qsystemlibrary.cpp
 
 registry.o: $(SOURCE_PATH)/tools/shared/windows/registry.cpp
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/tools/shared/windows/registry.cpp
+
+qjson.o: $(SOURCE_PATH)/src/corelib/json/qjson.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/json/qjson.cpp
+
+qjsondocument.o: $(SOURCE_PATH)/src/corelib/json/qjsondocument.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/json/qjsondocument.cpp
+
+qjsonparser.o: $(SOURCE_PATH)/src/corelib/json/qjsonparser.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/json/qjsonparser.cpp
+
+qjsonarray.o: $(SOURCE_PATH)/src/corelib/json/qjsonarray.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/json/qjsonarray.cpp
+
+qjsonobject.o: $(SOURCE_PATH)/src/corelib/json/qjsonobject.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/json/qjsonobject.cpp
+
+qjsonvalue.o: $(SOURCE_PATH)/src/corelib/json/qjsonvalue.cpp
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SOURCE_PATH)/src/corelib/json/qjsonvalue.cpp
 
 # DO NOT DELETE THIS LINE -- make depend depends on it

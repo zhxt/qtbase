@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -249,7 +241,8 @@ void QMakeGlobals::setDirectories(const QString &input_dir, const QString &outpu
         int srcLen = srcpath.length();
         int dstLen = dstpath.length();
         int lastSl = -1;
-        while (++lastSl, srcpath.at(--srcLen) == dstpath.at(--dstLen))
+        while (++lastSl, --srcLen, --dstLen,
+               srcLen && dstLen && srcpath.at(srcLen) == dstpath.at(dstLen))
             if (srcpath.at(srcLen) == QLatin1Char('/'))
                 lastSl = 0;
         source_root = srcpath.left(srcLen + lastSl);
@@ -269,6 +262,19 @@ QString QMakeGlobals::shadowedPath(const QString &fileName) const
     return QString();
 }
 
+QStringList QMakeGlobals::splitPathList(const QString &val) const
+{
+    QStringList ret;
+    if (!val.isEmpty()) {
+        QDir bdir;
+        QStringList vals = val.split(dirlist_sep);
+        ret.reserve(vals.length());
+        foreach (const QString &it, vals)
+            ret << QDir::cleanPath(bdir.absoluteFilePath(it));
+    }
+    return ret;
+}
+
 QString QMakeGlobals::getEnv(const QString &var) const
 {
 #ifdef PROEVALUATOR_SETENV
@@ -280,16 +286,7 @@ QString QMakeGlobals::getEnv(const QString &var) const
 
 QStringList QMakeGlobals::getPathListEnv(const QString &var) const
 {
-    QStringList ret;
-    QString val = getEnv(var);
-    if (!val.isEmpty()) {
-        QDir bdir;
-        QStringList vals = val.split(dirlist_sep);
-        ret.reserve(vals.length());
-        foreach (const QString &it, vals)
-            ret << QDir::cleanPath(bdir.absoluteFilePath(it));
-    }
-    return ret;
+    return splitPathList(getEnv(var));
 }
 
 QString QMakeGlobals::expandEnvVars(const QString &str) const
@@ -323,34 +320,46 @@ bool QMakeGlobals::initProperties()
         QT_PCLOSE(proc);
     }
 #endif
-    foreach (QByteArray line, data.split('\n'))
-        if (!line.startsWith("QMAKE_")) {
-            int off = line.indexOf(':');
-            if (off < 0) // huh?
-                continue;
-            if (line.endsWith('\r'))
-                line.chop(1);
-            QString name = QString::fromLatin1(line.left(off));
-            ProString value = ProString(QDir::fromNativeSeparators(
-                        QString::fromLocal8Bit(line.mid(off + 1))));
-            properties.insert(ProKey(name), value);
-            if (name.startsWith(QLatin1String("QT_")) && !name.contains(QLatin1Char('/'))) {
-                if (name.startsWith(QLatin1String("QT_INSTALL_"))) {
+    foreach (QByteArray line, data.split('\n')) {
+        int off = line.indexOf(':');
+        if (off < 0) // huh?
+            continue;
+        if (line.endsWith('\r'))
+            line.chop(1);
+        QString name = QString::fromLatin1(line.left(off));
+        ProString value = ProString(QDir::fromNativeSeparators(
+                    QString::fromLocal8Bit(line.mid(off + 1))));
+        properties.insert(ProKey(name), value);
+        if (name.startsWith(QLatin1String("QT_"))) {
+            bool plain = !name.contains(QLatin1Char('/'));
+            if (!plain) {
+                if (!name.endsWith(QLatin1String("/get")))
+                    continue;
+                name.chop(4);
+            }
+            if (name.startsWith(QLatin1String("QT_INSTALL_"))) {
+                if (plain) {
                     properties.insert(ProKey(name + QLatin1String("/raw")), value);
                     properties.insert(ProKey(name + QLatin1String("/get")), value);
-                    if (name == QLatin1String("QT_INSTALL_PREFIX")
-                        || name == QLatin1String("QT_INSTALL_DATA")
-                        || name == QLatin1String("QT_INSTALL_BINS")) {
-                        name.replace(3, 7, QLatin1String("HOST"));
+                }
+                properties.insert(ProKey(name + QLatin1String("/src")), value);
+                if (name == QLatin1String("QT_INSTALL_PREFIX")
+                    || name == QLatin1String("QT_INSTALL_DATA")
+                    || name == QLatin1String("QT_INSTALL_BINS")) {
+                    name.replace(3, 7, QLatin1String("HOST"));
+                    if (plain) {
                         properties.insert(ProKey(name), value);
                         properties.insert(ProKey(name + QLatin1String("/get")), value);
                     }
-                } else if (name.startsWith(QLatin1String("QT_HOST_"))) {
-                    properties.insert(ProKey(name + QLatin1String("/get")), value);
+                    properties.insert(ProKey(name + QLatin1String("/src")), value);
                 }
+            } else if (name.startsWith(QLatin1String("QT_HOST_"))) {
+                if (plain)
+                    properties.insert(ProKey(name + QLatin1String("/get")), value);
+                properties.insert(ProKey(name + QLatin1String("/src")), value);
             }
         }
-    properties.insert(ProKey("QMAKE_VERSION"), ProString("2.01a"));
+    }
     return true;
 }
 #else

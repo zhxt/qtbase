@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -65,6 +57,15 @@
 
 #include <algorithm>
 
+#ifdef Q_OS_WINRT
+namespace ABI {
+    namespace Windows {
+        namespace Foundation {
+            struct IAsyncAction;
+        }
+    }
+}
+#endif // Q_OS_WINRT
 
 QT_BEGIN_NAMESPACE
 
@@ -150,6 +151,7 @@ public:
     bool running;
     bool finished;
     bool isInFinish; //when in QThreadPrivate::finish
+    bool interruptionRequested;
 
     bool exited;
     int returnCode;
@@ -176,7 +178,7 @@ public:
     unsigned int id;
     int waiters;
     bool terminationEnabled, terminatePending;
-# endif
+#endif // Q_OS_WIN
     QThreadData *data;
 
     static void createEventDispatcher(QThreadData *data);
@@ -218,13 +220,11 @@ public:
 
 class QThreadData
 {
-    QAtomicInt _ref;
-
 public:
     QThreadData(int initialRefCount = 1);
     ~QThreadData();
 
-    static QThreadData *current();
+    static QThreadData *current(bool createIfNecessary = true);
     static void clearCurrentThreadData();
     static QThreadData *get2(QThread *thread)
     { Q_ASSERT_X(thread != 0, "QThread", "internal error"); return thread->d_func()->data; }
@@ -241,15 +241,42 @@ public:
         return canWait;
     }
 
-    QThread *thread;
-    Qt::HANDLE threadId;
-    bool quitNow;
+    // This class provides per-thread (by way of being a QThreadData
+    // member) storage for qFlagLocation()
+    class FlaggedDebugSignatures
+    {
+        static const uint Count = 2;
+
+        uint idx;
+        const char* locations[Count];
+
+    public:
+        FlaggedDebugSignatures() : idx(0)
+        { std::fill_n(locations, Count, static_cast<char*>(0)); }
+
+        void store(const char* method)
+        { locations[idx++ % Count] = method; }
+
+        bool contains(const char *method) const
+        { return std::find(locations, locations + Count, method) != locations + Count; }
+    };
+
+private:
+    QAtomicInt _ref;
+
+public:
     int loopLevel;
-    QAtomicPointer<QAbstractEventDispatcher> eventDispatcher;
+
     QStack<QEventLoop *> eventLoops;
     QPostEventList postEventList;
-    bool canWait;
+    QAtomicPointer<QThread> thread;
+    Qt::HANDLE threadId;
+    QAtomicPointer<QAbstractEventDispatcher> eventDispatcher;
     QVector<void *> tls;
+    FlaggedDebugSignatures flaggedSignatures;
+
+    bool quitNow;
+    bool canWait;
     bool isAdopted;
 };
 
@@ -275,7 +302,7 @@ public:
     void init();
 
 private:
-    void run();
+    void run() Q_DECL_OVERRIDE;
 };
 
 QT_END_NAMESPACE

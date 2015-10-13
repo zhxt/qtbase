@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,7 +41,6 @@
 #include <qvalidator.h>
 #include <qdebug.h>
 
-#include <math.h>
 #include <float.h>
 
 QT_BEGIN_NAMESPACE
@@ -66,10 +57,10 @@ class QSpinBoxPrivate : public QAbstractSpinBoxPrivate
     Q_DECLARE_PUBLIC(QSpinBox)
 public:
     QSpinBoxPrivate();
-    void emitSignals(EmitPolicy ep, const QVariant &);
+    void emitSignals(EmitPolicy ep, const QVariant &) Q_DECL_OVERRIDE;
 
-    virtual QVariant valueFromText(const QString &n) const;
-    virtual QString textFromValue(const QVariant &n) const;
+    virtual QVariant valueFromText(const QString &n) const Q_DECL_OVERRIDE;
+    virtual QString textFromValue(const QVariant &n) const Q_DECL_OVERRIDE;
     QVariant validateAndInterpret(QString &input, int &pos,
                                   QValidator::State &state) const;
 
@@ -78,6 +69,8 @@ public:
         q->setInputMethodHints(Qt::ImhDigitsOnly);
         setLayoutItemMargins(QStyle::SE_SpinBoxLayoutItem);
     }
+
+    int displayIntegerBase;
 };
 
 class QDoubleSpinBoxPrivate : public QAbstractSpinBoxPrivate
@@ -85,10 +78,10 @@ class QDoubleSpinBoxPrivate : public QAbstractSpinBoxPrivate
     Q_DECLARE_PUBLIC(QDoubleSpinBox)
 public:
     QDoubleSpinBoxPrivate();
-    void emitSignals(EmitPolicy ep, const QVariant &);
+    void emitSignals(EmitPolicy ep, const QVariant &) Q_DECL_OVERRIDE;
 
-    virtual QVariant valueFromText(const QString &n) const;
-    virtual QString textFromValue(const QVariant &n) const;
+    virtual QVariant valueFromText(const QString &n) const Q_DECL_OVERRIDE;
+    virtual QString textFromValue(const QVariant &n) const Q_DECL_OVERRIDE;
     QVariant validateAndInterpret(QString &input, int &pos,
                                   QValidator::State &state) const;
     double round(double input) const;
@@ -425,12 +418,44 @@ void QSpinBox::setRange(int minimum, int maximum)
 }
 
 /*!
+    \property QSpinBox::displayIntegerBase
+
+    \brief the base used to display the value of the spin box
+
+    The default displayIntegerBase value is 10.
+
+    \sa textFromValue(), valueFromText()
+    \since 5.2
+*/
+
+int QSpinBox::displayIntegerBase() const
+{
+    Q_D(const QSpinBox);
+    return d->displayIntegerBase;
+}
+
+void QSpinBox::setDisplayIntegerBase(int base)
+{
+    Q_D(QSpinBox);
+    // Falls back to base 10 on invalid bases (like QString)
+    if (base < 2 || base > 36) {
+        qWarning("QSpinBox::setDisplayIntegerBase: Invalid base (%d)", base);
+        base = 10;
+    }
+
+    if (base != d->displayIntegerBase) {
+        d->displayIntegerBase = base;
+        d->updateEdit();
+    }
+}
+
+/*!
     This virtual function is used by the spin box whenever it needs to
     display the given \a value. The default implementation returns a
     string containing \a value printed in the standard way using
     QWidget::locale().toString(), but with the thousand separator
-    removed. Reimplementations may return anything. (See the example
-    in the detailed description.)
+    removed unless setGroupSeparatorShown() is set. Reimplementations may
+    return anything. (See the example in the detailed description.)
 
     Note: QSpinBox does not call this function for specialValueText()
     and that neither prefix() nor suffix() should be included in the
@@ -444,9 +469,18 @@ void QSpinBox::setRange(int minimum, int maximum)
 
 QString QSpinBox::textFromValue(int value) const
 {
-    QString str = locale().toString(value);
-    if (qAbs(value) >= 1000 || value == INT_MIN) {
-        str.remove(locale().groupSeparator());
+    Q_D(const QSpinBox);
+    QString str;
+
+    if (d->displayIntegerBase != 10) {
+        str = QString::number(qAbs(value), d->displayIntegerBase);
+        if (value < 0)
+            str.prepend('-');
+    } else {
+        str = locale().toString(value);
+        if (!d->showGroupSeparator && (qAbs(value) >= 1000 || value == INT_MIN)) {
+            str.remove(locale().groupSeparator());
+        }
     }
 
     return str;
@@ -495,7 +529,8 @@ QValidator::State QSpinBox::validate(QString &text, int &pos) const
 */
 void QSpinBox::fixup(QString &input) const
 {
-    input.remove(locale().groupSeparator());
+    if (!isGroupSeparatorShown())
+        input.remove(locale().groupSeparator());
 }
 
 
@@ -552,6 +587,9 @@ void QSpinBox::fixup(QString &input) const
     choice in addition to the range of numeric values. See
     setSpecialValueText() for how to do this with QDoubleSpinBox.
 
+    \note The displayed value of the QDoubleSpinBox is limited to 18 characters
+    in addition to eventual prefix and suffix content. This limitation is used
+    to keep the double spin box usable even with extremely large values.
     \sa QSpinBox, QDateTimeEdit, QSlider, {Spin Boxes Example}
 */
 
@@ -848,7 +886,8 @@ void QDoubleSpinBox::setDecimals(int decimals)
     display the given \a value. The default implementation returns a string
     containing \a value printed using QWidget::locale().toString(\a value,
     QLatin1Char('f'), decimals()) and will remove the thousand
-    separator. Reimplementations may return anything.
+    separator unless setGroupSeparatorShown() is set. Reimplementations may
+    return anything.
 
     Note: QDoubleSpinBox does not call this function for
     specialValueText() and that neither prefix() nor suffix() should
@@ -865,9 +904,9 @@ QString QDoubleSpinBox::textFromValue(double value) const
 {
     Q_D(const QDoubleSpinBox);
     QString str = locale().toString(value, 'f', d->decimals);
-    if (qAbs(value) >= 1000.0) {
+    if (!d->showGroupSeparator && qAbs(value) >= 1000.0)
         str.remove(locale().groupSeparator());
-    }
+
     return str;
 }
 
@@ -926,6 +965,7 @@ QSpinBoxPrivate::QSpinBoxPrivate()
     minimum = QVariant((int)0);
     maximum = QVariant((int)99);
     value = minimum;
+    displayIntegerBase = 10;
     singleStep = QVariant((int)1);
     type = QVariant::Int;
 }
@@ -996,18 +1036,22 @@ QVariant QSpinBoxPrivate::validateAndInterpret(QString &input, int &pos,
 
     if (max != min && (copy.isEmpty()
                        || (min < 0 && copy == QLatin1String("-"))
-                       || (min >= 0 && copy == QLatin1String("+")))) {
+                       || (max >= 0 && copy == QLatin1String("+")))) {
         state = QValidator::Intermediate;
         QSBDEBUG() << __FILE__ << __LINE__<< "num is set to" << num;
     } else if (copy.startsWith(QLatin1Char('-')) && min >= 0) {
         state = QValidator::Invalid; // special-case -0 will be interpreted as 0 and thus not be invalid with a range from 0-100
     } else {
         bool ok = false;
-        num = locale.toInt(copy, &ok);
-        if (!ok && copy.contains(locale.groupSeparator()) && (max >= 1000 || min <= -1000)) {
-            QString copy2 = copy;
-            copy2.remove(locale.groupSeparator());
-            num = locale.toInt(copy2, &ok);
+        if (displayIntegerBase != 10) {
+            num = copy.toInt(&ok, displayIntegerBase);
+        } else {
+            num = locale.toInt(copy, &ok);
+            if (!ok && copy.contains(locale.groupSeparator()) && (max >= 1000 || min <= -1000)) {
+                QString copy2 = copy;
+                copy2.remove(locale.groupSeparator());
+                num = locale.toInt(copy2, &ok);
+            }
         }
         QSBDEBUG() << __FILE__ << __LINE__<< "num is set to" << num;
         if (!ok) {

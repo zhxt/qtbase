@@ -1,44 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#include <qapplication.h>
 #include <qaction.h>
 #include <qwidgetaction.h>
 #include <qtoolbar.h>
@@ -47,6 +40,9 @@
 #include <qmenu.h>
 #include <qdebug.h>
 #include <qmath.h>
+#ifdef Q_OS_OSX
+#include <qpa/qplatformnativeinterface.h>
+#endif
 
 #include "qmainwindowlayout_p.h"
 #include "qtoolbarextension_p.h"
@@ -333,26 +329,43 @@ void QToolBarLayout::updateGeomArray() const
     rpick(o, that->hint) += handleExtent;
     that->hint += QSize(2*margin, 2*margin);
     that->dirty = false;
-#ifdef Q_WS_MAC
-    if (QMainWindow *mw = qobject_cast<QMainWindow *>(parentWidget()->parentWidget())) {
-        if (mw->unifiedTitleAndToolBarOnMac()
-                && mw->toolBarArea(static_cast<QToolBar *>(parentWidget())) == Qt::TopToolBarArea) {
-            if (expandFlag) {
-                tb->setMaximumSize(0xFFFFFF, 0xFFFFFF);
-            } else {
-               tb->setMaximumSize(hint);
-            }
-        }
-    }
-#endif
-
-    that->dirty = false;
 }
 
 static bool defaultWidgetAction(QToolBarItem *item)
 {
     QWidgetAction *a = qobject_cast<QWidgetAction*>(item->action);
     return a != 0 && a->defaultWidget() == item->widget();
+}
+
+void QToolBarLayout::updateMacBorderMetrics()
+{
+#ifdef Q_OS_OSX
+    QToolBar *tb = qobject_cast<QToolBar*>(parentWidget());
+    if (!tb)
+        return;
+
+    QRect rect = geometry();
+
+    QMainWindow *mainWindow = qobject_cast<QMainWindow*>(tb->parentWidget());
+    if (!mainWindow || !mainWindow->isWindow() || !mainWindow->unifiedTitleAndToolBarOnMac())
+        return;
+
+    QPlatformNativeInterface *nativeInterface = QApplication::platformNativeInterface();
+    QPlatformNativeInterface::NativeResourceForIntegrationFunction function =
+        nativeInterface->nativeResourceFunctionForIntegration("registerContentBorderArea");
+    if (!function)
+        return; // Not Cocoa platform plugin.
+
+    QPoint upper = tb->mapToParent(rect.topLeft());
+    QPoint lower = tb->mapToParent(rect.bottomLeft() + QPoint(0, 1));
+
+    typedef void (*RegisterContentBorderAreaFunction)(QWindow *window, void *identifier, int upper, int lower);
+    if (mainWindow->toolBarArea(tb) == Qt::TopToolBarArea) {
+        (reinterpret_cast<RegisterContentBorderAreaFunction>(function))(tb->window()->windowHandle(), tb, upper.y(), lower.y());
+    } else {
+        (reinterpret_cast<RegisterContentBorderAreaFunction>(function))(tb->window()->windowHandle(), tb, 0, 0);
+    }
+#endif
 }
 
 void QToolBarLayout::setGeometry(const QRect &rect)
@@ -368,6 +381,8 @@ void QToolBarLayout::setGeometry(const QRect &rect)
     Qt::Orientation o = tb->orientation();
 
     QLayout::setGeometry(rect);
+
+    updateMacBorderMetrics();
 
     bool ranOutOfSpace = false;
     if (!animating)
@@ -401,15 +416,6 @@ void QToolBarLayout::setGeometry(const QRect &rect)
         if (!extension->isHidden())
             extension->hide();
     }
-#ifdef Q_WS_MAC
-    if (QMainWindow *win = qobject_cast<QMainWindow*>(tb->parentWidget())) {
-        Qt::ToolBarArea area = win->toolBarArea(tb);
-        if (win->unifiedTitleAndToolBarOnMac() && area == Qt::TopToolBarArea) {
-            qt_mainwindow_layout(win)->fixSizeInUnifiedToolbar(tb);
-        }
-    }
-#endif
-
 }
 
 bool QToolBarLayout::layoutActions(const QSize &size)

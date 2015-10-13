@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,7 +35,7 @@
 #include <private/qblendfunctions_p.h>
 #include <private/qmath_p.h>
 
-#ifdef QT_COMPILER_SUPPORTS_NEON
+#ifdef __ARM_NEON__
 
 #include <private/qdrawhelper_neon_p.h>
 #include <private/qpaintengine_raster_p.h>
@@ -51,7 +43,7 @@
 
 QT_BEGIN_NAMESPACE
 
-void qt_memfill32_neon(quint32 *dest, quint32 value, int count)
+void qt_memfill32(quint32 *dest, quint32 value, int count)
 {
     const int epilogueSize = count % 16;
     if (count >= 16) {
@@ -539,7 +531,7 @@ Blend_on_RGB16_SourceAndConstAlpha_Neon_create(BlendFunc blender, int const_alph
 }
 
 void qt_scale_image_argb32_on_rgb16_neon(uchar *destPixels, int dbpl,
-                                         const uchar *srcPixels, int sbpl,
+                                         const uchar *srcPixels, int sbpl, int srch,
                                          const QRectF &targetRect,
                                          const QRectF &sourceRect,
                                          const QRect &clip,
@@ -548,19 +540,19 @@ void qt_scale_image_argb32_on_rgb16_neon(uchar *destPixels, int dbpl,
     if (const_alpha == 0)
         return;
 
-    qt_scale_image_16bit<quint32>(destPixels, dbpl, srcPixels, sbpl, targetRect, sourceRect, clip,
+    qt_scale_image_16bit<quint32>(destPixels, dbpl, srcPixels, sbpl, srch, targetRect, sourceRect, clip,
         Blend_on_RGB16_SourceAndConstAlpha_Neon_create<quint32>(blend_8_pixels_argb32_on_rgb16_neon, const_alpha));
 }
 
 void qt_scale_image_rgb16_on_rgb16(uchar *destPixels, int dbpl,
-                                   const uchar *srcPixels, int sbpl,
+                                   const uchar *srcPixels, int sbpl, int srch,
                                    const QRectF &targetRect,
                                    const QRectF &sourceRect,
                                    const QRect &clip,
                                    int const_alpha);
 
 void qt_scale_image_rgb16_on_rgb16_neon(uchar *destPixels, int dbpl,
-                                        const uchar *srcPixels, int sbpl,
+                                        const uchar *srcPixels, int sbpl, int srch,
                                         const QRectF &targetRect,
                                         const QRectF &sourceRect,
                                         const QRect &clip,
@@ -570,11 +562,11 @@ void qt_scale_image_rgb16_on_rgb16_neon(uchar *destPixels, int dbpl,
         return;
 
     if (const_alpha == 256) {
-        qt_scale_image_rgb16_on_rgb16(destPixels, dbpl, srcPixels, sbpl, targetRect, sourceRect, clip, const_alpha);
+        qt_scale_image_rgb16_on_rgb16(destPixels, dbpl, srcPixels, sbpl, srch, targetRect, sourceRect, clip, const_alpha);
         return;
     }
 
-    qt_scale_image_16bit<quint16>(destPixels, dbpl, srcPixels, sbpl, targetRect, sourceRect, clip,
+    qt_scale_image_16bit<quint16>(destPixels, dbpl, srcPixels, sbpl, srch, targetRect, sourceRect, clip,
         Blend_on_RGB16_SourceAndConstAlpha_Neon_create<quint16>(blend_8_pixels_rgb16_on_rgb16_neon, const_alpha));
 }
 
@@ -964,6 +956,7 @@ public:
     union Vect_buffer_i { Int32x4 v; int i[4]; };
     union Vect_buffer_f { Float32x4 v; float f[4]; };
 
+    static inline Float32x4 v_dup(double x) { return vdupq_n_f32(float(x)); }
     static inline Float32x4 v_dup(float x) { return vdupq_n_f32(x); }
     static inline Int32x4 v_dup(int x) { return vdupq_n_s32(x); }
     static inline Int32x4 v_dup(uint x) { return vdupq_n_s32(x); }
@@ -997,5 +990,5 @@ const uint * QT_FASTCALL qt_fetch_radial_gradient_neon(uint *buffer, const Opera
 
 QT_END_NAMESPACE
 
-#endif // QT_COMPILER_SUPPORTS_NEON
+#endif // __ARM_NEON__
 

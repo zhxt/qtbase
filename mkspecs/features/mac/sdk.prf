@@ -8,9 +8,25 @@ contains(QMAKE_MAC_SDK, .*/.*): \
 isEmpty(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.path) {
     QMAKE_MAC_SDK_PATH = $$system("/usr/bin/xcodebuild -sdk $$QMAKE_MAC_SDK -version Path 2>/dev/null")
     isEmpty(QMAKE_MAC_SDK_PATH): error("Could not resolve SDK path for \'$$QMAKE_MAC_SDK\'")
-    !isEmpty(_QMAKE_CACHE_): cache(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.path, set, QMAKE_MAC_SDK_PATH)
+    cache(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.path, set stash, QMAKE_MAC_SDK_PATH)
 } else {
     QMAKE_MAC_SDK_PATH = $$eval(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.path)
+}
+
+isEmpty(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.platform_path) {
+    QMAKE_MAC_SDK_PLATFORM_PATH = $$system("/usr/bin/xcodebuild -sdk $$QMAKE_MAC_SDK -version PlatformPath 2>/dev/null")
+    isEmpty(QMAKE_MAC_SDK_PLATFORM_PATH): error("Could not resolve SDK platform path for \'$$QMAKE_MAC_SDK\'")
+    cache(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.platform_path, set stash, QMAKE_MAC_SDK_PLATFORM_PATH)
+} else {
+    QMAKE_MAC_SDK_PLATFORM_PATH = $$eval(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.platform_path)
+}
+
+isEmpty(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.version) {
+    QMAKE_MAC_SDK_VERSION = $$system("/usr/bin/xcodebuild -sdk $$QMAKE_MAC_SDK -version SDKVersion 2>/dev/null")
+    isEmpty(QMAKE_MAC_SDK_VERSION): error("Could not resolve SDK version for \'$$QMAKE_MAC_SDK\'")
+    cache(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.version, set stash, QMAKE_MAC_SDK_VERSION)
+} else {
+    QMAKE_MAC_SDK_VERSION = $$eval(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.version)
 }
 
 !equals(MAKEFILE_GENERATOR, XCODE) {
@@ -24,10 +40,13 @@ sysrootified =
 for(val, QMAKE_INCDIR_OPENGL): sysrootified += $${QMAKE_MAC_SDK_PATH}$$val
 QMAKE_INCDIR_OPENGL = $$sysrootified
 
+QMAKESPEC_NAME = $$basename(QMAKESPEC)
+
 # Resolve SDK version of various tools
 for(tool, $$list(QMAKE_CC QMAKE_CXX QMAKE_FIX_RPATH QMAKE_AR QMAKE_RANLIB QMAKE_LINK QMAKE_LINK_SHLIB)) {
-    !isEmpty(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.$${tool}) {
-        $$tool = $$eval(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.$${tool})
+    tool_variable = QMAKE_MAC_SDK.$${QMAKESPEC_NAME}.$${QMAKE_MAC_SDK}.$${tool}
+    !isEmpty($$tool_variable) {
+        $$tool = $$eval($$tool_variable)
         next()
     }
 
@@ -38,18 +57,13 @@ for(tool, $$list(QMAKE_CC QMAKE_CXX QMAKE_FIX_RPATH QMAKE_AR QMAKE_RANLIB QMAKE_
     isEmpty(sysrooted): next()
 
     $$tool = $$sysrooted $$member(value, 1, -1)
-    !isEmpty(_QMAKE_CACHE_): cache(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.$${tool}, set, $$tool)
+    cache($$tool_variable, set stash, $$tool)
 }
 
 isEmpty(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.platform_name) {
-    # We use xml as the output format instead of json since plutil on 10.6 does not have that option
-    QMAKE_MAC_PLATFORM_NAME = $$system("/usr/bin/plutil -convert xml1 \"$$QMAKE_MAC_SDK_PATH/SDKSettings.plist\" -o - 2>/dev/null | " \
-        "sed '/^<!DOCTYPE/d' | " \ # Don't look up http://www.apple.com/DTDs/PropertyList-1.0.dtd
-        "PERL5LIB= xpath 'string(//key[.=\"PLATFORM_NAME\"]/following-sibling::*[1])' 2>/dev/null | " \
-        "sed 's/.*Value: \\(.*\\)/\\1/'")
-
+    QMAKE_MAC_PLATFORM_NAME = $$system("/usr/libexec/PlistBuddy -c 'print DefaultProperties:PLATFORM_NAME' $$QMAKE_MAC_SDK_PATH/SDKSettings.plist 2>/dev/null")
     isEmpty(QMAKE_MAC_PLATFORM_NAME): error("Could not resolve platform name for SDK '$$QMAKE_MAC_SDK'")
-    !isEmpty(_QMAKE_CACHE_): cache(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.platform_name, set, QMAKE_MAC_PLATFORM_NAME)
+    cache(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.platform_name, set stash, QMAKE_MAC_PLATFORM_NAME)
 } else {
     QMAKE_MAC_PLATFORM_NAME = $$eval(QMAKE_MAC_SDK.$${QMAKE_MAC_SDK}.platform_name)
 }

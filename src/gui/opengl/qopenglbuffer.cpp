@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -126,6 +118,18 @@ QT_BEGIN_NAMESPACE
     \value ReadOnly The buffer will be mapped for reading only.
     \value WriteOnly The buffer will be mapped for writing only.
     \value ReadWrite The buffer will be mapped for reading and writing.
+*/
+
+/*!
+    \enum QOpenGLBuffer::RangeAccessFlag
+    This enum defines the access mode bits for QOpenGLBuffer::mapRange().
+
+    \value RangeRead The buffer will be mapped for reading.
+    \value RangeWrite The buffer will be mapped for writing.
+    \value RangeInvalidate Discard the previous contents of the specified range.
+    \value RangeInvalidateBuffer Discard the previous contents of the entire buffer.
+    \value RangeFlushExplicit Indicates that modifications are to be flushed explicitly via \c glFlushMappedBufferRange.
+    \value RangeUnsynchronized Indicates that pending operations should not be synchronized before returning from mapRange().
 */
 
 class QOpenGLBufferPrivate
@@ -259,7 +263,7 @@ namespace {
 }
 
 /*!
-    Creates the buffer object in the OpenGL server.  Returns true if
+    Creates the buffer object in the OpenGL server.  Returns \c true if
     the object was created; false otherwise.
 
     This function must be called with a current QOpenGLContext.
@@ -294,7 +298,7 @@ bool QOpenGLBuffer::create()
 }
 
 /*!
-    Returns true if this buffer has been created; false otherwise.
+    Returns \c true if this buffer has been created; false otherwise.
 
     \sa create(), destroy()
 */
@@ -322,7 +326,7 @@ void QOpenGLBuffer::destroy()
 
 /*!
     Reads the \a count bytes in this buffer starting at \a offset
-    into \a data.  Returns true on success; false if reading from
+    into \a data.  Returns \c true on success; false if reading from
     the buffer is not supported.  Buffer reading is not supported
     under OpenGL/ES.
 
@@ -336,9 +340,9 @@ bool QOpenGLBuffer::read(int offset, void *data, int count)
     Q_D(QOpenGLBuffer);
     if (!d->funcs->hasOpenGLFeature(QOpenGLFunctions::Buffers) || !d->guard->id())
         return false;
-    while (glGetError() != GL_NO_ERROR) ; // Clear error state.
+    while (d->funcs->glGetError() != GL_NO_ERROR) ; // Clear error state.
     d->funcs->glGetBufferSubData(d->type, offset, count, data);
-    return glGetError() == GL_NO_ERROR;
+    return d->funcs->glGetError() == GL_NO_ERROR;
 #else
     Q_UNUSED(offset);
     Q_UNUSED(data);
@@ -403,7 +407,7 @@ void QOpenGLBuffer::allocate(const void *data, int count)
 
 /*!
     Binds the buffer associated with this object to the current
-    OpenGL context.  Returns false if binding was not possible, usually because
+    OpenGL context.  Returns \c false if binding was not possible, usually because
     type() is not supported on this OpenGL implementation.
 
     The buffer must be bound to the same QOpenGLContext current when create()
@@ -514,10 +518,14 @@ int QOpenGLBuffer::size() const
     It is assumed that create() has been called on this buffer and that
     it has been bound to the current context.
 
-    This function is only supported under OpenGL/ES if the
-    \c{GL_OES_mapbuffer} extension is present.
+    \note This function is only supported under OpenGL ES 2.0 or
+    earlier if the \c GL_OES_mapbuffer extension is present.
 
-    \sa unmap(), create(), bind()
+    \note On OpenGL ES 3.0 and newer, or, in case if desktop OpenGL,
+    if \c GL_ARB_map_buffer_range is supported, this function uses
+    \c glMapBufferRange instead of \c glMapBuffer.
+
+    \sa unmap(), create(), bind(), mapRange()
 */
 void *QOpenGLBuffer::map(QOpenGLBuffer::Access access)
 {
@@ -528,19 +536,60 @@ void *QOpenGLBuffer::map(QOpenGLBuffer::Access access)
 #endif
     if (!d->guard || !d->guard->id())
         return 0;
-    return d->funcs->glMapBuffer(d->type, access);
+    if (d->funcs->hasOpenGLExtension(QOpenGLExtensions::MapBufferRange)) {
+        QOpenGLBuffer::RangeAccessFlags rangeAccess = 0;
+        switch (access) {
+        case QOpenGLBuffer::ReadOnly:
+            rangeAccess = QOpenGLBuffer::RangeRead;
+            break;
+        case QOpenGLBuffer::WriteOnly:
+            rangeAccess = QOpenGLBuffer::RangeWrite;
+            break;
+        case QOpenGLBuffer::ReadWrite:
+            rangeAccess = QOpenGLBuffer::RangeRead | QOpenGLBuffer::RangeWrite;
+            break;
+        }
+        return d->funcs->glMapBufferRange(d->type, 0, size(), rangeAccess);
+    } else {
+        return d->funcs->glMapBuffer(d->type, access);
+    }
+}
+
+/*!
+    Maps the range specified by \a offset and \a count of the contents
+    of this buffer into the application's memory space and returns a
+    pointer to it.  Returns null if memory mapping is not possible.
+    The \a access parameter specifies a combination of access flags.
+
+    It is assumed that create() has been called on this buffer and that
+    it has been bound to the current context.
+
+    \note This function is not available on OpenGL ES 2.0 and earlier.
+
+    \sa unmap(), create(), bind()
+ */
+void *QOpenGLBuffer::mapRange(int offset, int count, QOpenGLBuffer::RangeAccessFlags access)
+{
+    Q_D(QOpenGLBuffer);
+#ifndef QT_NO_DEBUG
+    if (!isCreated())
+        qWarning("QOpenGLBuffer::mapRange(): buffer not created");
+#endif
+    if (!d->guard || !d->guard->id())
+        return 0;
+    return d->funcs->glMapBufferRange(d->type, offset, count, access);
 }
 
 /*!
     Unmaps the buffer after it was mapped into the application's
-    memory space with a previous call to map().  Returns true if
+    memory space with a previous call to map().  Returns \c true if
     the unmap succeeded; false otherwise.
 
     It is assumed that this buffer has been bound to the current context,
     and that it was previously mapped with map().
 
-    This function is only supported under OpenGL/ES if the
-    \c{GL_OES_mapbuffer} extension is present.
+    \note This function is only supported under OpenGL ES 2.0 and
+    earlier if the \c{GL_OES_mapbuffer} extension is present.
 
     \sa map()
 */

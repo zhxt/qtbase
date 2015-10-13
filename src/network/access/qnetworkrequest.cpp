@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -246,6 +238,24 @@ QT_BEGIN_NAMESPACE
         The QNetworkSession ConnectInBackground property will be set according to
         this attribute.
 
+    \value SpdyAllowedAttribute
+        Requests only, type: QMetaType::Bool (default: false)
+        Indicates whether the QNetworkAccessManager code is
+        allowed to use SPDY with this request. This applies only
+        to SSL requests, and depends on the server supporting SPDY.
+
+    \value SpdyWasUsedAttribute
+        Replies only, type: QMetaType::Bool
+        Indicates whether SPDY was used for receiving
+        this reply.
+
+    \value EmitAllUploadProgressSignalsAttribute
+        Requests only, type: QMetaType::Bool (default: false)
+        Indicates whether all upload signals should be emitted.
+        By default, the uploadProgress signal is emitted only
+        in 100 millisecond intervals.
+        (This value was introduced in 5.5.)
+
     \value User
         Special type. Additional information can be passed in
         QVariants with types ranging from User to UserMax. The default
@@ -369,7 +379,7 @@ QNetworkRequest::~QNetworkRequest()
 }
 
 /*!
-    Returns true if this object is the same as \a other (i.e., if they
+    Returns \c true if this object is the same as \a other (i.e., if they
     have the same URL, same headers and same meta-data settings).
 
     \sa operator!=()
@@ -382,7 +392,7 @@ bool QNetworkRequest::operator==(const QNetworkRequest &other) const
 /*!
     \fn bool QNetworkRequest::operator!=(const QNetworkRequest &other) const
 
-    Returns false if this object is not the same as \a other.
+    Returns \c false if this object is not the same as \a other.
 
     \sa operator==()
 */
@@ -449,7 +459,7 @@ void QNetworkRequest::setHeader(KnownHeaders header, const QVariant &value)
 }
 
 /*!
-    Returns true if the raw header \a headerName is present in this
+    Returns \c true if the raw header \a headerName is present in this
     network request.
 
     \sa rawHeader(), setRawHeader()
@@ -501,7 +511,7 @@ QList<QByteArray> QNetworkRequest::rawHeaderList() const
     will also set the known header LastModifiedHeader to be the
     QDateTime object of the parsed date.
 
-    Note: setting the same header twice overrides the previous
+    \note Setting the same header twice overrides the previous
     setting. To accomplish the behaviour of multiple HTTP headers of
     the same name, you should concatenate the two values, separating
     them with a comma (",") and set one single raw header.
@@ -517,7 +527,7 @@ void QNetworkRequest::setRawHeader(const QByteArray &headerName, const QByteArra
     Returns the attribute associated with the code \a code. If the
     attribute has not been set, it returns \a defaultValue.
 
-    Note: this function does not apply the defaults listed in
+    \note This function does not apply the defaults listed in
     QNetworkRequest::Attribute.
 
     \sa setAttribute(), QNetworkRequest::Attribute

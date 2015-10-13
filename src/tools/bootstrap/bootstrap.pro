@@ -5,7 +5,7 @@ QT =
 CONFIG += internal_module force_bootstrap
 
 # otherwise mingw headers do not declare common functions like putenv
-win32-g++*:QMAKE_CXXFLAGS_CXX11 = -std=gnu++0x
+mingw:QMAKE_CXXFLAGS_CXX11 = -std=gnu++0x
 
 MODULE_DEFINES = \
         QT_BOOTSTRAPPED \
@@ -20,8 +20,7 @@ MODULE_DEFINES = \
         QT_NO_UNICODETABLES \
         QT_NO_USING_NAMESPACE \
         QT_NO_DEPRECATED \
-        QT_NO_TRANSLATION \
-        QT_QMAKE_LOCATION=\\\"$$QMAKE_QMAKE\\\"
+        QT_NO_TRANSLATION
 
 DEFINES += \
     $$MODULE_DEFINES \
@@ -50,20 +49,18 @@ QMAKE_SYNCQT_OPTIONS += -version $$QT_VERSION
 
 load(qt_module)
 
-INCLUDEPATH += $$QT_BUILD_TREE/src/corelib/global
-
 SOURCES += \
            ../../corelib/codecs/qlatincodec.cpp \
            ../../corelib/codecs/qtextcodec.cpp \
            ../../corelib/codecs/qutfcodec.cpp \
            ../../corelib/global/qglobal.cpp \
-           ../../corelib/global/qlibraryinfo.cpp \
            ../../corelib/global/qlogging.cpp \
            ../../corelib/global/qmalloc.cpp \
            ../../corelib/global/qnumeric.cpp \
            ../../corelib/io/qabstractfileengine.cpp \
            ../../corelib/io/qbuffer.cpp \
            ../../corelib/io/qdatastream.cpp \
+           ../../corelib/io/qdebug.cpp \
            ../../corelib/io/qdir.cpp \
            ../../corelib/io/qdiriterator.cpp \
            ../../corelib/io/qfile.cpp \
@@ -74,10 +71,11 @@ SOURCES += \
            ../../corelib/io/qfsfileengine_iterator.cpp \
            ../../corelib/io/qiodevice.cpp \
            ../../corelib/io/qfiledevice.cpp \
-           ../../corelib/io/qsettings.cpp \
            ../../corelib/io/qtemporaryfile.cpp \
            ../../corelib/io/qtextstream.cpp \
            ../../corelib/io/qstandardpaths.cpp \
+           ../../corelib/io/qloggingcategory.cpp \
+           ../../corelib/io/qloggingregistry.cpp \
            ../../corelib/kernel/qcoreapplication.cpp \
            ../../corelib/kernel/qcoreglobaldata.cpp \
            ../../corelib/kernel/qmetatype.cpp \
@@ -88,6 +86,8 @@ SOURCES += \
            ../../corelib/tools/qbytearray.cpp \
            ../../corelib/tools/qarraydata.cpp \
            ../../corelib/tools/qbytearraymatcher.cpp \
+           ../../corelib/tools/qcommandlineparser.cpp \
+           ../../corelib/tools/qcommandlineoption.cpp \
            ../../corelib/tools/qcryptographichash.cpp \
            ../../corelib/tools/qdatetime.cpp \
            ../../corelib/tools/qhash.cpp \
@@ -102,6 +102,7 @@ SOURCES += \
            ../../corelib/tools/qsize.cpp \
            ../../corelib/tools/qline.cpp \
            ../../corelib/tools/qstring.cpp \
+           ../../corelib/tools/qstring_compat.cpp \
            ../../corelib/tools/qstringlist.cpp \
            ../../corelib/tools/qvector.cpp \
            ../../corelib/tools/qvsnprintf.cpp \
@@ -124,20 +125,25 @@ unix:SOURCES += ../../corelib/io/qfilesystemengine_unix.cpp \
 win32:SOURCES += ../../corelib/io/qfilesystemengine_win.cpp \
                  ../../corelib/io/qfilesystemiterator_win.cpp \
                  ../../corelib/io/qfsfileengine_win.cpp \
-                 ../../corelib/io/qsettings_win.cpp \
                  ../../corelib/kernel/qcoreapplication_win.cpp \
                  ../../corelib/plugin/qsystemlibrary.cpp \
 
 mac {
-   SOURCES += ../../corelib/io/qsettings_mac.cpp \
-              ../../corelib/kernel/qcoreapplication_mac.cpp \
-              ../../corelib/kernel/qcore_mac.cpp
-   LIBS += -framework CoreServices
+    SOURCES += \
+        ../../corelib/kernel/qcoreapplication_mac.cpp \
+        ../../corelib/kernel/qcore_mac.cpp
+    OBJECTIVE_SOURCES += \
+        ../../corelib/kernel/qcore_mac_objc.mm
+
+    LIBS += -framework Foundation
+    osx: LIBS_PRIVATE += -framework CoreServices
+    ios: LIBS_PRIVATE += -framework UIKit
 }
 
 macx {
-    SOURCES += \
-        ../../corelib/io/qstandardpaths_mac.cpp
+    OBJECTIVE_SOURCES += \
+        ../../corelib/tools/qstring_mac.mm \
+        ../../corelib/io/qstandardpaths_mac.mm
 } else:unix {
     SOURCES += \
         ../../corelib/io/qstandardpaths_unix.cpp
@@ -146,12 +152,10 @@ macx {
         ../../corelib/io/qstandardpaths_win.cpp
 }
 
-*-g++*: QMAKE_CXXFLAGS += -ffunction-sections
-
 if(contains(QT_CONFIG, zlib)|cross_compile):include(../../3rdparty/zlib.pri)
 else:include(../../3rdparty/zlib_dependency.pri)
 
-win32:LIBS += -luser32 -lole32 -ladvapi32
+win32:LIBS += -luser32 -lole32 -ladvapi32 -lshell32
 
 lib.CONFIG = dummy_install
 INSTALLS += lib

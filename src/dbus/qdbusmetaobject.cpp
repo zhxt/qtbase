@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDBus module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -75,6 +67,7 @@ private:
         QByteArray name;
         QVarLengthArray<int, 4> inputTypes;
         QVarLengthArray<int, 4> outputTypes;
+        QByteArray rawReturnType;
         int flags;
     };
 
@@ -127,25 +120,9 @@ QDBusMetaObjectGenerator::QDBusMetaObjectGenerator(const QString &interfaceName,
     }
 }
 
-Q_DBUS_EXPORT bool qt_dbus_metaobject_skip_annotations = false;
-
-QDBusMetaObjectGenerator::Type
-QDBusMetaObjectGenerator::findType(const QByteArray &signature,
-                                   const QDBusIntrospection::Annotations &annotations,
-                                   const char *direction, int id)
+static int registerComplexDBusType(const char *typeName)
 {
     struct QDBusRawTypeHandler {
-        static void destroy(void *)
-        {
-            qFatal("Cannot destroy placeholder type QDBusRawType");
-        }
-
-        static void *create(const void *)
-        {
-            qFatal("Cannot create placeholder type QDBusRawType");
-            return 0;
-        }
-
         static void destruct(void *)
         {
             qFatal("Cannot destruct placeholder type QDBusRawType");
@@ -158,6 +135,21 @@ QDBusMetaObjectGenerator::findType(const QByteArray &signature,
         }
     };
 
+    return QMetaType::registerNormalizedType(typeName,
+                                             QDBusRawTypeHandler::destruct,
+                                             QDBusRawTypeHandler::construct,
+                                             sizeof(void *),
+                                             QMetaType::MovableType,
+                                             0);
+}
+
+Q_DBUS_EXPORT bool qt_dbus_metaobject_skip_annotations = false;
+
+QDBusMetaObjectGenerator::Type
+QDBusMetaObjectGenerator::findType(const QByteArray &signature,
+                                   const QDBusIntrospection::Annotations &annotations,
+                                   const char *direction, int id)
+{
     Type result;
     result.id = QVariant::Invalid;
 
@@ -194,13 +186,7 @@ QDBusMetaObjectGenerator::findType(const QByteArray &signature,
             // type is still unknown or doesn't match back to the signature that it
             // was expected to, so synthesize a fake type
             typeName = "QDBusRawType<0x" + signature.toHex() + ">*";
-            type = QMetaType::registerType(typeName, QDBusRawTypeHandler::destroy,
-                                           QDBusRawTypeHandler::create,
-                                           QDBusRawTypeHandler::destruct,
-                                           QDBusRawTypeHandler::construct,
-                                           sizeof(void *),
-                                           QMetaType::MovableType,
-                                           0);
+            type = registerComplexDBusType(typeName);
         }
 
         result.name = typeName;
@@ -214,9 +200,12 @@ QDBusMetaObjectGenerator::findType(const QByteArray &signature,
         } else if (signature == "a{sv}") {
             result.name = "QVariantMap";
             type = QVariant::Map;
+        } else if (signature == "a{ss}") {
+            result.name = "QMap<QString,QString>";
+            type = qMetaTypeId<QMap<QString, QString> >();
         } else {
-            result.name = "QDBusRawType::" + signature;
-            type = -1;
+            result.name = "{D-Bus type \"" + signature + "\"}";
+            type = registerComplexDBusType(result.name);
         }
     } else {
         result.name = QMetaType::typeName(type);
@@ -276,6 +265,9 @@ void QDBusMetaObjectGenerator::parseMethods()
 
             mm.outputTypes.append(type.id);
 
+            if (i == 0 && type.id == -1) {
+                mm.rawReturnType = type.name;
+            }
             if (i != 0) {
                 // non-const ref parameter
                 mm.parameterNames.append(arg.name.toLatin1());
@@ -344,7 +336,7 @@ void QDBusMetaObjectGenerator::parseSignals()
             prototype.append(')');
 
         // meta method flags
-        mm.flags = AccessProtected | MethodSignal | MethodScriptable;
+        mm.flags = AccessPublic | MethodSignal | MethodScriptable;
 
         // add
         signals_.insert(QMetaObject::normalizedSignature(prototype), mm);
@@ -441,8 +433,7 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
         data_size += 2 + mm.inputTypes.count() + mm.outputTypes.count();
     idata.resize(data_size + 1);
 
-    QMetaStringTable strings;
-    strings.enter(className.toLatin1());
+    QMetaStringTable strings(className.toLatin1());
 
     int offset = header->methodData;
     int parametersOffset = offset + header->methodCount * 5;
@@ -471,10 +462,14 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
                 int type;
                 QByteArray typeName;
                 if (i < 0) { // Return type
-                    if (!mm.outputTypes.isEmpty())
+                    if (!mm.outputTypes.isEmpty()) {
                         type = mm.outputTypes.first();
-                    else
+                        if (type == -1) {
+                            type = IsUnresolvedType | strings.enter(mm.rawReturnType);
+                        }
+                    } else {
                         type = QMetaType::Void;
+                    }
                 } else if (i < mm.inputTypes.size()) {
                     type = mm.inputTypes.at(i);
                 } else {
@@ -509,7 +504,7 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
     }
 
     Q_ASSERT(offset == header->methodData + header->methodCount * 5);
-    Q_ASSERT(parametersOffset = header->propertyData);
+    Q_ASSERT(parametersOffset == header->propertyData);
     Q_ASSERT(signatureOffset == header->methodDBusData + header->methodCount * intsPerMethod);
     Q_ASSERT(typeidOffset == idata.size());
     offset += methodParametersDataSize;

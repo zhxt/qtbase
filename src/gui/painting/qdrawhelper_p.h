@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,7 @@
 //
 
 #include "QtCore/qglobal.h"
+#include "QtCore/qmath.h"
 #include "QtGui/qcolor.h"
 #include "QtGui/qpainter.h"
 #include "QtGui/qimage.h"
@@ -63,16 +56,10 @@
 #endif
 #include "private/qrasterdefs_p.h"
 #include <private/qsimd_p.h>
-#include <private/qmath_p.h>
 
 QT_BEGIN_NAMESPACE
 
-#if defined(Q_CC_RVCT)
-// RVCT doesn't like static template functions
-#  define Q_STATIC_TEMPLATE_FUNCTION
-#  define Q_ALWAYS_INLINE __forceinline
-#  define Q_DECL_RESTRICT
-#elif defined(Q_CC_GNU)
+#if defined(Q_CC_GNU)
 #  define Q_STATIC_TEMPLATE_FUNCTION static
 #  define Q_ALWAYS_INLINE inline __attribute__((always_inline))
 #  define Q_DECL_RESTRICT __restrict__
@@ -138,7 +125,7 @@ typedef void (*SrcOverBlendFunc)(uchar *destPixels, int dbpl,
                                  int const_alpha);
 
 typedef void (*SrcOverScaleFunc)(uchar *destPixels, int dbpl,
-                                 const uchar *src, int spbl,
+                                 const uchar *src, int spbl, int srch,
                                  const QRectF &targetRect,
                                  const QRectF &sourceRect,
                                  const QRect &clipRect,
@@ -171,6 +158,8 @@ extern MemRotateFunc qMemRotateFunctions[QImage::NImageFormats][3];
 extern DrawHelper qDrawHelper[QImage::NImageFormats];
 
 void qBlendTexture(int count, const QSpan *spans, void *userData);
+extern void qt_memfill32(quint32 *dest, quint32 value, int count);
+extern void qt_memfill16(quint16 *dest, quint16 value, int count);
 
 typedef void (QT_FASTCALL *CompositionFunction)(uint *Q_DECL_RESTRICT dest, const uint *Q_DECL_RESTRICT src, int length, uint const_alpha);
 typedef void (QT_FASTCALL *CompositionFunctionSolid)(uint *dest, int length, uint color, uint const_alpha);
@@ -386,8 +375,6 @@ static inline qreal qRadialDeterminant(qreal a, qreal b, qreal c)
     return (b * b) - (4 * a * c);
 }
 
-extern void (*qt_memfill32)(quint32 *dest, quint32 value, int count);
-
 template <class RadialFetchFunc> Q_STATIC_TEMPLATE_FUNCTION
 const uint * QT_FASTCALL qt_fetch_radial_gradient_template(uint *buffer, const Operator *op, const QSpanData *data,
                                                            int y, int x, int length)
@@ -563,10 +550,6 @@ public:
     }
 };
 
-#if defined(Q_CC_RVCT)
-#  pragma push
-#  pragma arm
-#endif
 static Q_ALWAYS_INLINE uint INTERPOLATE_PIXEL_255(uint x, uint a, uint y, uint b) {
     uint t = (x & 0xff00ff) * a + (y & 0xff00ff) * b;
     t = (t + ((t >> 8) & 0xff00ff) + 0x800080) >> 8;
@@ -578,9 +561,6 @@ static Q_ALWAYS_INLINE uint INTERPOLATE_PIXEL_255(uint x, uint a, uint y, uint b
     x |= t;
     return x;
 }
-#if defined(Q_CC_RVCT)
-#  pragma pop
-#endif
 
 #if QT_POINTER_SIZE == 8 // 64-bit versions
 
@@ -599,14 +579,6 @@ static Q_ALWAYS_INLINE uint BYTE_MUL(uint x, uint a) {
     return (uint(t)) | (uint(t >> 24));
 }
 
-static Q_ALWAYS_INLINE uint PREMUL(uint x) {
-    uint a = x >> 24;
-    quint64 t = (((quint64(x)) | ((quint64(x)) << 24)) & 0x00ff00ff00ff00ff) * a;
-    t = (t + ((t >> 8) & 0xff00ff00ff00ff) + 0x80008000800080) >> 8;
-    t &= 0x000000ff00ff00ff;
-    return (uint(t)) | (uint(t >> 24)) | (a << 24);
-}
-
 #else // 32-bit versions
 
 static Q_ALWAYS_INLINE uint INTERPOLATE_PIXEL_256(uint x, uint a, uint y, uint b) {
@@ -620,10 +592,6 @@ static Q_ALWAYS_INLINE uint INTERPOLATE_PIXEL_256(uint x, uint a, uint y, uint b
     return x;
 }
 
-#if defined(Q_CC_RVCT)
-#  pragma push
-#  pragma arm
-#endif
 static Q_ALWAYS_INLINE uint BYTE_MUL(uint x, uint a) {
     uint t = (x & 0xff00ff) * a;
     t = (t + ((t >> 8) & 0xff00ff) + 0x800080) >> 8;
@@ -635,24 +603,69 @@ static Q_ALWAYS_INLINE uint BYTE_MUL(uint x, uint a) {
     x |= t;
     return x;
 }
-#if defined(Q_CC_RVCT)
-#  pragma pop
 #endif
 
-static Q_ALWAYS_INLINE uint PREMUL(uint x) {
-    uint a = x >> 24;
-    uint t = (x & 0xff00ff) * a;
-    t = (t + ((t >> 8) & 0xff00ff) + 0x800080) >> 8;
-    t &= 0xff00ff;
+#ifdef __SSE2__
+static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
+{
+    // First interpolate right and left pixels in parallel.
+    __m128i vl = _mm_unpacklo_epi32(_mm_cvtsi32_si128(tl), _mm_cvtsi32_si128(bl));
+    __m128i vr = _mm_unpacklo_epi32(_mm_cvtsi32_si128(tr), _mm_cvtsi32_si128(br));
+    vl = _mm_unpacklo_epi8(vl, _mm_setzero_si128());
+    vr = _mm_unpacklo_epi8(vr, _mm_setzero_si128());
+    vl = _mm_mullo_epi16(vl, _mm_set1_epi16(256 - distx));
+    vr = _mm_mullo_epi16(vr, _mm_set1_epi16(distx));
+    __m128i vtb = _mm_add_epi16(vl, vr);
+    vtb = _mm_srli_epi16(vtb, 8);
+    // vtb now contains the result of the first two interpolate calls vtb = unpacked((xbot << 64) | xtop)
 
-    x = ((x >> 8) & 0xff) * a;
-    x = (x + ((x >> 8) & 0xff) + 0x80);
-    x &= 0xff00;
-    x |= t | (a << 24);
-    return x;
+    // Now the last interpolate between top and bottom interpolations.
+    const __m128i vidisty = _mm_shufflelo_epi16(_mm_cvtsi32_si128(256 - disty), _MM_SHUFFLE(0, 0, 0, 0));
+    const __m128i vdisty = _mm_shufflelo_epi16(_mm_cvtsi32_si128(disty), _MM_SHUFFLE(0, 0, 0, 0));
+    const __m128i vmuly = _mm_unpacklo_epi16(vidisty, vdisty);
+    vtb = _mm_unpacklo_epi16(vtb, _mm_srli_si128(vtb, 8));
+    // vtb now contains the colors of top and bottom interleaved { ta, ba, tr, br, tg, bg, tb, bb }
+    vtb = _mm_madd_epi16(vtb, vmuly); // Multiply and horizontal add.
+    vtb = _mm_srli_epi32(vtb, 8);
+    vtb = _mm_packs_epi32(vtb, _mm_setzero_si128());
+    vtb = _mm_packus_epi16(vtb, _mm_setzero_si128());
+    return _mm_cvtsi128_si32(vtb);
+}
+#else
+static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
+{
+    uint idistx = 256 - distx;
+    uint idisty = 256 - disty;
+    uint xtop = INTERPOLATE_PIXEL_256(tl, idistx, tr, distx);
+    uint xbot = INTERPOLATE_PIXEL_256(bl, idistx, br, distx);
+    return INTERPOLATE_PIXEL_256(xtop, idisty, xbot, disty);
 }
 #endif
 
+#if Q_BYTE_ORDER == Q_BIG_ENDIAN
+static Q_ALWAYS_INLINE quint32 RGBA2ARGB(quint32 x) {
+    quint32 rgb = x >> 8;
+    quint32 a = x << 24;
+    return a | rgb;
+}
+
+static Q_ALWAYS_INLINE quint32 ARGB2RGBA(quint32 x) {
+    quint32 rgb = x << 8;
+    quint32 a = x >> 24;
+    return a | rgb;
+}
+#else
+static Q_ALWAYS_INLINE quint32 RGBA2ARGB(quint32 x) {
+    // RGBA8888 is ABGR32 on little endian.
+    quint32 ag = x & 0xff00ff00;
+    quint32 rg = x & 0x00ff00ff;
+    return ag | (rg  << 16) | (rg >> 16);
+}
+
+static Q_ALWAYS_INLINE quint32 ARGB2RGBA(quint32 x) {
+    return RGBA2ARGB(x);
+}
+#endif
 
 static Q_ALWAYS_INLINE uint BYTE_MUL_RGB16(uint x, uint a) {
     a += 1;
@@ -667,18 +680,33 @@ static Q_ALWAYS_INLINE uint BYTE_MUL_RGB16_32(uint x, uint a) {
     return t;
 }
 
-#define INV_PREMUL(p)                                   \
-    (qAlpha(p) == 0 ? 0 :                               \
-    ((qAlpha(p) << 24)                                  \
-     | (((255*qRed(p))/ qAlpha(p)) << 16)               \
-     | (((255*qGreen(p)) / qAlpha(p))  << 8)            \
-     | ((255*qBlue(p)) / qAlpha(p))))
+static Q_ALWAYS_INLINE int qt_div_255(int x) { return (x + (x>>8) + 0x80) >> 8; }
+
+static Q_ALWAYS_INLINE uint BYTE_MUL_RGB30(uint x, uint a) {
+    uint xa = x >> 30;
+    uint xr = (x >> 20) & 0x3ff;
+    uint xg = (x >> 10) & 0x3ff;
+    uint xb = x & 0x3ff;
+    xa = qt_div_255(xa * a);
+    xr = qt_div_255(xr * a);
+    xg = qt_div_255(xg * a);
+    xb = qt_div_255(xb * a);
+    return (xa << 30) | (xr << 20) | (xg << 10) | xb;
+}
+
+static Q_ALWAYS_INLINE uint qAlphaRgb30(uint c)
+{
+    uint a = c >> 30;
+    a |= a << 2;
+    a |= a << 4;
+    return a;
+}
 
 struct quint24 {
     quint24(uint value);
     operator uint() const;
     uchar data[3];
-} Q_PACKED;
+};
 
 inline quint24::quint24(uint value)
 {
@@ -702,7 +730,6 @@ template<> inline void qt_memfill(quint32 *dest, quint32 color, int count)
 
 template<> inline void qt_memfill(quint16 *dest, quint16 color, int count)
 {
-    extern void (*qt_memfill16)(quint16 *dest, quint16 value, int count);
     qt_memfill16(dest, color, count);
 }
 
@@ -759,7 +786,7 @@ do {                                          \
     /* Duff's device */                       \
     uint *_d = (uint*)(dest) + length;         \
     const uint *_s = (uint*)(src) + length;    \
-    register int n = ((length) + 7) / 8;      \
+    int n = ((length) + 7) / 8;               \
     switch ((length) & 0x07)                  \
     {                                         \
     case 0: do { *--_d = *--_s;                 \
@@ -778,8 +805,8 @@ do {                                          \
 do {                                          \
     /* Duff's device */                       \
     ushort *_d = (ushort*)(dest);         \
-    const ushort *_s = (ushort*)(src);    \
-    register int n = ((length) + 7) / 8;      \
+    const ushort *_s = (const ushort*)(src);    \
+    int n = ((length) + 7) / 8;               \
     switch ((length) & 0x07)                  \
     {                                         \
     case 0: do { *_d++ = *_s++;                 \
@@ -793,15 +820,6 @@ do {                                          \
     } while (--n > 0);                        \
     }                                         \
 } while (0)
-
-#if defined(Q_CC_RVCT)
-#  pragma push
-#  pragma arm
-#endif
-static Q_ALWAYS_INLINE int qt_div_255(int x) { return (x + (x>>8) + 0x80) >> 8; }
-#if defined(Q_CC_RVCT)
-#  pragma pop
-#endif
 
 inline ushort qConvertRgb32To16(uint c)
 {
@@ -818,6 +836,101 @@ inline QRgb qConvertRgb16To32(uint c)
         | ((((c) << 8) & 0xf80000) | (((c) << 3) & 0x70000));
 }
 
+enum QtPixelOrder {
+    PixelOrderRGB,
+    PixelOrderBGR
+};
+
+template<enum QtPixelOrder> inline uint qConvertArgb32ToA2rgb30(QRgb);
+
+template<enum QtPixelOrder> inline uint qConvertRgb32ToRgb30(QRgb);
+
+template<enum QtPixelOrder> inline QRgb qConvertA2rgb30ToArgb32(uint c);
+
+// A combined unpremultiply and premultiply with new simplified alpha.
+// Needed when alpha loses precision relative to other colors during conversion (ARGB32 -> A2RGB30).
+template<unsigned int Shift>
+inline QRgb qRepremultiply(QRgb p)
+{
+    const uint alpha = qAlpha(p);
+    if (alpha == 255 || alpha == 0)
+        return p;
+    p = qUnpremultiply(p);
+    Q_CONSTEXPR  uint mult = 255 / (255 >> Shift);
+    const uint newAlpha = mult * (alpha >> Shift);
+    p = (p & ~0xff000000) | (newAlpha<<24);
+    return qPremultiply(p);
+}
+
+template<>
+inline uint qConvertArgb32ToA2rgb30<PixelOrderBGR>(QRgb c)
+{
+    c = qRepremultiply<6>(c);
+    return (c & 0xc0000000)
+        | (((c << 22) & 0x3fc00000) | ((c << 14) & 0x00300000))
+        | (((c << 4) & 0x000ff000) | ((c >> 4) & 0x00000c00))
+        | (((c >> 14) & 0x000003fc) | ((c >> 22) & 0x00000003));
+}
+
+template<>
+inline uint qConvertArgb32ToA2rgb30<PixelOrderRGB>(QRgb c)
+{
+    c = qRepremultiply<6>(c);
+    return (c & 0xc0000000)
+        | (((c << 6) & 0x3fc00000) | ((c >> 2) & 0x00300000))
+        | (((c << 4) & 0x000ff000) | ((c >> 4) & 0x00000c00))
+        | (((c << 2) & 0x000003fc) | ((c >> 6) & 0x00000003));
+}
+
+template<>
+inline uint qConvertRgb32ToRgb30<PixelOrderBGR>(QRgb c)
+{
+    return 0xc0000000
+        | (((c << 22) & 0x3fc00000) | ((c << 14) & 0x00300000))
+        | (((c << 4) & 0x000ff000) | ((c >> 4) & 0x00000c00))
+        | (((c >> 14) & 0x000003fc) | ((c >> 22) & 0x00000003));
+}
+
+template<>
+inline uint qConvertRgb32ToRgb30<PixelOrderRGB>(QRgb c)
+{
+    return 0xc0000000
+        | (((c << 6) & 0x3fc00000) | ((c >> 2) & 0x00300000))
+        | (((c << 4) & 0x000ff000) | ((c >> 4) & 0x00000c00))
+        | (((c << 2) & 0x000003fc) | ((c >> 6) & 0x00000003));
+}
+
+template<>
+inline QRgb qConvertA2rgb30ToArgb32<PixelOrderBGR>(uint c)
+{
+    uint a = c >> 30;
+    a |= a << 2;
+    a |= a << 4;
+    return (a << 24)
+        | ((c << 14) & 0x00ff0000)
+        | ((c >> 4) & 0x0000ff00)
+        | ((c >> 22) & 0x000000ff);
+}
+
+template<>
+inline QRgb qConvertA2rgb30ToArgb32<PixelOrderRGB>(uint c)
+{
+    uint a = c >> 30;
+    a |= a << 2;
+    a |= a << 4;
+    return (a << 24)
+        | ((c >> 6) & 0x00ff0000)
+        | ((c >> 4) & 0x0000ff00)
+        | ((c >> 2) & 0x000000ff);
+}
+
+inline uint qRgbSwapRgb30(uint c)
+{
+    const uint ag = c & 0xc00ffc00;
+    const uint rb = c & 0x3ff003ff;
+    return ag | (rb << 20) | (rb >> 20);
+}
+
 inline int qRed565(quint16 rgb) {
     const int r = (rgb & 0xf800);
     return (r >> 8) | (r >> 13);
@@ -832,6 +945,22 @@ inline int qBlue565(quint16 rgb) {
     const int b = (rgb & 0x001f);
     return (b << 3) | (b >> 2);
 }
+
+
+static Q_ALWAYS_INLINE const uint *qt_convertARGB32ToARGB32PM(uint *buffer, const uint *src, int count)
+{
+    for (int i = 0; i < count; ++i)
+        buffer[i] = qPremultiply(src[i]);
+    return buffer;
+}
+
+static Q_ALWAYS_INLINE const uint *qt_convertRGBA8888ToARGB32PM(uint *buffer, const uint *src, int count)
+{
+    for (int i = 0; i < count; ++i)
+        buffer[i] = qPremultiply(RGBA2ARGB(src[i]));
+    return buffer;
+}
+
 
 const uint qt_bayer_matrix[16][16] = {
     { 0x1, 0xc0, 0x30, 0xf0, 0xc, 0xcc, 0x3c, 0xfc,
@@ -1007,14 +1136,15 @@ struct QPixelLayout
     BPP bpp;
     ConvertFunc convertToARGB32PM;
     ConvertFunc convertFromARGB32PM;
+    ConvertFunc convertFromRGB32;
 };
 
 typedef const uint *(QT_FASTCALL *FetchPixelsFunc)(uint *buffer, const uchar *src, int index, int count);
 typedef void (QT_FASTCALL *StorePixelsFunc)(uchar *dest, const uint *src, int index, int count);
 
 extern QPixelLayout qPixelLayouts[QImage::NImageFormats];
-extern FetchPixelsFunc qFetchPixels[QPixelLayout::BPPCount];
-extern StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
+extern const FetchPixelsFunc qFetchPixels[QPixelLayout::BPPCount];
+extern const StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
 
 
 

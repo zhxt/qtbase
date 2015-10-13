@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -242,7 +234,7 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     isSymLink(). The symLinkTarget() function provides the name of the file
     the symlink points to.
 
-    On Unix (including Mac OS X), the symlink has the same size() has
+    On Unix (including OS X and iOS), the symlink has the same size() has
     the file it points to, because Unix handles symlinks
     transparently; similarly, opening a symlink using QFile
     effectively opens the link's target. For example:
@@ -271,6 +263,18 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     groupId(). You can examine a file's permissions and ownership in a
     single statement using the permission() function.
 
+    \target NTFS permissions
+    \note On NTFS file systems, ownership and permissions checking is
+    disabled by default for performance reasons. To enable it,
+    include the following line:
+
+    \snippet ntfsp.cpp 0
+
+    Permission checking is then turned on and off by incrementing and
+    decrementing \c qt_ntfs_permission_lookup by 1.
+
+    \snippet ntfsp.cpp 1
+
     \section1 Performance Issues
 
     Some of QFileInfo's functions query the file system, but for
@@ -291,6 +295,14 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     every time you request information from it call setCaching(false).
 
     \sa QDir, QFile
+*/
+
+/*!
+    \fn QFileInfo &QFileInfo::operator=(QFileInfo &&other)
+
+    Move-assigns \a other to this QFileInfo instance.
+
+    \since 5.2
 */
 
 /*!
@@ -371,15 +383,15 @@ QFileInfo::~QFileInfo()
 /*!
     \fn bool QFileInfo::operator!=(const QFileInfo &fileinfo) const
 
-    Returns true if this QFileInfo object refers to a different file
-    than the one specified by \a fileinfo; otherwise returns false.
+    Returns \c true if this QFileInfo object refers to a different file
+    than the one specified by \a fileinfo; otherwise returns \c false.
 
     \sa operator==()
 */
 
 /*!
-    Returns true if this QFileInfo object refers to a file in the same
-    location as \a fileinfo; otherwise returns false.
+    Returns \c true if this QFileInfo object refers to a file in the same
+    location as \a fileinfo; otherwise returns \c false.
 
     Note that the result of comparing two empty QFileInfo objects,
     containing no file references (file paths that do not exist or
@@ -511,7 +523,8 @@ void QFileInfo::setFile(const QDir &dir, const QString &file)
     is true. In contrast to canonicalFilePath(), symbolic links or
     redundant "." or ".." elements are not necessarily removed.
 
-    If the QFileInfo is empty it returns QDir::currentPath().
+    \warning If filePath() is empty the behavior of this function
+            is undefined.
 
     \sa filePath(), canonicalFilePath(), isRelative()
 */
@@ -553,8 +566,8 @@ QString QFileInfo::canonicalFilePath() const
     In contrast to canonicalPath() symbolic links or redundant "." or
     ".." elements are not necessarily removed.
 
-    \warning If the QFileInfo object was created with an empty QString,
-              the behavior of this function is undefined.
+    \warning If filePath() is empty the behavior of this function
+             is undefined.
 
     \sa absoluteFilePath(), path(), canonicalPath(), fileName(), isRelative()
 */
@@ -607,14 +620,14 @@ QString QFileInfo::path() const
 /*!
     \fn bool QFileInfo::isAbsolute() const
 
-    Returns true if the file path name is absolute, otherwise returns
+    Returns \c true if the file path name is absolute, otherwise returns
     false if the path is relative.
 
     \sa isRelative()
 */
 
 /*!
-    Returns true if the file path name is relative, otherwise returns
+    Returns \c true if the file path name is relative, otherwise returns
     false if the path is absolute (e.g. under Unix a path is absolute
     if it begins with a "/").
 
@@ -632,7 +645,7 @@ bool QFileInfo::isRelative() const
 
 /*!
     Converts the file's path to an absolute path if it is not already in that form.
-    Returns true to indicate that the path was converted; otherwise returns false
+    Returns \c true to indicate that the path was converted; otherwise returns \c false
     to indicate that the path was already absolute.
 
     \sa filePath(), isRelative()
@@ -648,10 +661,10 @@ bool QFileInfo::makeAbsolute()
 }
 
 /*!
-    Returns true if the file exists; otherwise returns false.
+    Returns \c true if the file exists; otherwise returns \c false.
 
-    \note If the file is a symlink that points to a non existing
-     file, false is returned.
+    \note If the file is a symlink that points to a non-existing
+    file, false is returned.
 */
 bool QFileInfo::exists() const
 {
@@ -664,6 +677,31 @@ bool QFileInfo::exists() const
         return d->metaData.exists();
     }
     return d->getFileFlags(QAbstractFileEngine::ExistsFlag);
+}
+
+/*!
+    \since 5.2
+
+    Returns \c true if the \a file exists; otherwise returns \c false.
+
+    \note If \a file is a symlink that points to a non-existing
+    file, false is returned.
+
+    \note Using this function is faster than using
+    \c QFileInfo(file).exists() for file system access.
+*/
+bool QFileInfo::exists(const QString &file)
+{
+    QFileSystemEntry entry(file);
+    QFileSystemMetaData data;
+    QAbstractFileEngine *engine =
+        QFileSystemEngine::resolveEntryAndCreateLegacyEngine(entry, data);
+    // Expensive fallback to non-QFileSystemEngine implementation
+    if (engine)
+        return QFileInfo(new QFileInfoPrivate(entry, data, engine)).exists();
+
+    QFileSystemEngine::fillMetaData(entry, data, QFileSystemMetaData::ExistsAttribute);
+    return data.exists();
 }
 
 /*!
@@ -716,7 +754,7 @@ QString QFileInfo::fileName() const
     \since 4.3
     Returns the name of the bundle.
 
-    On Mac OS X this returns the proper localized name for a bundle if the
+    On OS X and iOS this returns the proper localized name for a bundle if the
     path isBundle(). On all other platforms an empty QString is returned.
 
     Example:
@@ -854,7 +892,10 @@ QDir QFileInfo::absoluteDir() const
 }
 
 /*!
-    Returns true if the user can read the file; otherwise returns false.
+    Returns \c true if the user can read the file; otherwise returns \c false.
+
+    \note If the \l{NTFS permissions} check has not been enabled, the result
+    on Windows will merely reflect whether the file exists.
 
     \sa isWritable(), isExecutable(), permission()
 */
@@ -872,7 +913,10 @@ bool QFileInfo::isReadable() const
 }
 
 /*!
-    Returns true if the user can write to the file; otherwise returns false.
+    Returns \c true if the user can write to the file; otherwise returns \c false.
+
+    \note If the \l{NTFS permissions} check has not been enabled, the result on
+    Windows will merely reflect whether the file is marked as Read Only.
 
     \sa isReadable(), isExecutable(), permission()
 */
@@ -890,7 +934,7 @@ bool QFileInfo::isWritable() const
 }
 
 /*!
-    Returns true if the file is executable; otherwise returns false.
+    Returns \c true if the file is executable; otherwise returns \c false.
 
     \sa isReadable(), isWritable(), permission()
 */
@@ -908,9 +952,9 @@ bool QFileInfo::isExecutable() const
 }
 
 /*!
-    Returns true if this is a `hidden' file; otherwise returns false.
+    Returns \c true if this is a `hidden' file; otherwise returns \c false.
 
-    \b{Note:} This function returns true for the special entries
+    \b{Note:} This function returns \c true for the special entries
     "." and ".." on Unix, even though QDir::entryList threats them as shown.
 */
 bool QFileInfo::isHidden() const
@@ -928,8 +972,8 @@ bool QFileInfo::isHidden() const
 
 /*!
     \since 5.0
-    Returns true if the file path can be used directly with native APIs.
-    Returns false if the file is otherwise supported by a virtual file system
+    Returns \c true if the file path can be used directly with native APIs.
+    Returns \c false if the file is otherwise supported by a virtual file system
     inside Qt, such as \l{the Qt Resource System}.
 
     \b{Note:} Native paths may still require conversion of path separators
@@ -950,8 +994,8 @@ bool QFileInfo::isNativePath() const
 }
 
 /*!
-    Returns true if this object points to a file or to a symbolic
-    link to a file. Returns false if the
+    Returns \c true if this object points to a file or to a symbolic
+    link to a file. Returns \c false if the
     object points to something which isn't a file, such as a directory.
 
     \sa isDir(), isSymLink(), isBundle()
@@ -970,8 +1014,8 @@ bool QFileInfo::isFile() const
 }
 
 /*!
-    Returns true if this object points to a directory or to a symbolic
-    link to a directory; otherwise returns false.
+    Returns \c true if this object points to a directory or to a symbolic
+    link to a directory; otherwise returns \c false.
 
     \sa isFile(), isSymLink(), isBundle()
 */
@@ -991,8 +1035,8 @@ bool QFileInfo::isDir() const
 
 /*!
     \since 4.3
-    Returns true if this object points to a bundle or to a symbolic
-    link to a bundle on Mac OS X; otherwise returns false.
+    Returns \c true if this object points to a bundle or to a symbolic
+    link to a bundle on OS X and iOS; otherwise returns \c false.
 
     \sa isDir(), isSymLink(), isFile()
 */
@@ -1010,10 +1054,10 @@ bool QFileInfo::isBundle() const
 }
 
 /*!
-    Returns true if this object points to a symbolic link (or to a
-    shortcut on Windows); otherwise returns false.
+    Returns \c true if this object points to a symbolic link (or to a
+    shortcut on Windows); otherwise returns \c false.
 
-    On Unix (including Mac OS X), opening a symlink effectively opens
+    On Unix (including OS X and iOS), opening a symlink effectively opens
     the \l{symLinkTarget()}{link's target}. On Windows, it opens the \c
     .lnk file itself.
 
@@ -1040,9 +1084,9 @@ bool QFileInfo::isSymLink() const
 }
 
 /*!
-    Returns true if the object points to a directory or to a symbolic
+    Returns \c true if the object points to a directory or to a symbolic
     link to a directory, and that directory is the root directory; otherwise
-    returns false.
+    returns \c false.
 */
 bool QFileInfo::isRoot() const
 {
@@ -1075,7 +1119,7 @@ bool QFileInfo::isRoot() const
     link.
 
     This name may not represent an existing file; it is only a string.
-    QFileInfo::exists() returns true if the symlink points to an
+    QFileInfo::exists() returns \c true if the symlink points to an
     existing file.
 
     \sa exists(), isSymLink(), isDir(), isFile()
@@ -1100,7 +1144,8 @@ QString QFileInfo::readLink() const
     returned.
 
     This function can be time consuming under Unix (in the order of
-    milliseconds).
+    milliseconds). On Windows, it will return an empty string unless
+    the \l{NTFS permissions} check has been enabled.
 
     \sa ownerId(), group(), groupId()
 */
@@ -1178,7 +1223,10 @@ uint QFileInfo::groupId() const
     for permission combinations.
 
     On systems where files do not have permissions this function
-    always returns true.
+    always returns \c true.
+
+    \note The result might be inaccurate on Windows if the
+    \l{NTFS permissions} check has not been enabled.
 
     Example:
     \snippet code/src_corelib_io_qfileinfo.cpp 10
@@ -1203,6 +1251,9 @@ bool QFileInfo::permission(QFile::Permissions permissions) const
 /*!
     Returns the complete OR-ed together combination of
     QFile::Permissions for the file.
+
+    \note The result might be inaccurate on Windows if the
+    \l{NTFS permissions} check has not been enabled.
 */
 QFile::Permissions QFileInfo::permissions() const
 {
@@ -1318,7 +1369,7 @@ QFileInfoPrivate* QFileInfo::d_func()
 }
 
 /*!
-    Returns true if caching is enabled; otherwise returns false.
+    Returns \c true if caching is enabled; otherwise returns \c false.
 
     \sa setCaching(), refresh()
 */

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -218,8 +210,8 @@ void QPolygon::translate(int dx, int dy)
     if (dx == 0 && dy == 0)
         return;
 
-    register QPoint *p = data();
-    register int i = size();
+    QPoint *p = data();
+    int i = size();
     QPoint pt(dx, dy);
     while (i--) {
         *p += pt;
@@ -447,7 +439,7 @@ QRect QPolygon::boundingRect() const
 {
     if (isEmpty())
         return QRect(0, 0, 0, 0);
-    register const QPoint *pd = constData();
+    const QPoint *pd = constData();
     int minx, maxx, miny, maxy;
     minx = maxx = pd->x();
     miny = maxy = pd->y();
@@ -469,11 +461,12 @@ QRect QPolygon::boundingRect() const
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QPolygon &a)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QPolygon(";
     for (int i = 0; i < a.count(); ++i)
         dbg.nospace() << a.at(i);
     dbg.nospace() << ')';
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -599,8 +592,8 @@ void QPolygonF::translate(const QPointF &offset)
     if (offset.isNull())
         return;
 
-    register QPointF *p = data();
-    register int i = size();
+    QPointF *p = data();
+    int i = size();
     while (i--) {
         *p += offset;
         ++p;
@@ -642,7 +635,7 @@ QPolygonF QPolygonF::translated(const QPointF &offset) const
 /*!
     \fn bool QPolygonF::isClosed() const
 
-    Returns true if the polygon is closed; otherwise returns false.
+    Returns \c true if the polygon is closed; otherwise returns \c false.
 
     A polygon is said to be closed if its start point and end point are equal.
 
@@ -660,7 +653,7 @@ QRectF QPolygonF::boundingRect() const
 {
     if (isEmpty())
         return QRectF(0, 0, 0, 0);
-    register const QPointF *pd = constData();
+    const QPointF *pd = constData();
     qreal minx, maxx, miny, maxy;
     minx = maxx = pd->x();
     miny = maxy = pd->y();
@@ -810,11 +803,12 @@ QDataStream &operator>>(QDataStream &s, QPolygonF &a)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QPolygonF &a)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QPolygonF(";
     for (int i = 0; i < a.count(); ++i)
         dbg.nospace() << a.at(i);
     dbg.nospace() << ')';
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -824,8 +818,8 @@ QDebug operator<<(QDebug dbg, const QPolygonF &a)
 
     \fn bool QPolygonF::containsPoint(const QPointF &point, Qt::FillRule fillRule) const
 
-    Returns true if the given \a point is inside the polygon according to
-    the specified \a fillRule; otherwise returns false.
+    Returns \c true if the given \a point is inside the polygon according to
+    the specified \a fillRule; otherwise returns \c false.
 */
 bool QPolygonF::containsPoint(const QPointF &pt, Qt::FillRule fillRule) const
 {
@@ -855,8 +849,8 @@ bool QPolygonF::containsPoint(const QPointF &pt, Qt::FillRule fillRule) const
     \since 4.3
 
     \fn bool QPolygon::containsPoint(const QPoint &point, Qt::FillRule fillRule) const
-    Returns true if the given \a point is inside the polygon according to
-    the specified \a fillRule; otherwise returns false.
+    Returns \c true if the given \a point is inside the polygon according to
+    the specified \a fillRule; otherwise returns \c false.
 */
 bool QPolygon::containsPoint(const QPoint &pt, Qt::FillRule fillRule) const
 {

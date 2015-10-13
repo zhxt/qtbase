@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -126,11 +118,13 @@ private slots:
     void spanningItem2x3_data();
     void spanningItem2x3();
     void spanningItem();
+    void spanAcrossEmptyRow();
     void heightForWidth();
     void widthForHeight();
     void heightForWidthWithSpanning();
     void stretchAndHeightForWidth();
     void testDefaultAlignment();
+    void hiddenItems();
 };
 
 class RectWidget : public QGraphicsWidget
@@ -1688,6 +1682,23 @@ void tst_QGraphicsGridLayout::sizeHint_data()
                             << QSizeF(100, 100)
                             << QSizeF(100, 100);
 
+    QTest::newRow("colSpan_with_ignored_column") << (ItemList()
+                                    << ItemDesc(0,0)
+                                        .minSize(QSizeF(40,20))
+                                        .maxSize(QSizeF(60,20))
+                                        .colSpan(2)
+                                    << ItemDesc(0,2)
+                                        .minSize(QSizeF(20, 20))
+                                        .maxSize(QSizeF(30, 20))
+                                    << ItemDesc(1,0)
+                                        .minSize(QSizeF(60, 20))
+                                        .maxSize(QSizeF(90, 20))
+                                        .colSpan(3)
+                                )
+                            << QSizeF(60, 40)
+                            << QSizeF(80, 40)
+                            << QSizeF(90, 40);
+
 }
 
 // public QSizeF sizeHint(Qt::SizeHint which, QSizeF const& constraint = QSizeF()) const
@@ -2973,7 +2984,7 @@ void tst_QGraphicsGridLayout::geometries()
 void tst_QGraphicsGridLayout::avoidRecursionInInsertItem()
 {
     QGraphicsWidget window(0, Qt::Window);
-	QGraphicsGridLayout *layout = new QGraphicsGridLayout(&window);
+    QGraphicsGridLayout *layout = new QGraphicsGridLayout(&window);
     QCOMPARE(layout->count(), 0);
     QTest::ignoreMessage(QtWarningMsg, "QGraphicsGridLayout::addItem: cannot insert itself");
     layout->addItem(layout, 0, 0);
@@ -3192,23 +3203,19 @@ void tst_QGraphicsGridLayout::heightForWidthWithSpanning()
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(-1, -1)), QSizeF(1, 1));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(-1, -1)), QSizeF(200, 100));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
     QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(-1, -1)), QSizeF(30000, 30000));
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(200, -1)), QSizeF(200, 100));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(200, -1)), QSizeF(200, 100));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
     QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(200, -1)), QSizeF(200, 100));
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(2, -1)), QSizeF(2, 10000));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(2, -1)), QSizeF(2, 10000));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
     QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(2, -1)), QSizeF(2, 10000));
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(200, -1)), QSizeF(200, 100));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(200, -1)), QSizeF(200, 100));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
-    QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(200, -1)), QSizeF(200, 10000));
+    QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(200, -1)), QSizeF(200, 100));
 }
 
 Q_DECLARE_METATYPE(QSizePolicy::Policy)
@@ -3364,6 +3371,37 @@ void tst_QGraphicsGridLayout::spanningItem()
     QCOMPARE(layout->maximumSize(), QSizeF(160,80));
 }
 
+void tst_QGraphicsGridLayout::spanAcrossEmptyRow()
+{
+    QGraphicsWidget *form = new QGraphicsWidget(0, Qt::Window);
+    QGraphicsGridLayout *layout = new QGraphicsGridLayout(form);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    RectWidget *w1 = new RectWidget;
+    RectWidget *w2 = new RectWidget;
+    RectWidget *w3 = new RectWidget;
+
+    QSizeF size(10, 10);
+    for (int i = 0; i < 3; ++i) {
+        w1->setSizeHint((Qt::SizeHint)i, size);
+        w2->setSizeHint((Qt::SizeHint)i, size);
+        w3->setSizeHint((Qt::SizeHint)i, size);
+        size+=size;                 //[(10,10), (20,20), (40,40)]
+    }
+    layout->addItem(w1, 0, 0, 1, 1);
+    layout->addItem(w2, 0, 1, 1, 2);
+    layout->addItem(w3, 0, 99, 1, 1);
+
+    form->resize(60,20);
+    QCOMPARE(w1->geometry(), QRectF( 0, 0, 20, 20));
+    QCOMPARE(w2->geometry(), QRectF(20, 0, 20, 20));
+    QCOMPARE(w3->geometry(), QRectF(40, 0, 20, 20));
+
+    QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize), QSizeF(30, 10));
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize), QSizeF(60, 20));
+    QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize), QSizeF(120, 40));
+}
+
 void tst_QGraphicsGridLayout::stretchAndHeightForWidth()
 {
     QGraphicsWidget *widget = new QGraphicsWidget(0, Qt::Window);
@@ -3465,6 +3503,94 @@ void tst_QGraphicsGridLayout::testDefaultAlignment()
     QCOMPARE(w->geometry(), QRectF(0,0,50,50));
     QCOMPARE(w2->geometry(), QRectF(0,50,100,100));
 }
+
+static RectWidget *addWidget(QGraphicsGridLayout *grid, int row, int column)
+{
+    RectWidget *w = new RectWidget;
+    w->setPreferredSize(20, 20);
+    grid->addItem(w, row, column);
+    return w;
+}
+
+static void setVisible(bool visible, QGraphicsWidget **widgets)
+{
+    for (int i = 0; i < 3; ++i)
+        if (widgets[i]) widgets[i]->setVisible(visible);
+}
+
+static void setRetainSizeWhenHidden(bool retainSize, QGraphicsWidget **widgets)
+{
+    QSizePolicy sp = widgets[0]->sizePolicy();
+    sp.setRetainSizeWhenHidden(retainSize);
+    for (int i = 0; i < 3; ++i)
+        if (widgets[i]) widgets[i]->setSizePolicy(sp);
+}
+
+void tst_QGraphicsGridLayout::hiddenItems()
+{
+    QGraphicsWidget *widget = new QGraphicsWidget;
+    QGraphicsGridLayout *layout = new QGraphicsGridLayout(widget);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+
+    // Create a 3x3 layout
+    addWidget(layout, 0, 0);
+    RectWidget *w01 = addWidget(layout, 0, 1);
+    addWidget(layout, 0, 2);
+    RectWidget *w10 = addWidget(layout, 1, 0);
+    RectWidget *w11 = addWidget(layout, 1, 1);
+    RectWidget *w12 = addWidget(layout, 1, 2);
+    addWidget(layout, 2, 0);
+    RectWidget *w21 = addWidget(layout, 2, 1);
+    addWidget(layout, 2, 2);
+
+    QGraphicsWidget *middleColumn[] = {w01, w11, w21 };
+    QGraphicsWidget *topTwoOfMiddleColumn[] = {w01, w11, 0 };
+
+    // hide and show middle column
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    setVisible(false, middleColumn);   // hide middle column
+    QCOMPARE(layout->preferredWidth(), qreal(42));
+    setVisible(true, middleColumn);    // show middle column
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    setRetainSizeWhenHidden(true, middleColumn);
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    setVisible(false, middleColumn);   // hide middle column
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    setRetainSizeWhenHidden(false, middleColumn);
+    QCOMPARE(layout->preferredWidth(), qreal(42));
+    setVisible(true, middleColumn);
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+
+    // Hide only two items, => column should not collapse
+    setVisible(false, topTwoOfMiddleColumn);
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+
+
+    QGraphicsWidget *middleRow[] = {w10, w11, w12 };
+    QGraphicsWidget *leftMostTwoOfMiddleRow[] = {w10, w11, 0 };
+
+    // hide and show middle row
+    QCOMPARE(layout->preferredHeight(), qreal(64));
+    setVisible(false, middleRow);
+    QCOMPARE(layout->preferredHeight(), qreal(42));
+    setVisible(true, middleRow);
+    QCOMPARE(layout->preferredHeight(), qreal(64));
+    setRetainSizeWhenHidden(true, middleColumn);
+    QCOMPARE(layout->preferredHeight(), qreal(64));
+    setVisible(false, middleRow);
+    QCOMPARE(layout->preferredHeight(), qreal(64));
+    setRetainSizeWhenHidden(false, middleRow);
+    QCOMPARE(layout->preferredHeight(), qreal(42));
+    setVisible(true, middleRow);
+    QCOMPARE(layout->preferredHeight(), qreal(64));
+
+    // Hide only two items => row should not collapse
+    setVisible(false, leftMostTwoOfMiddleRow);
+    QCOMPARE(layout->preferredHeight(), qreal(64));
+
+}
+
 QTEST_MAIN(tst_QGraphicsGridLayout)
 #include "tst_qgraphicsgridlayout.moc"
 

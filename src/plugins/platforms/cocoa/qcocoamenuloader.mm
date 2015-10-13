@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -69,7 +61,7 @@ QT_BEGIN_NAMESPACE
     and written to QDir::temp() before loading. (Earlier Qt versions used
     to require having the nib file in the Qt GUI framework.)
 */
-void qt_mac_loadMenuNib(QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader)
+void qt_mac_loadMenuNib(QCocoaMenuLoader *qtMenuLoader)
 {
     // Create qt_menu.nib dir in temp.
     QDir temp = QDir::temp();
@@ -87,7 +79,11 @@ void qt_mac_loadMenuNib(QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader)
         return;
     }
     foreach (const QFileInfo &file, nibResource.entryInfoList()) {
-        QFile::copy(file.absoluteFilePath(), nibDir + QLatin1String("/") + file.fileName());
+        QFileInfo destinationFile(nibDir + QLatin1String("/") + file.fileName());
+        if (destinationFile.exists() && destinationFile.size() != file.size())
+            QFile::remove(destinationFile.absoluteFilePath());
+
+        QFile::copy(file.absoluteFilePath(), destinationFile.absoluteFilePath());
     }
 
     // Load and instantiate nib file from temp
@@ -106,7 +102,7 @@ void qt_mac_loadMenuNib(QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader)
 
 QT_END_NAMESPACE
 
-@implementation QT_MANGLE_NAMESPACE(QCocoaMenuLoader)
+@implementation QCocoaMenuLoader
 
 - (void)awakeFromNib
 {
@@ -115,14 +111,13 @@ QT_END_NAMESPACE
     showAllItem = [[appMenu itemWithTitle:@"Show All"] retain];
 
     // Get the names in the nib to match the app name set by Qt.
-    const NSString *appName = reinterpret_cast<const NSString*>(QCFString::toCFStringRef(qt_mac_applicationName()));
+    const NSString *appName = qt_mac_applicationName().toNSString();
     [quitItem setTitle:[[quitItem title] stringByReplacingOccurrencesOfString:@"NewApplication"
                                                                    withString:const_cast<NSString *>(appName)]];
     [hideItem setTitle:[[hideItem title] stringByReplacingOccurrencesOfString:@"NewApplication"
                                                                    withString:const_cast<NSString *>(appName)]];
     [aboutItem setTitle:[[aboutItem title] stringByReplacingOccurrencesOfString:@"NewApplication"
                                                                    withString:const_cast<NSString *>(appName)]];
-    [appName release];
     // Disable the items that don't do anything. If someone associates a QAction with them
     // They should get synced back in.
     [preferencesItem setEnabled:NO];
@@ -175,7 +170,7 @@ QT_END_NAMESPACE
 - (void)removeActionsFromAppMenu
 {
     for (NSMenuItem *item in [appMenu itemArray])
-        [item setTag:nil];
+        [item setTag:0];
 }
 
 - (void)dealloc

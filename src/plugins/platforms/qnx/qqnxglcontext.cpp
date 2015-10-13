@@ -1,48 +1,39 @@
 /***************************************************************************
 **
-** Copyright (C) 2011 - 2012 Research In Motion
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2011 - 2013 BlackBerry Limited. All rights reserved.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qqnxglcontext.h"
-#include "qqnxrootwindow.h"
 #include "qqnxscreen.h"
-#include "qqnxwindow.h"
+#include "qqnxeglwindow.h"
 
 #include "private/qeglconvenience_p.h"
 
@@ -60,36 +51,10 @@ QT_BEGIN_NAMESPACE
 
 EGLDisplay QQnxGLContext::ms_eglDisplay = EGL_NO_DISPLAY;
 
-static EGLenum checkEGLError(const char *msg)
-{
-    static const char *errmsg[] =
-    {
-        "EGL function succeeded",
-        "EGL is not initialized, or could not be initialized, for the specified display",
-        "EGL cannot access a requested resource",
-        "EGL failed to allocate resources for the requested operation",
-        "EGL fail to access an unrecognized attribute or attribute value was passed in an attribute list",
-        "EGLConfig argument does not name a valid EGLConfig",
-        "EGLContext argument does not name a valid EGLContext",
-        "EGL current surface of the calling thread is no longer valid",
-        "EGLDisplay argument does not name a valid EGLDisplay",
-        "EGL arguments are inconsistent",
-        "EGLNativePixmapType argument does not refer to a valid native pixmap",
-        "EGLNativeWindowType argument does not refer to a valid native window",
-        "EGL one or more argument values are invalid",
-        "EGLSurface argument does not name a valid surface configured for rendering",
-        "EGL power management event has occurred",
-    };
-    EGLenum error = eglGetError();
-    fprintf(stderr, "%s: %s\n", msg, errmsg[error - EGL_SUCCESS]);
-    return error;
-}
-
 QQnxGLContext::QQnxGLContext(QOpenGLContext *glContext)
     : QPlatformOpenGLContext(),
       m_glContext(glContext),
-      m_eglSurface(EGL_NO_SURFACE),
-      m_newSurfaceRequested(true)   // Create a surface the first time makeCurrent() is called
+      m_currentEglSurface(EGL_NO_SURFACE)
 {
     qGLContextDebug() << Q_FUNC_INFO;
     QSurfaceFormat format = m_glContext->format();
@@ -151,7 +116,11 @@ QQnxGLContext::QQnxGLContext(QOpenGLContext *glContext)
     if (m_eglConfig == 0)
         qFatal("QQnxGLContext: failed to find EGL config");
 
-    m_eglContext = eglCreateContext(ms_eglDisplay, m_eglConfig, EGL_NO_CONTEXT, contextAttrs());
+    QQnxGLContext *glShareContext = static_cast<QQnxGLContext*>(m_glContext->shareHandle());
+    m_eglShareContext = glShareContext ? glShareContext->m_eglContext : EGL_NO_CONTEXT;
+
+    m_eglContext = eglCreateContext(ms_eglDisplay, m_eglConfig, m_eglShareContext,
+                                    contextAttrs(format));
     if (m_eglContext == EGL_NO_CONTEXT) {
         checkEGLError("eglCreateContext");
         qFatal("QQnxGLContext: failed to create EGL context, err=%d", eglGetError());
@@ -168,12 +137,34 @@ QQnxGLContext::~QQnxGLContext()
     // Cleanup EGL context if it exists
     if (m_eglContext != EGL_NO_CONTEXT)
         eglDestroyContext(ms_eglDisplay, m_eglContext);
-
-    // Cleanup EGL surface if it exists
-    destroySurface();
 }
 
-void QQnxGLContext::initialize()
+EGLenum QQnxGLContext::checkEGLError(const char *msg)
+{
+    static const char *errmsg[] =
+    {
+        "EGL function succeeded",
+        "EGL is not initialized, or could not be initialized, for the specified display",
+        "EGL cannot access a requested resource",
+        "EGL failed to allocate resources for the requested operation",
+        "EGL fail to access an unrecognized attribute or attribute value was passed in an attribute list",
+        "EGLConfig argument does not name a valid EGLConfig",
+        "EGLContext argument does not name a valid EGLContext",
+        "EGL current surface of the calling thread is no longer valid",
+        "EGLDisplay argument does not name a valid EGLDisplay",
+        "EGL arguments are inconsistent",
+        "EGLNativePixmapType argument does not refer to a valid native pixmap",
+        "EGLNativeWindowType argument does not refer to a valid native window",
+        "EGL one or more argument values are invalid",
+        "EGLSurface argument does not name a valid surface configured for rendering",
+        "EGL power management event has occurred",
+    };
+    EGLenum error = eglGetError();
+    fprintf(stderr, "%s: %s\n", msg, errmsg[error - EGL_SUCCESS]);
+    return error;
+}
+
+void QQnxGLContext::initializeContext()
 {
     qGLContextDebug() << Q_FUNC_INFO;
 
@@ -191,18 +182,12 @@ void QQnxGLContext::initialize()
     }
 }
 
-void QQnxGLContext::shutdown()
+void QQnxGLContext::shutdownContext()
 {
     qGLContextDebug() << Q_FUNC_INFO;
 
     // Close connection to EGL
     eglTerminate(ms_eglDisplay);
-}
-
-void QQnxGLContext::requestSurfaceChange()
-{
-    qGLContextDebug() << Q_FUNC_INFO;
-    m_newSurfaceRequested.testAndSetRelease(false, true);
 }
 
 bool QQnxGLContext::makeCurrent(QPlatformSurface *surface)
@@ -216,17 +201,22 @@ bool QQnxGLContext::makeCurrent(QPlatformSurface *surface)
     if (eglResult != EGL_TRUE)
         qFatal("QQnxGLContext: failed to set EGL API, err=%d", eglGetError());
 
-    if (m_newSurfaceRequested.testAndSetOrdered(true, false)) {
-        qGLContextDebug() << "New EGL surface requested";
+    QQnxEglWindow *platformWindow = dynamic_cast<QQnxEglWindow*>(surface);
+    if (!platformWindow)
+        return false;
+
+    platformWindow->setPlatformOpenGLContext(this);
+
+    if (m_currentEglSurface == EGL_NO_SURFACE || m_currentEglSurface != platformWindow->getSurface()) {
+        m_currentEglSurface = platformWindow->getSurface();
         doneCurrent();
-        destroySurface();
-        createSurface(surface);
     }
 
-    eglResult = eglMakeCurrent(ms_eglDisplay, m_eglSurface, m_eglSurface, m_eglContext);
+    eglResult = eglMakeCurrent(ms_eglDisplay, m_currentEglSurface, m_currentEglSurface, m_eglContext);
     if (eglResult != EGL_TRUE) {
         checkEGLError("eglMakeCurrent");
-        qFatal("QQNX: failed to set current EGL context, err=%d", eglGetError());
+        qWarning("QQNX: failed to set current EGL context, err=%d", eglGetError());
+        return false;
     }
     return (eglResult == EGL_TRUE);
 }
@@ -248,18 +238,12 @@ void QQnxGLContext::doneCurrent()
 
 void QQnxGLContext::swapBuffers(QPlatformSurface *surface)
 {
-    Q_UNUSED(surface);
     qGLContextDebug() << Q_FUNC_INFO;
+    QQnxEglWindow *platformWindow = dynamic_cast<QQnxEglWindow*>(surface);
+    if (!platformWindow)
+        return;
 
-    // Set current rendering API
-    EGLBoolean eglResult = eglBindAPI(EGL_OPENGL_ES_API);
-    if (eglResult != EGL_TRUE)
-        qFatal("QQNX: failed to set EGL API, err=%d", eglGetError());
-
-    // Post EGL surface to window
-    eglResult = eglSwapBuffers(ms_eglDisplay, m_eglSurface);
-    if (eglResult != EGL_TRUE)
-        qFatal("QQNX: failed to swap EGL buffers, err=%d", eglGetError());
+    platformWindow->swapEGLBuffers();
 }
 
 QFunctionPointer QQnxGLContext::getProcAddress(const QByteArray &procName)
@@ -275,79 +259,26 @@ QFunctionPointer QQnxGLContext::getProcAddress(const QByteArray &procName)
     return static_cast<QFunctionPointer>(eglGetProcAddress(procName.constData()));
 }
 
-EGLint *QQnxGLContext::contextAttrs()
+bool QQnxGLContext::isSharing() const
+{
+    return m_eglShareContext != EGL_NO_CONTEXT;
+}
+
+EGLDisplay QQnxGLContext::getEglDisplay() {
+    return ms_eglDisplay;
+}
+
+EGLint *QQnxGLContext::contextAttrs(const QSurfaceFormat &format)
 {
     qGLContextDebug() << Q_FUNC_INFO;
 
     // Choose EGL settings based on OpenGL version
 #if defined(QT_OPENGL_ES_2)
-    static EGLint attrs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+    static EGLint attrs[] = { EGL_CONTEXT_CLIENT_VERSION, format.version().first, EGL_NONE };
     return attrs;
 #else
     return 0;
 #endif
-}
-
-bool QQnxGLContext::isCurrent() const
-{
-    qGLContextDebug() << Q_FUNC_INFO;
-    return (eglGetCurrentContext() == m_eglContext);
-}
-
-void QQnxGLContext::createSurface(QPlatformSurface *surface)
-{
-    qGLContextDebug() << Q_FUNC_INFO;
-
-    // Get a pointer to the corresponding platform window
-    QQnxWindow *platformWindow = dynamic_cast<QQnxWindow*>(surface);
-    if (!platformWindow)
-        qFatal("QQNX: unable to create EGLSurface without a QQnxWindow");
-
-    // Link the window and context
-    platformWindow->setPlatformOpenGLContext(this);
-
-    // Fetch the surface size from the window and update
-    // the window's buffers before we create the EGL surface
-    const QSize surfaceSize = platformWindow->requestedBufferSize();
-    if (!surfaceSize.isValid()) {
-        qFatal("QQNX: Trying to create 0 size EGL surface. "
-               "Please set a valid window size before calling QOpenGLContext::makeCurrent()");
-    }
-    platformWindow->setBufferSize(surfaceSize);
-
-    // Post root window, in case it hasn't been posted yet, to make it appear.
-    platformWindow->screen()->onWindowPost(platformWindow);
-
-    // Obtain the native handle for our window
-    screen_window_t handle = platformWindow->nativeHandle();
-
-    const EGLint eglSurfaceAttrs[] =
-    {
-        EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
-        EGL_NONE
-    };
-
-    // Create EGL surface
-    m_eglSurface = eglCreateWindowSurface(ms_eglDisplay, m_eglConfig, (EGLNativeWindowType) handle, eglSurfaceAttrs);
-    if (m_eglSurface == EGL_NO_SURFACE) {
-        checkEGLError("eglCreateWindowSurface");
-        qFatal("QQNX: failed to create EGL surface, err=%d", eglGetError());
-    }
-}
-
-void QQnxGLContext::destroySurface()
-{
-    qGLContextDebug() << Q_FUNC_INFO;
-
-    // Destroy EGL surface if it exists
-    if (m_eglSurface != EGL_NO_SURFACE) {
-        EGLBoolean eglResult = eglDestroySurface(ms_eglDisplay, m_eglSurface);
-        if (eglResult != EGL_TRUE) {
-            qFatal("QQNX: failed to destroy EGL surface, err=%d", eglGetError());
-        }
-    }
-
-    m_eglSurface = EGL_NO_SURFACE;
 }
 
 QT_END_NAMESPACE

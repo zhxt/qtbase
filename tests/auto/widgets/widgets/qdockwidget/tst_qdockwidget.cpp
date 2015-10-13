@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -80,6 +72,7 @@ private slots:
     void setTitleBarWidget();
     void titleBarDoubleClick();
     void restoreStateOfFloating();
+    void restoreDockWidget();
     // task specific tests:
     void task165177_deleteFocusWidget();
     void task169808_setFloating();
@@ -87,7 +80,7 @@ private slots:
     void task248604_infiniteResize();
     void task258459_visibilityChanged();
     void taskQTBUG_1665_closableChanged();
-	void taskQTBUG_9758_undockedGeometry();
+    void taskQTBUG_9758_undockedGeometry();
 };
 
 // Testing get/set functions
@@ -347,7 +340,9 @@ void tst_QDockWidget::features()
 
 void tst_QDockWidget::setFloating()
 {
+    const QRect deskRect = QApplication::desktop()->availableGeometry();
     QMainWindow mw;
+    mw.move(deskRect.left() + deskRect.width() * 2 / 3, deskRect.top() + deskRect.height() / 3);
     QDockWidget dw;
     mw.addDockWidget(Qt::LeftDockWidgetArea, &dw);
 
@@ -355,10 +350,16 @@ void tst_QDockWidget::setFloating()
     QVERIFY(QTest::qWaitForWindowExposed(&mw));
 
     QVERIFY(!dw.isFloating());
+    const QPoint dockedPosition = dw.mapToGlobal(dw.pos());
 
     QSignalSpy spy(&dw, SIGNAL(topLevelChanged(bool)));
 
     dw.setFloating(true);
+    const QPoint floatingPosition = dw.pos();
+
+    // QTBUG-31044, show approximately at old position, give or take window frame.
+    QVERIFY((dockedPosition - floatingPosition).manhattanLength() < 50);
+
     QVERIFY(dw.isFloating());
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).value(0).toBool(), dw.isFloating());
@@ -580,7 +581,7 @@ void tst_QDockWidget::visibilityChanged()
     QCOMPARE(spy.count(), 0);
 
     mw.addDockWidget(Qt::RightDockWidgetArea, &dw2);
-	QTest::qWait(200);
+    QTest::qWait(200);
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toBool(), true);
 }
@@ -694,20 +695,80 @@ void tst_QDockWidget::titleBarDoubleClick()
     QCOMPARE(win.dockWidgetArea(&dock), Qt::TopDockWidgetArea);
 }
 
+static QDockWidget *createTestDock(QMainWindow &parent)
+{
+    const QString title = QStringLiteral("dock1");
+    QDockWidget *dock = new QDockWidget(title, &parent);
+    dock->setObjectName(title);
+    dock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    return dock;
+}
+
 void tst_QDockWidget::restoreStateOfFloating()
 {
     QMainWindow mw;
-    QDockWidget dock;
-    dock.setObjectName("dock1");
-    mw.addDockWidget(Qt::TopDockWidgetArea, &dock);
-    QVERIFY(!dock.isFloating());
+    QDockWidget *dock = createTestDock(mw);
+    mw.addDockWidget(Qt::TopDockWidgetArea, dock);
+    QVERIFY(!dock->isFloating());
     QByteArray ba = mw.saveState();
-    dock.setFloating(true);
-    QVERIFY(dock.isFloating());
+    dock->setFloating(true);
+    QVERIFY(dock->isFloating());
     QVERIFY(mw.restoreState(ba));
-    QVERIFY(!dock.isFloating());
+    QVERIFY(!dock->isFloating());
 }
 
+void tst_QDockWidget::restoreDockWidget()
+{
+    QByteArray geometry;
+    QByteArray state;
+    const QString name = QStringLiteral("main");
+    const QRect availableGeometry = QApplication::desktop()->availableGeometry();
+    const QSize size = availableGeometry.size() / 5;
+    const QPoint mainWindowPos = availableGeometry.bottomRight() - QPoint(size.width(), size.height()) - QPoint(100, 100);
+    const QPoint dockPos = availableGeometry.center();
+
+    {
+        QMainWindow saveWindow;
+        saveWindow.setObjectName(name);
+        saveWindow.setWindowTitle(QTest::currentTestFunction() + QStringLiteral(" save"));
+        saveWindow.resize(size);
+        saveWindow.move(mainWindowPos);
+        saveWindow.restoreState(QByteArray());
+        QDockWidget *dock = createTestDock(saveWindow);
+        QVERIFY(!saveWindow.restoreDockWidget(dock)); // Not added, no placeholder
+        saveWindow.addDockWidget(Qt::TopDockWidgetArea, dock);
+        dock->setFloating(true);
+        dock->resize(size);
+        dock->move(dockPos);
+        saveWindow.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&saveWindow));
+        QVERIFY(dock->isFloating());
+        state = saveWindow.saveState();
+        geometry = saveWindow.saveGeometry();
+    }
+
+    QVERIFY(!geometry.isEmpty());
+    QVERIFY(!state.isEmpty());
+
+    {
+        QMainWindow restoreWindow;
+        restoreWindow.setObjectName(name);
+        restoreWindow.setWindowTitle(QTest::currentTestFunction() + QStringLiteral(" restore"));
+        QVERIFY(restoreWindow.restoreState(state));
+        QVERIFY(restoreWindow.restoreGeometry(geometry));
+
+        // QMainWindow::restoreDockWidget() restores the state when adding the dock
+        // after restoreState().
+        QDockWidget *dock = createTestDock(restoreWindow);
+        QVERIFY(restoreWindow.restoreDockWidget(dock));
+        restoreWindow.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&restoreWindow));
+        QTRY_VERIFY(dock->isFloating());
+        if (!QGuiApplication::platformName().compare("xcb", Qt::CaseInsensitive))
+            QSKIP("Skip due to Window manager positioning issues", Abort);
+        QTRY_COMPARE(dock->pos(), dockPos);
+    }
+}
 
 void tst_QDockWidget::task165177_deleteFocusWidget()
 {
@@ -750,19 +811,19 @@ void tst_QDockWidget::task169808_setFloating()
         }
     };
     QMainWindow mw;
-	mw.setCentralWidget(new MyWidget);
-	QDockWidget *dw = new QDockWidget("my dock");
-	dw->setWidget(new MyWidget);
-	mw.addDockWidget(Qt::LeftDockWidgetArea, dw);
-	dw->setFloating(true);
-	mw.show();
+    mw.setCentralWidget(new MyWidget);
+    QDockWidget *dw = new QDockWidget("my dock");
+    dw->setWidget(new MyWidget);
+    mw.addDockWidget(Qt::LeftDockWidgetArea, dw);
+    dw->setFloating(true);
+    mw.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mw));
 
     QCOMPARE(dw->widget()->size(), dw->widget()->sizeHint());
 
     //and now we try to test if the contents margin is taken into account
     dw->widget()->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-	dw->setFloating(false);
+    dw->setFloating(false);
     QVERIFY(QTest::qWaitForWindowExposed(&mw));
     qApp->processEvents(); //leave time processing events
 
@@ -793,13 +854,16 @@ void tst_QDockWidget::task237438_setFloatingCrash()
 
 void tst_QDockWidget::task248604_infiniteResize()
 {
+#if defined Q_OS_BLACKBERRY
+    QSKIP("Top level window is stretched to fullscreen");
+#endif
     QDockWidget d;
     QTabWidget *t = new QTabWidget;
     t->addTab(new QWidget, "Foo");
     d.setWidget(t);
     d.setContentsMargins(2, 2, 2, 2);
     d.setMinimumSize(320, 240);
-    d.show();
+    d.showNormal();
     QTest::qWait(400);
     QCOMPARE(d.size(), QSize(320, 240));
 }

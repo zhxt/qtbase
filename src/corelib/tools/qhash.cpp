@@ -1,41 +1,33 @@
 
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Giuseppe D'Angelo <dangelog@gmail.com>.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -60,6 +52,7 @@
 #include <qbytearray.h>
 #include <qdatetime.h>
 #include <qbasicatomic.h>
+#include <private/qsimd_p.h>
 
 #ifndef QT_BOOTSTRAPPED
 #include <qcoreapplication.h>
@@ -93,9 +86,69 @@ QT_BEGIN_NAMESPACE
     (for instance, gcc 4.4 does that even at -O0).
 */
 
+#if QT_COMPILER_SUPPORTS_HERE(SSE4_2)
+static inline bool hasFastCrc32()
+{
+    return qCpuHasFeature(SSE4_2);
+}
+
+template <typename Char>
+QT_FUNCTION_TARGET(SSE4_2)
+static uint crc32(const Char *ptr, size_t len, uint h)
+{
+    // The CRC32 instructions from Nehalem calculate a 32-bit CRC32 checksum
+    const uchar *p = reinterpret_cast<const uchar *>(ptr);
+    const uchar *const e = p + (len * sizeof(Char));
+#  ifdef Q_PROCESSOR_X86_64
+    // The 64-bit instruction still calculates only 32-bit, but without this
+    // variable GCC 4.9 still tries to clear the high bits on every loop
+    qulonglong h2 = h;
+
+    p += 8;
+    for ( ; p <= e; p += 8)
+        h2 = _mm_crc32_u64(h2, *reinterpret_cast<const qlonglong *>(p - 8));
+    h = h2;
+    p -= 8;
+
+    len = e - p;
+    if (len & 4) {
+        h = _mm_crc32_u32(h, *reinterpret_cast<const uint *>(p));
+        p += 4;
+    }
+#  else
+    p += 4;
+    for ( ; p <= e; p += 4)
+        h = _mm_crc32_u32(h, *reinterpret_cast<const uint *>(p - 4));
+    p -= 4;
+    len = e - p;
+#  endif
+    if (len & 2) {
+        h = _mm_crc32_u16(h, *reinterpret_cast<const ushort *>(p));
+        p += 2;
+    }
+    if (sizeof(Char) == 1 && len & 1)
+        h = _mm_crc32_u8(h, *p);
+    return h;
+}
+#else
+static inline bool hasFastCrc32()
+{
+    return false;
+}
+
+static uint crc32(...)
+{
+    Q_UNREACHABLE();
+    return 0;
+}
+#endif
+
 static inline uint hash(const uchar *p, int len, uint seed) Q_DECL_NOTHROW
 {
     uint h = seed;
+
+    if (hasFastCrc32())
+        return crc32(p, size_t(len), h);
 
     for (int i = 0; i < len; ++i)
         h = 31 * h + p[i];
@@ -103,9 +156,17 @@ static inline uint hash(const uchar *p, int len, uint seed) Q_DECL_NOTHROW
     return h;
 }
 
+uint qHashBits(const void *p, size_t len, uint seed) Q_DECL_NOTHROW
+{
+    return hash(static_cast<const uchar*>(p), int(len), seed);
+}
+
 static inline uint hash(const QChar *p, int len, uint seed) Q_DECL_NOTHROW
 {
     uint h = seed;
+
+    if (hasFastCrc32())
+        return crc32(p, size_t(len), h);
 
     for (int i = 0; i < len; ++i)
         h = 31 * h + p[i].unicode();
@@ -159,11 +220,12 @@ uint qHash(QLatin1String key, uint seed) Q_DECL_NOTHROW
 */
 static uint qt_create_qhash_seed()
 {
+    uint seed = 0;
+
+#ifndef QT_BOOTSTRAPPED
     QByteArray envSeed = qgetenv("QT_HASH_SEED");
     if (!envSeed.isNull())
         return envSeed.toUInt();
-
-    uint seed = 0;
 
 #ifdef Q_OS_UNIX
     int randomfd = qt_safe_open("/dev/urandom", O_RDONLY);
@@ -191,17 +253,14 @@ static uint qt_create_qhash_seed()
     seed ^= timestamp;
     seed ^= (timestamp >> 32);
 
-#ifndef QT_BOOTSTRAPPED
     quint64 pid = QCoreApplication::applicationPid();
     seed ^= pid;
     seed ^= (pid >> 32);
-#endif // QT_BOOTSTRAPPED
 
     quintptr seedPtr = reinterpret_cast<quintptr>(&seed);
     seed ^= seedPtr;
-#if QT_POINTER_SIZE == 8
-    seed ^= (seedPtr >> 32);
-#endif
+    seed ^= (qulonglong(seedPtr) >> 32); // no-op on 32-bit platforms
+#endif // QT_BOOTSTRAPPED
 
     return seed;
 }
@@ -274,19 +333,28 @@ uint qt_hash(const QStringRef &key) Q_DECL_NOTHROW
 }
 
 /*
-    The prime_deltas array is a table of selected prime values, even
-    though it doesn't look like one. The primes we are using are 1,
-    2, 5, 11, 17, 37, 67, 131, 257, ..., i.e. primes in the immediate
-    surrounding of a power of two.
+    The prime_deltas array contains the difference between a power
+    of two and the next prime number:
 
-    The primeForNumBits() function returns the prime associated to a
-    power of two. For example, primeForNumBits(8) returns 257.
+    prime_deltas[i] = nextprime(2^i) - 2^i
+
+    Basically, it's sequence A092131 from OEIS, assuming:
+    - nextprime(1) = 1
+    - nextprime(2) = 2
+    and
+    - left-extending it for the offset 0 (A092131 starts at i=1)
+    - stopping the sequence at i = 28 (the table is big enough...)
 */
 
 static const uchar prime_deltas[] = {
-    0,  0,  1,  3,  1,  5,  3,  3,  1,  9,  7,  5,  3,  9, 25,  3,
-    1, 21,  3, 21,  7, 15,  9,  5,  3, 29, 15,  0,  0,  0,  0,  0
+    0,  0,  1,  3,  1,  5,  3,  3,  1,  9,  7,  5,  3, 17, 27,  3,
+    1, 29,  3, 21,  7, 17, 15,  9, 43, 35, 15,  0,  0,  0,  0,  0
 };
+
+/*
+    The primeForNumBits() function returns the prime associated to a
+    power of two. For example, primeForNumBits(8) returns 257.
+*/
 
 static inline int primeForNumBits(int numBits)
 {
@@ -350,7 +418,7 @@ QHashData *QHashData::detach_helper(void (*node_duplicate)(Node *, void *),
         Node *e;
     };
     if (this == &shared_null)
-        qt_initialize_qhash_seed();
+        qt_initialize_qhash_seed(); // may throw
     d = new QHashData;
     d->fakeNext = 0;
     d->buckets = 0;
@@ -360,7 +428,7 @@ QHashData *QHashData::detach_helper(void (*node_duplicate)(Node *, void *),
     d->userNumBits = userNumBits;
     d->numBits = numBits;
     d->numBuckets = numBuckets;
-    d->seed = uint(qt_qhash_seed.load());
+    d->seed = (this == &shared_null) ? uint(qt_qhash_seed.load()) : seed;
     d->sharable = true;
     d->strictAlignment = nodeAlign > 8;
     d->reserved = 0;
@@ -549,12 +617,11 @@ void QHashData::dump()
             numBuckets);
     qDebug("    %p (fakeNode = %p)", this, fakeNext);
     for (int i = 0; i < numBuckets; ++i) {
-        QString line;
         Node *n = buckets[i];
         if (n != reinterpret_cast<Node *>(this)) {
-            line.sprintf("%d:", i);
+            QString line = QString::asprintf("%d:", i);
             while (n != reinterpret_cast<Node *>(this)) {
-                line += QString().sprintf(" -> [%p]", n);
+                line += QString::asprintf(" -> [%p]", n);
                 if (!n) {
                     line += " (CORRUPT)";
                     break;
@@ -595,6 +662,110 @@ void QHashData::checkSanity()
     Returns the hash value for the \a key, using \a seed to seed the calculation.
 
     Types \c T1 and \c T2 must be supported by qHash().
+*/
+
+/*! \fn uint qHashRange(InputIterator first, InputIterator last, uint seed = 0)
+    \relates QHash
+    \since 5.5
+
+    Returns the hash value for the range [\a{first},\a{last}), using \a seed
+    to seed the calculation, by successively applying qHash() to each
+    element and combining the hash values into a single one.
+
+    The return value of this function depends on the order of elements
+    in the range. That means that
+
+    \code
+    {0, 1, 2}
+    \endcode
+
+    and
+    \code
+    {1, 2, 0}
+    \endcode
+
+    hash to \b{different} values. If order does not matter, for example for hash
+    tables, use qHashRangeCommutative() instead. If you are hashing raw
+    memory, use qHashBits().
+
+    Use this function only to implement qHash() for your own custom
+    types. For example, here's how you could implement a qHash() overload for
+    std::vector<int>:
+
+    \snippet code/src_corelib_tools_qhash.cpp qhashrange
+
+    It bears repeating that the implementation of qHashRange() - like
+    the qHash() overloads offered by Qt - may change at any time. You
+    \b{must not} rely on the fact that qHashRange() will give the same
+    results (for the same inputs) across different Qt versions, even
+    if qHash() for the element type would.
+
+    \sa qHashBits(), qHashRangeCommutative()
+*/
+
+/*! \fn uint qHashRangeCommutative(InputIterator first, InputIterator last, uint seed = 0)
+    \relates QHash
+    \since 5.5
+
+    Returns the hash value for the range [\a{first},\a{last}), using \a seed
+    to seed the calculation, by successively applying qHash() to each
+    element and combining the hash values into a single one.
+
+    The return value of this function does not depend on the order of
+    elements in the range. That means that
+
+    \code
+    {0, 1, 2}
+    \endcode
+
+    and
+    \code
+    {1, 2, 0}
+    \endcode
+
+    hash to the \b{same} values. If order matters, for example, for vectors
+    and arrays, use qHashRange() instead. If you are hashing raw
+    memory, use qHashBits().
+
+    Use this function only to implement qHash() for your own custom
+    types. For example, here's how you could implement a qHash() overload for
+    std::unordered_set<int>:
+
+    \snippet code/src_corelib_tools_qhash.cpp qhashrangecommutative
+
+    It bears repeating that the implementation of
+    qHashRangeCommutative() - like the qHash() overloads offered by Qt
+    - may change at any time. You \b{must not} rely on the fact that
+    qHashRangeCommutative() will give the same results (for the same
+    inputs) across different Qt versions, even if qHash() for the
+    element type would.
+
+    \sa qHashBits(), qHashRange()
+*/
+
+/*! \fn uint qHashBits(const void *p, size_t len, uint seed = 0)
+    \relates QHash
+    \since 5.4
+
+    Returns the hash value for the memory block of size \a len pointed
+    to by \a p, using \a seed to seed the calculation.
+
+    Use this function only to implement qHash() for your own custom
+    types. For example, here's how you could implement a qHash() overload for
+    std::vector<int>:
+
+    \snippet code/src_corelib_tools_qhash.cpp qhashbits
+
+    This takes advantage of the fact that std::vector lays out its data
+    contiguously. If that is not the case, or the contained type has
+    padding, you should use qHashRange() instead.
+
+    It bears repeating that the implementation of qHashBits() - like
+    the qHash() overloads offered by Qt - may change at any time. You
+    \b{must not} rely on the fact that qHashBits() will give the same
+    results (for the same inputs) across different Qt versions.
+
+    \sa qHashRange(), qHashRangeCommutative()
 */
 
 /*! \fn uint qHash(char key, uint seed = 0)
@@ -674,7 +845,39 @@ void QHashData::checkSanity()
     Returns the hash value for the \a key, using \a seed to seed the calculation.
 */
 
-/*! \fn uint qHash(QChar key, uint seed = 0)
+/*! \relates QHash
+    \since 5.3
+
+    Returns the hash value for the \a key, using \a seed to seed the calculation.
+*/
+uint qHash(float key, uint seed) Q_DECL_NOTHROW
+{
+    return key != 0.0f ? hash(reinterpret_cast<const uchar *>(&key), sizeof(key), seed) : seed ;
+}
+
+/*! \relates QHash
+    \since 5.3
+
+    Returns the hash value for the \a key, using \a seed to seed the calculation.
+*/
+uint qHash(double key, uint seed) Q_DECL_NOTHROW
+{
+    return key != 0.0  ? hash(reinterpret_cast<const uchar *>(&key), sizeof(key), seed) : seed ;
+}
+
+#ifndef Q_OS_DARWIN
+/*! \relates QHash
+    \since 5.3
+
+    Returns the hash value for the \a key, using \a seed to seed the calculation.
+*/
+uint qHash(long double key, uint seed) Q_DECL_NOTHROW
+{
+    return key != 0.0L ? hash(reinterpret_cast<const uchar *>(&key), sizeof(key), seed) : seed ;
+}
+#endif
+
+/*! \fn uint qHash(const QChar key, uint seed = 0)
     \relates QHash
     \since 5.0
 
@@ -857,8 +1060,8 @@ void QHashData::checkSanity()
 
     A QHash's key type has additional requirements other than being an
     assignable data type: it must provide operator==(), and there must also be
-    a global qHash() function that returns a hash value for an argument of the
-    key's type.
+    a qHash() function in the type's namespace that returns a hash value for an
+    argument of the key's type.
 
     The qHash() function computes a numeric value based on a key. It
     can use any algorithm imaginable, as long as it always returns
@@ -926,7 +1129,7 @@ void QHashData::checkSanity()
 
     This randomization of QHash is enabled by default. Even though programs
     should never depend on a particular QHash ordering, there may be situations
-    where you temporarily need deterministic behavior, e.g. for debugging or
+    where you temporarily need deterministic behavior, for example for debugging or
     regression testing. To disable the randomization, define the environment
     variable \c QT_HASH_SEED. The contents of that variable, interpreted as a
     decimal value, will be used as the seed for qHash().
@@ -941,6 +1144,15 @@ void QHashData::checkSanity()
     \sa clear()
 */
 
+/*!
+    \fn QHash::QHash(QHash &&other)
+
+    Move-constructs a QHash instance, making it point at the same
+    object that \a other was pointing to.
+
+    \since 5.2
+*/
+
 /*! \fn QHash::QHash(std::initializer_list<std::pair<Key,T> > list)
     \since 5.1
 
@@ -951,7 +1163,7 @@ void QHashData::checkSanity()
     compiled in C++11 mode.
 */
 
-/*! \fn QHash::QHash(const QHash<Key, T> &other)
+/*! \fn QHash::QHash(const QHash &other)
 
     Constructs a copy of \a other.
 
@@ -969,28 +1181,36 @@ void QHashData::checkSanity()
     iterators of this hash become invalid.
 */
 
-/*! \fn QHash<Key, T> &QHash::operator=(const QHash<Key, T> &other)
+/*! \fn QHash &QHash::operator=(const QHash &other)
 
     Assigns \a other to this hash and returns a reference to this hash.
 */
 
-/*! \fn void QHash::swap(QHash<Key, T> &other)
+/*!
+    \fn QHash &QHash::operator=(QHash &&other)
+
+    Move-assigns \a other to this QHash instance.
+
+    \since 5.2
+*/
+
+/*! \fn void QHash::swap(QHash &other)
     \since 4.8
 
     Swaps hash \a other with this hash. This operation is very
     fast and never fails.
 */
 
-/*! \fn void QMultiHash::swap(QMultiHash<Key, T> &other)
+/*! \fn void QMultiHash::swap(QMultiHash &other)
     \since 4.8
 
     Swaps hash \a other with this hash. This operation is very
     fast and never fails.
 */
 
-/*! \fn bool QHash::operator==(const QHash<Key, T> &other) const
+/*! \fn bool QHash::operator==(const QHash &other) const
 
-    Returns true if \a other is equal to this hash; otherwise returns
+    Returns \c true if \a other is equal to this hash; otherwise returns
     false.
 
     Two hashes are considered equal if they contain the same (key,
@@ -1001,10 +1221,10 @@ void QHashData::checkSanity()
     \sa operator!=()
 */
 
-/*! \fn bool QHash::operator!=(const QHash<Key, T> &other) const
+/*! \fn bool QHash::operator!=(const QHash &other) const
 
-    Returns true if \a other is not equal to this hash; otherwise
-    returns false.
+    Returns \c true if \a other is not equal to this hash; otherwise
+    returns \c false.
 
     Two hashes are considered equal if they contain the same (key,
     value) pairs.
@@ -1023,7 +1243,7 @@ void QHashData::checkSanity()
 
 /*! \fn bool QHash::isEmpty() const
 
-    Returns true if the hash contains no items; otherwise returns
+    Returns \c true if the hash contains no items; otherwise returns
     false.
 
     \sa size()
@@ -1090,8 +1310,8 @@ void QHashData::checkSanity()
 
     \internal
 
-    Returns true if the hash's internal data isn't shared with any
-    other hash object; otherwise returns false.
+    Returns \c true if the hash's internal data isn't shared with any
+    other hash object; otherwise returns \c false.
 
     \sa detach()
 */
@@ -1101,7 +1321,7 @@ void QHashData::checkSanity()
     \internal
 */
 
-/*! \fn bool QHash::isSharedWith(const QHash<Key, T> &other) const
+/*! \fn bool QHash::isSharedWith(const QHash &other) const
 
     \internal
 */
@@ -1140,8 +1360,8 @@ void QHashData::checkSanity()
 
 /*! \fn bool QHash::contains(const Key &key) const
 
-    Returns true if the hash contains an item with the \a key;
-    otherwise returns false.
+    Returns \c true if the hash contains an item with the \a key;
+    otherwise returns \c false.
 
     \sa count(), QMultiHash::contains()
 */
@@ -1226,7 +1446,7 @@ void QHashData::checkSanity()
 /*! \fn QList<T> QHash::values() const
 
     Returns a list containing all the values in the hash, in an
-    arbitrary order. If a key is associated multiple values, all of
+    arbitrary order. If a key is associated with multiple values, all of
     its values will be in the list, and not just the most recently
     inserted one.
 
@@ -1423,7 +1643,7 @@ void QHashData::checkSanity()
     \sa insert(), values()
 */
 
-/*! \fn QHash<Key, T> &QHash::unite(const QHash<Key, T> &other)
+/*! \fn QHash &QHash::unite(const QHash &other)
 
     Inserts all the items in the \a other hash into this hash. If a
     key is common to both hashes, the resulting hash will contain the
@@ -1436,7 +1656,7 @@ void QHashData::checkSanity()
 
     This function is provided for STL compatibility. It is equivalent
     to isEmpty(), returning true if the hash is empty; otherwise
-    returns false.
+    returns \c false.
 */
 
 /*! \typedef QHash::ConstIterator
@@ -1577,6 +1797,11 @@ void QHashData::checkSanity()
     need to keep iterators over a long period of time, we recommend
     that you use QMap rather than QHash.
 
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
     \sa QHash::const_iterator, QMutableHashIterator
 */
 
@@ -1639,8 +1864,8 @@ void QHashData::checkSanity()
     \fn bool QHash::iterator::operator==(const iterator &other) const
     \fn bool QHash::iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same item as this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
@@ -1649,8 +1874,8 @@ void QHashData::checkSanity()
     \fn bool QHash::iterator::operator!=(const iterator &other) const
     \fn bool QHash::iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different item than this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
 
     \sa operator==()
 */
@@ -1774,6 +1999,11 @@ void QHashData::checkSanity()
     internal data structure. If you need to keep iterators over a long
     period of time, we recommend that you use QMap rather than QHash.
 
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
     \sa QHash::iterator, QHashIterator
 */
 
@@ -1830,16 +2060,16 @@ void QHashData::checkSanity()
 
 /*! \fn bool QHash::const_iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same item as this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
 
 /*! \fn bool QHash::const_iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different item than this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
 
     \sa operator==()
 */
@@ -1996,8 +2226,8 @@ void QHashData::checkSanity()
     QMultiHash's key and value data types must be \l{assignable data
     types}. You cannot, for example, store a QWidget as a value;
     instead, store a QWidget *. In addition, QMultiHash's key type
-    must provide operator==(), and there must also be a global
-    qHash() function that returns a hash value for an argument of the
+    must provide operator==(), and there must also be a qHash() function
+   in the type's namespace that returns a hash value for an argument of the
     key's type. See the QHash documentation for details.
 
     \sa QHash, QHashIterator, QMutableHashIterator, QMultiMap
@@ -2072,15 +2302,9 @@ void QHashData::checkSanity()
     \fn bool QMultiHash::contains(const Key &key, const T &value) const
     \since 4.3
 
-    Returns true if the hash contains an item with the \a key and
-    \a value; otherwise returns false.
+    Returns \c true if the hash contains an item with the \a key and
+    \a value; otherwise returns \c false.
 
-    \sa QHash::contains()
-*/
-
-/*!
-    \fn bool QMultiHash::contains(const Key &key) const
-    \overload
     \sa QHash::contains()
 */
 
@@ -2095,29 +2319,11 @@ void QHashData::checkSanity()
 */
 
 /*!
-    \fn int QMultiHash::remove(const Key &key)
-    \overload
-    \sa QHash::remove()
-*/
-
-/*!
     \fn int QMultiHash::count(const Key &key, const T &value) const
     \since 4.3
 
     Returns the number of items with the \a key and \a value.
 
-    \sa QHash::count()
-*/
-
-/*!
-    \fn int QMultiHash::count(const Key &key) const
-    \overload
-    \sa QHash::count()
-*/
-
-/*!
-    \fn int QMultiHash::count() const
-    \overload
     \sa QHash::count()
 */
 
@@ -2135,21 +2341,9 @@ void QHashData::checkSanity()
 */
 
 /*!
-    \fn typename QHash<Key, T>::iterator QMultiHash::find(const Key &key)
-    \overload
-    \sa QHash::find()
-*/
-
-/*!
     \fn typename QHash<Key, T>::const_iterator QMultiHash::find(const Key &key, const T &value) const
     \since 4.3
     \overload
-*/
-
-/*!
-    \fn typename QHash<Key, T>::const_iterator QMultiHash::find(const Key &key) const
-    \overload
-    \sa QHash::find()
 */
 
 /*!
@@ -2162,12 +2356,6 @@ void QHashData::checkSanity()
     If the hash contains no such item, the function returns
     constEnd().
 
-    \sa QHash::constFind()
-*/
-
-/*!
-    \fn typename QHash<Key, T>::const_iterator QMultiHash::constFind(const Key &key) const
-    \overload
     \sa QHash::constFind()
 */
 

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -50,6 +42,12 @@
 #include <QtNetwork/qtcpserver.h>
 #include "../../../../auto/network-settings.h"
 
+#ifdef QT_BUILD_INTERNAL
+#include <QtNetwork/private/qhostinfo_p.h>
+#ifndef QT_NO_OPENSSL
+#include <QtNetwork/private/qsslsocket_openssl_p.h>
+#endif
+#endif
 
 Q_DECLARE_METATYPE(QSharedPointer<char>)
 
@@ -460,7 +458,9 @@ private slots:
 #ifndef QT_NO_SSL
     void echoPerformance_data();
     void echoPerformance();
-#endif
+    void preConnectEncrypted();
+#endif // !QT_NO_SSL
+    void preConnectEncrypted_data();
 
     void downloadPerformance();
     void uploadPerformance();
@@ -472,9 +472,13 @@ private slots:
     void httpDownloadPerformanceDownloadBuffer();
     void httpsRequestChain();
     void httpsUpload();
+    void preConnect_data();
+    void preConnect();
 
 private:
     void runHttpsUploadRequest(const QByteArray &data, const QNetworkRequest &request);
+    QPair<QNetworkReply *, qint64> runGetRequest(QNetworkAccessManager *manager,
+                                                 const QNetworkRequest &request);
 };
 
 void tst_qnetworkreply::initTestCase()
@@ -493,6 +497,19 @@ void tst_qnetworkreply::httpLatency()
         QVERIFY(!QTestEventLoop::instance().timeout());
         delete reply;
     }
+}
+
+QPair<QNetworkReply *, qint64> tst_qnetworkreply::runGetRequest(
+        QNetworkAccessManager *manager, const QNetworkRequest &request)
+{
+    QElapsedTimer timer;
+    timer.start();
+    QNetworkReply *reply = manager->get(request);
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)), reply, SLOT(ignoreSslErrors()));
+    connect(reply, SIGNAL(finished()), &QTestEventLoop::instance(), SLOT(exitLoop()), Qt::QueuedConnection);
+    QTestEventLoop::instance().enterLoop(20);
+    qint64 elapsed = timer.elapsed();
+    return qMakePair(reply, elapsed);
 }
 
 #ifndef QT_NO_SSL
@@ -527,7 +544,94 @@ void tst_qnetworkreply::echoPerformance()
         delete reply;
     }
 }
+
+void tst_qnetworkreply::preConnectEncrypted()
+{
+    QFETCH(int, sleepTime);
+    QFETCH(QSslConfiguration, sslConfiguration);
+    bool spdyEnabled = !sslConfiguration.isNull();
+
+    QString hostName = QLatin1String("www.google.com");
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl("https://" + hostName));
+    if (spdyEnabled)
+        request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, true);
+
+    // make sure we have a full request including
+    // DNS lookup, TCP and SSL handshakes
+#ifdef QT_BUILD_INTERNAL
+    qt_qhostinfo_clear_cache();
+#else
+    qWarning("no internal build, could not clear DNS cache. Results may not be representative.");
 #endif
+
+    // first, benchmark a normal request
+    QPair<QNetworkReply *, qint64> normalResult = runGetRequest(&manager, request);
+    QNetworkReply *normalReply = normalResult.first;
+    QVERIFY(!QTestEventLoop::instance().timeout());
+    QVERIFY(normalReply->error() == QNetworkReply::NoError);
+    qint64 normalElapsed = normalResult.second;
+
+    // clear all caches again
+#ifdef QT_BUILD_INTERNAL
+    qt_qhostinfo_clear_cache();
+#else
+    qWarning("no internal build, could not clear DNS cache. Results may not be representative.");
+#endif
+    manager.clearAccessCache();
+
+    // now try to make the connection beforehand
+    if (spdyEnabled) {
+        request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, true);
+        manager.connectToHostEncrypted(hostName, 443, sslConfiguration);
+    } else {
+        manager.connectToHostEncrypted(hostName);
+    }
+    QTestEventLoop::instance().enterLoopMSecs(sleepTime);
+
+    // now make another request and hopefully use the existing connection
+    QPair<QNetworkReply *, qint64> preConnectResult = runGetRequest(&manager, request);
+    QNetworkReply *preConnectReply = normalResult.first;
+    QVERIFY(!QTestEventLoop::instance().timeout());
+    QVERIFY(preConnectReply->error() == QNetworkReply::NoError);
+    bool spdyWasUsed = preConnectReply->attribute(QNetworkRequest::SpdyWasUsedAttribute).toBool();
+    QCOMPARE(spdyEnabled, spdyWasUsed);
+    qint64 preConnectElapsed = preConnectResult.second;
+    qDebug() << request.url().toString() << "full request:" << normalElapsed
+             << "ms, pre-connect request:" << preConnectElapsed << "ms, difference:"
+             << (normalElapsed - preConnectElapsed) << "ms";
+}
+
+#endif // !QT_NO_SSL
+
+void tst_qnetworkreply::preConnectEncrypted_data()
+{
+#ifndef QT_NO_OPENSSL
+    QTest::addColumn<int>("sleepTime");
+    QTest::addColumn<QSslConfiguration>("sslConfiguration");
+
+    // start a new normal request after preconnecting is done
+    QTest::newRow("HTTPS-2secs") << 2000 << QSslConfiguration();
+
+    // start a new normal request while preconnecting is in-flight
+    QTest::newRow("HTTPS-100ms") << 100 << QSslConfiguration();
+
+    QSslConfiguration spdySslConf = QSslConfiguration::defaultConfiguration();
+    QList<QByteArray> nextProtocols = QList<QByteArray>()
+            << QSslConfiguration::NextProtocolSpdy3_0
+            << QSslConfiguration::NextProtocolHttp1_1;
+    spdySslConf.setAllowedNextProtocols(nextProtocols);
+
+#if defined(QT_BUILD_INTERNAL) && !defined(QT_NO_SSL) && OPENSSL_VERSION_NUMBER >= 0x1000100fL && !defined(OPENSSL_NO_TLSEXT) && !defined(OPENSSL_NO_NEXTPROTONEG)
+    // start a new SPDY request while preconnecting is done
+    QTest::newRow("SPDY-2secs") << 2000 << spdySslConf;
+
+    // start a new SPDY request while preconnecting is in-flight
+    QTest::newRow("SPDY-100ms") << 100 << spdySslConf;
+#endif // defined (QT_BUILD_INTERNAL) && !defined(QT_NO_SSL) ...
+#endif // QT_NO_OPENSSL
+}
 
 void tst_qnetworkreply::downloadPerformance()
 {
@@ -798,7 +902,6 @@ void tst_qnetworkreply::httpsRequestChain()
     int count = 10;
 
     QNetworkRequest request(QUrl("https://" + QtNetworkSettings::serverName() + "/fluke.gif"));
-    //QNetworkRequest request(QUrl("https://www.nokia.com/robots.txt"));
     // Disable keep-alive so we have the full re-connecting of TCP.
     request.setRawHeader("Connection", "close");
 
@@ -808,7 +911,6 @@ void tst_qnetworkreply::httpsRequestChain()
 
     // Warm up DNS cache and then immediately start HTTP
     QHostInfo::lookupHost(QtNetworkSettings::serverName(), &helper, SLOT(doNextRequest()));
-    //QHostInfo::lookupHost("www.nokia.com", &helper, SLOT(doNextRequest()));
 
     // we can use QBENCHMARK_ONCE when we find out how to make it really run once.
     // there is still a warmup-run :(
@@ -852,6 +954,56 @@ void tst_qnetworkreply::httpsUpload()
     }
 }
 
+void tst_qnetworkreply::preConnect_data()
+{
+    preConnectEncrypted_data();
+}
+
+void tst_qnetworkreply::preConnect()
+{
+    QString hostName = QLatin1String("www.google.com");
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl("http://" + hostName));
+
+    // make sure we have a full request including
+    // DNS lookup and TCP handshake
+#ifdef QT_BUILD_INTERNAL
+    qt_qhostinfo_clear_cache();
+#else
+    qWarning("no internal build, could not clear DNS cache. Results may not be representative.");
+#endif
+
+    // first, benchmark a normal request
+    QPair<QNetworkReply *, qint64> normalResult = runGetRequest(&manager, request);
+    QNetworkReply *normalReply = normalResult.first;
+    QVERIFY(!QTestEventLoop::instance().timeout());
+    QVERIFY(normalReply->error() == QNetworkReply::NoError);
+    qint64 normalElapsed = normalResult.second;
+
+    // clear all caches again
+#ifdef QT_BUILD_INTERNAL
+    qt_qhostinfo_clear_cache();
+#else
+    qWarning("no internal build, could not clear DNS cache. Results may not be representative.");
+#endif
+    manager.clearAccessCache();
+
+    // now try to make the connection beforehand
+    QFETCH(int, sleepTime);
+    manager.connectToHost(hostName);
+    QTestEventLoop::instance().enterLoopMSecs(sleepTime);
+
+    // now make another request and hopefully use the existing connection
+    QPair<QNetworkReply *, qint64> preConnectResult = runGetRequest(&manager, request);
+    QNetworkReply *preConnectReply = normalResult.first;
+    QVERIFY(!QTestEventLoop::instance().timeout());
+    QVERIFY(preConnectReply->error() == QNetworkReply::NoError);
+    qint64 preConnectElapsed = preConnectResult.second;
+    qDebug() << request.url().toString() << "full request:" << normalElapsed
+             << "ms, pre-connect request:" << preConnectElapsed << "ms, difference:"
+             << (normalElapsed - preConnectElapsed) << "ms";
+}
 
 QTEST_MAIN(tst_qnetworkreply)
 

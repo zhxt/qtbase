@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -89,30 +81,34 @@
 #include "qgraphicslayoutitem.h"
 #include "qgraphicsgridlayout.h"
 #include "qgraphicswidget.h"
-#include "qgridlayoutengine_p.h"
-#include <QtCore/qdebug.h>
+#include "qgraphicsgridlayoutengine_p.h"
+#include "qgraphicslayoutstyleinfo_p.h"
+#ifdef QT_DEBUG
+# include <QtCore/qdebug.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
 class QGraphicsGridLayoutPrivate : public QGraphicsLayoutPrivate
 {
 public:
-    QGraphicsGridLayoutPrivate() { }
-    QLayoutStyleInfo styleInfo() const;
+    QGraphicsGridLayoutPrivate(): m_styleInfo(0) { }
+    QGraphicsLayoutStyleInfo *styleInfo() const;
 
-    QGridLayoutEngine engine;
-#ifdef QT_DEBUG
+    mutable QGraphicsLayoutStyleInfo *m_styleInfo;
+    QGraphicsGridLayoutEngine engine;
+
+#ifdef QGRIDLAYOUTENGINE_DEBUG
     void dump(int indent) const;
 #endif
 };
 
-Q_GLOBAL_STATIC(QWidget, globalStyleInfoWidget);
 
-QLayoutStyleInfo QGraphicsGridLayoutPrivate::styleInfo() const
+QGraphicsLayoutStyleInfo *QGraphicsGridLayoutPrivate::styleInfo() const
 {
-    QGraphicsItem *item = parentItem();
-    QStyle *style = (item && item->isWidget()) ? static_cast<QGraphicsWidget*>(item)->style() : QApplication::style();
-    return QLayoutStyleInfo(style, globalStyleInfoWidget());
+    if (!m_styleInfo)
+        m_styleInfo = new QGraphicsLayoutStyleInfo(this);
+    return m_styleInfo;
 }
 
 /*!
@@ -172,7 +168,8 @@ void QGraphicsGridLayout::addItem(QGraphicsLayoutItem *item, int row, int column
 
     d->addChildLayoutItem(item);
 
-    new QGridLayoutItem(&d->engine, item, row, column, rowSpan, columnSpan, alignment);
+    QGraphicsGridLayoutEngineItem *gridEngineItem = new QGraphicsGridLayoutEngineItem(item, row, column, rowSpan, columnSpan, alignment);
+    d->engine.insertItem(gridEngineItem, -1);
     invalidate();
 }
 
@@ -199,7 +196,7 @@ void QGraphicsGridLayout::setHorizontalSpacing(qreal spacing)
 qreal QGraphicsGridLayout::horizontalSpacing() const
 {
     Q_D(const QGraphicsGridLayout);
-    return d->engine.spacing(d->styleInfo(), Qt::Horizontal);
+    return d->engine.spacing(Qt::Horizontal, d->styleInfo());
 }
 
 /*!
@@ -218,7 +215,7 @@ void QGraphicsGridLayout::setVerticalSpacing(qreal spacing)
 qreal QGraphicsGridLayout::verticalSpacing() const
 {
     Q_D(const QGraphicsGridLayout);
-    return d->engine.spacing(d->styleInfo(), Qt::Vertical);
+    return d->engine.spacing(Qt::Vertical, d->styleInfo());
 }
 
 /*!
@@ -535,8 +532,8 @@ QGraphicsLayoutItem *QGraphicsGridLayout::itemAt(int row, int column) const
         qWarning("QGraphicsGridLayout::itemAt: invalid row, column %d, %d", row, column);
         return 0;
     }
-    if (QGridLayoutItem *item = d->engine.itemAt(row, column))
-        return item->layoutItem();
+    if (QGraphicsGridLayoutEngineItem *engineItem = static_cast<QGraphicsGridLayoutEngineItem*>(d->engine.itemAt(row, column)))
+        return engineItem->layoutItem();
     return 0;
 }
 
@@ -561,8 +558,8 @@ QGraphicsLayoutItem *QGraphicsGridLayout::itemAt(int index) const
         return 0;
     }
     QGraphicsLayoutItem *item = 0;
-    if (QGridLayoutItem *gridItem = d->engine.itemAt(index))
-        item = gridItem->layoutItem();
+    if (QGraphicsGridLayoutEngineItem *engineItem = static_cast<QGraphicsGridLayoutEngineItem*>(d->engine.itemAt(index)))
+        item = engineItem->layoutItem();
     return item;
 }
 
@@ -579,7 +576,8 @@ void QGraphicsGridLayout::removeAt(int index)
         qWarning("QGraphicsGridLayout::removeAt: invalid index %d", index);
         return;
     }
-    if (QGridLayoutItem *gridItem = d->engine.itemAt(index)) {
+
+    if (QGraphicsGridLayoutEngineItem *gridItem = static_cast<QGraphicsGridLayoutEngineItem*>(d->engine.itemAt(index))) {
         if (QGraphicsLayoutItem *layoutItem = gridItem->layoutItem())
             layoutItem->setParentLayoutItem(0);
         d->engine.removeItem(gridItem);
@@ -619,10 +617,12 @@ void QGraphicsGridLayout::invalidate()
 {
     Q_D(QGraphicsGridLayout);
     d->engine.invalidate();
+    if (d->m_styleInfo)
+        d->m_styleInfo->invalidate();
     QGraphicsLayout::invalidate();
 }
 
-#ifdef QT_DEBUG
+#ifdef QGRIDLAYOUTENGINE_DEBUG
 void QGraphicsGridLayoutPrivate::dump(int indent) const
 {
     if (qt_graphicsLayoutDebug()) {
@@ -646,8 +646,8 @@ void QGraphicsGridLayout::setGeometry(const QRectF &rect)
     if (visualDir == Qt::RightToLeft)
         qSwap(left, right);
     effectiveRect.adjust(+left, +top, -right, -bottom);
-    d->engine.setGeometries(d->styleInfo(), effectiveRect);
-#ifdef QT_DEBUG
+    d->engine.setGeometries(effectiveRect, d->styleInfo());
+#ifdef QGRIDLAYOUTENGINE_DEBUG
     if (qt_graphicsLayoutDebug()) {
         static int counter = 0;
         qDebug("==== BEGIN DUMP OF QGraphicsGridLayout (%d)====", counter++);
@@ -666,7 +666,7 @@ QSizeF QGraphicsGridLayout::sizeHint(Qt::SizeHint which, const QSizeF &constrain
     qreal left, top, right, bottom;
     getContentsMargins(&left, &top, &right, &bottom);
     const QSizeF extraMargins(left + right, top + bottom);
-    return d->engine.sizeHint(d->styleInfo(), which , constraint - extraMargins) + extraMargins;
+    return d->engine.sizeHint(which , constraint - extraMargins, d->styleInfo()) + extraMargins;
 }
 
 

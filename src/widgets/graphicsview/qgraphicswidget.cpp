@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -702,7 +694,7 @@ void QGraphicsWidget::initStyleOption(QStyleOption *option) const
         option->state |= QStyle::State_Window;
     /*
       ###
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     extern bool qt_mac_can_clickThrough(const QGraphicsWidget *w); //qwidget_mac.cpp
     if (!(option->state & QStyle::State_Active) && !qt_mac_can_clickThrough(widget))
         option->state &= ~QStyle::State_Enabled;
@@ -1043,7 +1035,7 @@ void QGraphicsWidget::setPalette(const QPalette &palette)
     In addition, Windows are always filled with QPalette::Window, unless the
     WA_OpaquePaintEvent or WA_NoSystemBackground attributes are set.
 
-    By default, this property is false.
+    By default, this property is \c false.
 
     \sa Qt::WA_OpaquePaintEvent, Qt::WA_NoSystemBackground,
 */
@@ -1145,6 +1137,10 @@ QVariant QGraphicsWidget::itemChange(GraphicsItemChange change, const QVariant &
                 setAttribute(Qt::WA_Resized, false);
             }
         }
+
+        // layout size hint only changes if an item changes from/to explicitly hidden state
+        if (value.toBool() || d->explicitlyHidden)
+            updateGeometry();
         break;
     case ItemVisibleHasChanged:
         if (!value.toBool()) {
@@ -1239,8 +1235,8 @@ bool QGraphicsWidget::sceneEvent(QEvent *event)
     You can reimplement this handler in a subclass of QGraphicsWidget to
     provide your own custom window frame interaction support.
 
-    Returns true if \a event has been recognized and processed; otherwise,
-    returns false.
+    Returns \c true if \a event has been recognized and processed; otherwise,
+    returns \c false.
 
     \sa event()
 */
@@ -1315,7 +1311,7 @@ Qt::WindowFrameSection QGraphicsWidget::windowFrameSectionAt(const QPointF &pos)
     if (x <= left + cornerMargin) {
         if (y <= top + windowFrameWidth || (x <= left + windowFrameWidth && y <= top + cornerMargin)) {
             s = Qt::TopLeftSection;
-        } else if (y >= bottom - windowFrameWidth || (x <= left + windowFrameWidth && y >= bottom - windowFrameWidth)) {
+        } else if (y >= bottom - windowFrameWidth || (x <= left + windowFrameWidth && y >= bottom - cornerMargin)) {
             s = Qt::BottomLeftSection;
         } else if (x <= left + windowFrameWidth) {
             s = Qt::LeftSection;
@@ -1323,7 +1319,7 @@ Qt::WindowFrameSection QGraphicsWidget::windowFrameSectionAt(const QPointF &pos)
     } else if (x >= right - cornerMargin) {
         if (y <= top + windowFrameWidth || (x >= right - windowFrameWidth && y <= top + cornerMargin)) {
             s = Qt::TopRightSection;
-        } else if (y >= bottom - windowFrameWidth || (x >= right - windowFrameWidth && y >= bottom - windowFrameWidth)) {
+        } else if (y >= bottom - windowFrameWidth || (x >= right - windowFrameWidth && y >= bottom - cornerMargin)) {
             s = Qt::BottomRightSection;
         } else if (x >= right - windowFrameWidth) {
             s = Qt::RightSection;
@@ -1409,8 +1405,13 @@ bool QGraphicsWidget::event(QEvent *event)
         break;
     case QEvent::WindowActivate:
     case QEvent::WindowDeactivate:
-    case QEvent::StyleAnimationUpdate:
         update();
+        break;
+    case QEvent::StyleAnimationUpdate:
+        if (isVisible()) {
+            event->accept();
+            update();
+        }
         break;
         // Taken from QWidget::event
     case QEvent::ActivationChange:
@@ -1524,7 +1525,7 @@ void QGraphicsWidget::focusInEvent(QFocusEvent *event)
 
 /*!
     Finds a new widget to give the keyboard focus to, as appropriate for Tab
-    and Shift+Tab, and returns true if it can find a new widget; returns false
+    and Shift+Tab, and returns \c true if it can find a new widget; returns \c false
     otherwise. If \a next is true, this function searches forward; if \a next
     is false, it searches backward.
 
@@ -1782,7 +1783,7 @@ void QGraphicsWidget::setWindowFlags(Qt::WindowFlags wFlags)
 }
 
 /*!
-    Returns true if this widget's window is in the active window, or if the
+    Returns \c true if this widget's window is in the active window, or if the
     widget does not have a window but is in an active scene (i.e., a scene
     that currently has focus).
 
@@ -1993,7 +1994,11 @@ void QGraphicsWidget::addAction(QAction *action)
 
     \sa removeAction(), QMenu, addAction(), QWidget::addActions()
 */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+void QGraphicsWidget::addActions(const QList<QAction *> &actions)
+#else
 void QGraphicsWidget::addActions(QList<QAction *> actions)
+#endif
 {
     for (int i = 0; i < actions.count(); ++i)
         insertAction(0, actions.at(i));
@@ -2193,8 +2198,8 @@ void QGraphicsWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
 }
 
 /*!
-    Returns true if \a attribute is enabled for this widget; otherwise,
-    returns false.
+    Returns \c true if \a attribute is enabled for this widget; otherwise,
+    returns \c false.
 
     \sa setAttribute()
 */
@@ -2269,7 +2274,7 @@ void QGraphicsWidget::paintWindowFrame(QPainter *painter, const QStyleOptionGrap
     const QPointF styleOrigin = this->windowFrameRect().topLeft();
     painter->translate(styleOrigin);
 
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
     const QSize pixmapSize = windowFrameRect.size();
     if (pixmapSize.width() <= 0 || pixmapSize.height() <= 0)
         return;
@@ -2337,7 +2342,7 @@ void QGraphicsWidget::paintWindowFrame(QPainter *painter, const QStyleOptionGrap
     frameOptions.midLineWidth = 1;
     style()->drawPrimitive(QStyle::PE_FrameWindow, &frameOptions, painter, widget);
 
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
     realPainter->drawPixmap(QPoint(), pm);
     delete painter;
 #endif
@@ -2364,7 +2369,7 @@ QPainterPath QGraphicsWidget::shape() const
 /*!
     Call this function to close the widget.
 
-    Returns true if the widget was closed; otherwise returns false.
+    Returns \c true if the widget was closed; otherwise returns \c false.
     This slot will first send a QCloseEvent to the widget, which may or may
     not accept the event. If the event was ignored, nothing happens. If the
     event was accepted, it will hide() the widget.
@@ -2388,18 +2393,6 @@ bool QGraphicsWidget::close()
     }
     return true;
 }
-
-#ifdef Q_NO_USING_KEYWORD
-/*!
-    \fn const QObjectList &QGraphicsWidget::children() const
-    \internal
-
-    This function returns the same value as QObject::children(). It's
-    provided to differentiate between the obsolete member
-    QGraphicsItem::children() and QObject::children(). QGraphicsItem now
-    provides childItems() instead.
-*/
-#endif
 
 #if 0
 void QGraphicsWidget::dumpFocusChain()

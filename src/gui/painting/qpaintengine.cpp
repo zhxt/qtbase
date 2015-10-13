@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -157,7 +149,7 @@ QFont QTextItem::font() const
   provided is the raster paint engine, which contains a software
   rasterizer which supports the full feature set on all supported platforms.
   This is the default for painting on QWidget-based classes in e.g. on Windows,
-  X11 and Mac OS X, it is the backend for painting on QImage and it is
+  X11 and OS X, it is the backend for painting on QImage and it is
   used as a fallback for paint engines that do not support a certain
   capability. In addition we provide QPaintEngine implementations for
   OpenGL (accessible through QGLWidget) and printing (which allows using
@@ -371,8 +363,8 @@ void QPaintEngine::drawPolygon(const QPoint *points, int pointCount, PolygonDraw
     \value X11
     \value Windows
     \value MacPrinter
-    \value CoreGraphics Mac OS X's Quartz2D (CoreGraphics)
-    \value QuickDraw Mac OS X's QuickDraw
+    \value CoreGraphics OS X's Quartz2D (CoreGraphics)
+    \value QuickDraw OS X's QuickDraw
     \value QWindowSystem Qt for Embedded Linux
     \value PostScript (No longer supported)
     \value OpenGL
@@ -387,13 +379,14 @@ void QPaintEngine::drawPolygon(const QPoint *points, int pointCount, PolygonDraw
     \value OpenGL2
     \value PaintBuffer
     \value Blitter
+    \value Direct2D Windows only, Direct2D based engine
 */
 
 /*!
     \fn bool QPaintEngine::isActive() const
 
-    Returns true if the paint engine is actively drawing; otherwise
-    returns false.
+    Returns \c true if the paint engine is actively drawing; otherwise
+    returns \c false.
 
     \sa setActive()
 */
@@ -657,8 +650,8 @@ void QPaintEngine::drawImage(const QRectF &r, const QImage &image, const QRectF 
 /*!
     \fn bool QPaintEngine::hasFeature(PaintEngineFeatures feature) const
 
-    Returns true if the paint engine supports the specified \a
-    feature; otherwise returns false.
+    Returns \c true if the paint engine supports the specified \a
+    feature; otherwise returns \c false.
 */
 
 /*!
@@ -666,7 +659,7 @@ void QPaintEngine::drawImage(const QRectF &r, const QImage &image, const QRectF 
 
     \internal
 
-    Returns true if the paint engine is a QPaintEngineEx derivative.
+    Returns \c true if the paint engine is a QPaintEngineEx derivative.
 */
 
 /*!
@@ -760,7 +753,7 @@ void QPaintEngine::drawTextItem(const QPointF &p, const QTextItem &textItem)
                                  bool((painter()->renderHints() & QPainter::TextAntialiasing)
                                       && !(painter()->font().styleStrategy() & QFont::NoAntialias)));
         painter()->translate(p.x(), p.y());
-        painter()->fillPath(path, state->pen().brush());
+        painter()->fillPath(path, painter()->pen().brush());
         painter()->restore();
     }
 }

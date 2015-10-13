@@ -2,7 +2,7 @@ CONFIG += testcase
 SOURCES  += ../tst_qtcpserver.cpp
 
 win32: {
-wince*: {
+wince {
 	LIBS += -lws2
 	crashApp.files = ../crashingServer/crashingServer.exe
 	crashApp.path = crashingServer
@@ -25,4 +25,3 @@ win32 {
 QT = core network testlib
 
 MOC_DIR=tmp
-DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0

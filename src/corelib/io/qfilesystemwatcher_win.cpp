@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -95,7 +87,7 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
             )
 #endif
         normalPath.chop(1);
-        QFileInfo fileInfo(normalPath.toLower());
+        QFileInfo fileInfo(normalPath);
         if (!fileInfo.exists())
             continue;
 
@@ -136,15 +128,16 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
             thread = *jt;
             QMutexLocker locker(&(thread->mutex));
 
-            handle = thread->handleForDir.value(absolutePath);
+            handle = thread->handleForDir.value(QFileSystemWatcherPathKey(absolutePath));
             if (handle.handle != INVALID_HANDLE_VALUE && handle.flags == flags) {
                 // found a thread now insert...
                 DEBUG() << "Found a thread" << thread;
 
-                QHash<QString, QWindowsFileSystemWatcherEngine::PathInfo> &h
-                        = thread->pathInfoForHandle[handle.handle];
-                if (!h.contains(fileInfo.absoluteFilePath())) {
-                    thread->pathInfoForHandle[handle.handle].insert(fileInfo.absoluteFilePath(), pathInfo);
+                QWindowsFileSystemWatcherEngineThread::PathInfoHash &h =
+                    thread->pathInfoForHandle[handle.handle];
+                const QFileSystemWatcherPathKey key(fileInfo.absoluteFilePath());
+                if (!h.contains(key)) {
+                    thread->pathInfoForHandle[handle.handle].insert(key, pathInfo);
                     if (isDir)
                         directories->append(path);
                     else
@@ -177,9 +170,9 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
                     DEBUG() << "Added handle" << handle.handle << "for" << absolutePath << "to watch" << fileInfo.absoluteFilePath()
                             << "to existing thread " << thread;
                     thread->handles.append(handle.handle);
-                    thread->handleForDir.insert(absolutePath, handle);
+                    thread->handleForDir.insert(QFileSystemWatcherPathKey(absolutePath), handle);
 
-                    thread->pathInfoForHandle[handle.handle].insert(fileInfo.absoluteFilePath(), pathInfo);
+                    thread->pathInfoForHandle[handle.handle].insert(QFileSystemWatcherPathKey(fileInfo.absoluteFilePath()), pathInfo);
                     if (isDir)
                         directories->append(path);
                     else
@@ -195,9 +188,9 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
                 QWindowsFileSystemWatcherEngineThread *thread = new QWindowsFileSystemWatcherEngineThread();
                 DEBUG() << "  ###Creating new thread" << thread << "(" << (threads.count()+1) << "threads)";
                 thread->handles.append(handle.handle);
-                thread->handleForDir.insert(absolutePath, handle);
+                thread->handleForDir.insert(QFileSystemWatcherPathKey(absolutePath), handle);
 
-                thread->pathInfoForHandle[handle.handle].insert(fileInfo.absoluteFilePath(), pathInfo);
+                thread->pathInfoForHandle[handle.handle].insert(QFileSystemWatcherPathKey(fileInfo.absoluteFilePath()), pathInfo);
                 if (isDir)
                     directories->append(path);
                 else
@@ -230,7 +223,7 @@ QStringList QWindowsFileSystemWatcherEngine::removePaths(const QStringList &path
         QString normalPath = path;
         if (normalPath.endsWith(QLatin1Char('/')) || normalPath.endsWith(QLatin1Char('\\')))
             normalPath.chop(1);
-        QFileInfo fileInfo(normalPath.toLower());
+        QFileInfo fileInfo(normalPath);
         DEBUG() << "removing" << normalPath;
         QString absolutePath = fileInfo.absoluteFilePath();
         QList<QWindowsFileSystemWatcherEngineThread *>::iterator jt, end;
@@ -242,19 +235,20 @@ QStringList QWindowsFileSystemWatcherEngine::removePaths(const QStringList &path
 
             QMutexLocker locker(&(thread->mutex));
 
-            QWindowsFileSystemWatcherEngine::Handle handle = thread->handleForDir.value(absolutePath);
+            QWindowsFileSystemWatcherEngine::Handle handle = thread->handleForDir.value(QFileSystemWatcherPathKey(absolutePath));
             if (handle.handle == INVALID_HANDLE_VALUE) {
                 // perhaps path is a file?
                 absolutePath = fileInfo.absolutePath();
-                handle = thread->handleForDir.value(absolutePath);
+                handle = thread->handleForDir.value(QFileSystemWatcherPathKey(absolutePath));
             }
             if (handle.handle != INVALID_HANDLE_VALUE) {
-                QHash<QString, QWindowsFileSystemWatcherEngine::PathInfo> &h =
+                QWindowsFileSystemWatcherEngineThread::PathInfoHash &h =
                         thread->pathInfoForHandle[handle.handle];
-                if (h.remove(fileInfo.absoluteFilePath())) {
+                if (h.remove(QFileSystemWatcherPathKey(fileInfo.absoluteFilePath()))) {
                     // ###
                     files->removeAll(path);
                     directories->removeAll(path);
+                    it.remove();
 
                     if (h.isEmpty()) {
                         DEBUG() << "Closing handle" << handle.handle;
@@ -264,10 +258,8 @@ QStringList QWindowsFileSystemWatcherEngine::removePaths(const QStringList &path
                         Q_ASSERT(indexOfHandle != -1);
                         thread->handles.remove(indexOfHandle);
 
-                        thread->handleForDir.remove(absolutePath);
+                        thread->handleForDir.remove(QFileSystemWatcherPathKey(absolutePath));
                         // h is now invalid
-
-                        it.remove();
 
                         if (thread->handleForDir.isEmpty()) {
                             DEBUG() << "Stopping thread " << thread;
@@ -326,7 +318,7 @@ QWindowsFileSystemWatcherEngineThread::~QWindowsFileSystemWatcherEngineThread()
     }
 }
 
-static inline QString msgFindNextFailed(const QHash<QString, QWindowsFileSystemWatcherEngine::PathInfo> &pathInfos)
+static inline QString msgFindNextFailed(const QWindowsFileSystemWatcherEngineThread::PathInfoHash &pathInfos)
 {
     QString result;
     QTextStream str(&result);
@@ -366,7 +358,7 @@ void QWindowsFileSystemWatcherEngineThread::run()
                 // for some reason, so we must check if the handle exist in the handles vector
                 if (handles.contains(handle)) {
                     DEBUG() << "thread" << this << "Acknowledged handle:" << at << handle;
-                    QHash<QString, QWindowsFileSystemWatcherEngine::PathInfo> &h = pathInfoForHandle[handle];
+                    QWindowsFileSystemWatcherEngineThread::PathInfoHash &h = pathInfoForHandle[handle];
                     bool fakeRemove = false;
 
                     if (!FindNextChangeNotification(handle)) {
@@ -381,9 +373,9 @@ void QWindowsFileSystemWatcherEngineThread::run()
 
                         qErrnoWarning(error, "%s", qPrintable(msgFindNextFailed(h)));
                     }
-                    QMutableHashIterator<QString, QWindowsFileSystemWatcherEngine::PathInfo> it(h);
+                    QMutableHashIterator<QFileSystemWatcherPathKey, QWindowsFileSystemWatcherEngine::PathInfo> it(h);
                     while (it.hasNext()) {
-                        QHash<QString, QWindowsFileSystemWatcherEngine::PathInfo>::iterator x = it.next();
+                        QWindowsFileSystemWatcherEngineThread::PathInfoHash::iterator x = it.next();
                         QString absolutePath = x.value().absolutePath;
                         QFileInfo fileInfo(x.value().path);
                         DEBUG() << "checking" << x.key();
@@ -407,7 +399,7 @@ void QWindowsFileSystemWatcherEngineThread::run()
                                 Q_ASSERT(indexOfHandle != -1);
                                 handles.remove(indexOfHandle);
 
-                                handleForDir.remove(absolutePath);
+                                handleForDir.remove(QFileSystemWatcherPathKey(absolutePath));
                                 // h is now invalid
                             }
                         } else if (x.value().isDir) {

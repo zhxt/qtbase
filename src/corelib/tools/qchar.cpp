@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -53,6 +45,8 @@
 
 #include "qunicodetables_p.h"
 #include "qunicodetables.cpp"
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -113,7 +107,7 @@ QT_BEGIN_NAMESPACE
     operating on the full range of Unicode characters, not just for the ASCII
     range. They all return true if the character is a certain type of character;
     otherwise they return false. These classification functions are
-    isNull() (returns true if the character is '\\0'), isPrint()
+    isNull() (returns \c true if the character is '\\0'), isPrint()
     (true if the character is any sort of printable character,
     including whitespace), isPunct() (any sort of punctation),
     isMark() (Unicode Mark), isLetter() (a letter), isNumber() (any
@@ -121,13 +115,13 @@ QT_BEGIN_NAMESPACE
     isDigit() (decimal digits). All of these are wrappers around
     category() which return the Unicode-defined category of each
     character. Some of these also calculate the derived properties
-    (for example isSpace() returns true if the character is of category
+    (for example isSpace() returns \c true if the character is of category
     Separator_* or an exceptional code point from Other_Control category).
 
     QChar also provides direction(), which indicates the "natural"
-    writing direction of this character. The joining() function
+    writing direction of this character. The joiningType() function
     indicates how the character joins with it's neighbors (needed
-    mostly for Arabic) and finally hasMirrored(), which indicates
+    mostly for Arabic or Syriac) and finally hasMirrored(), which indicates
     whether the character needs to be mirrored when it is printed in
     it's "unnatural" writing direction.
 
@@ -183,8 +177,9 @@ QT_BEGIN_NAMESPACE
     \value Unicode_6_0  Version 6.0
     \value Unicode_6_1  Version 6.1
     \value Unicode_6_2  Version 6.2
+    \value Unicode_6_3  Version 6.3  Since Qt 5.3
     \value Unicode_Unassigned  The value is not assigned to any character
-                               in version 6.2 of Unicode.
+                               in version 6.3 of Unicode.
 
     \sa unicodeVersion(), currentUnicodeVersion()
 */
@@ -382,6 +377,29 @@ QT_BEGIN_NAMESPACE
     \value Script_Sharada
     \value Script_SoraSompeng
     \value Script_Takri
+    \value Script_CaucasianAlbanian
+    \value Script_BassaVah
+    \value Script_Duployan
+    \value Script_Elbasan
+    \value Script_Grantha
+    \value Script_PahawhHmong
+    \value Script_Khojki
+    \value Script_LinearA
+    \value Script_Mahajani
+    \value Script_Manichaean
+    \value Script_MendeKikakui
+    \value Script_Modi
+    \value Script_Mro
+    \value Script_OldNorthArabian
+    \value Script_Nabataean
+    \value Script_Palmyrene
+    \value Script_PauCinHau
+    \value Script_OldPermic
+    \value Script_PsalterPahlavi
+    \value Script_Siddham
+    \value Script_Khudawadi
+    \value Script_Tirhuta
+    \value Script_WarangCiti
 
     \omitvalue ScriptCount
 
@@ -406,14 +424,18 @@ QT_BEGIN_NAMESPACE
     \value DirEN
     \value DirES
     \value DirET
+    \value DirFSI Since Qt 5.3
     \value DirL
     \value DirLRE
+    \value DirLRI Since Qt 5.3
     \value DirLRO
     \value DirNSM
     \value DirON
     \value DirPDF
+    \value DirPDI Since Qt 5.3
     \value DirR
     \value DirRLE
+    \value DirRLI Since Qt 5.3
     \value DirRLO
     \value DirS
     \value DirWS
@@ -451,7 +473,29 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
+    \enum QChar::JoiningType
+    since 5.3
+
+    This enum type defines the Unicode joining type attributes. See the
+    \l{http://www.unicode.org/}{Unicode Standard} for a description of the values.
+
+    In order to conform to C/C++ naming conventions "Joining_" is prepended
+    to the codes used in the Unicode Standard.
+
+    \value Joining_None
+    \value Joining_Causing
+    \value Joining_Dual
+    \value Joining_Right
+    \value Joining_Left
+    \value Joining_Transparent
+
+    \sa joiningType()
+*/
+
+#if QT_DEPRECATED_SINCE(5, 3)
+/*!
     \enum QChar::Joining
+    \deprecated in 5.3, use JoiningType instead.
 
     This enum type defines the Unicode joining attributes. See the
     \l{http://www.unicode.org/}{Unicode Standard} for a description
@@ -464,6 +508,7 @@ QT_BEGIN_NAMESPACE
 
     \sa joining()
 */
+#endif
 
 /*!
     \enum QChar::CombiningClass
@@ -504,6 +549,7 @@ QT_BEGIN_NAMESPACE
     \value CarriageReturn
     \value Space
     \value Nbsp Non-breaking space.
+    \value SoftHyphen
     \value ReplacementCharacter The character shown when a font has no glyph
            for a certain codepoint. A special question mark character is often
            used. Codecs use this codepoint when input data cannot be
@@ -551,12 +597,22 @@ QT_BEGIN_NAMESPACE
     \fn QChar::QChar(char ch)
 
     Constructs a QChar corresponding to ASCII/Latin-1 character \a ch.
+
+    \note This constructor is not available when \c QT_NO_CAST_FROM_ASCII
+    is defined.
+
+    \sa QT_NO_CAST_FROM_ASCII
 */
 
 /*!
     \fn QChar::QChar(uchar ch)
 
     Constructs a QChar corresponding to ASCII/Latin-1 character \a ch.
+
+    \note This constructor is not available when \c QT_NO_CAST_FROM_ASCII
+    is defined.
+
+    \sa QT_NO_CAST_FROM_ASCII
 */
 
 /*!
@@ -594,8 +650,8 @@ QT_BEGIN_NAMESPACE
 /*!
     \fn bool QChar::isNull() const
 
-    Returns true if the character is the Unicode character 0x0000
-    ('\\0'); otherwise returns false.
+    Returns \c true if the character is the Unicode character 0x0000
+    ('\\0'); otherwise returns \c false.
 */
 
 /*!
@@ -617,8 +673,8 @@ QT_BEGIN_NAMESPACE
 /*!
     \fn bool QChar::isPrint() const
 
-    Returns true if the character is a printable character; otherwise
-    returns false. This is any character not of category Other_*.
+    Returns \c true if the character is a printable character; otherwise
+    returns \c false. This is any character not of category Other_*.
 
     Note that this gives no indication of whether the character is
     available in a particular font.
@@ -628,8 +684,8 @@ QT_BEGIN_NAMESPACE
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a printable character; otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a printable character; otherwise returns \c false.
     This is any character not of category Other_*.
 
     Note that this gives no indication of whether the character is
@@ -650,9 +706,9 @@ bool QChar::isPrint(uint ucs4)
 /*!
     \fn bool QChar::isSpace() const
 
-    Returns true if the character is a separator character
+    Returns \c true if the character is a separator character
     (Separator_* categories or certain code points from Other_Control category);
-    otherwise returns false.
+    otherwise returns \c false.
 */
 
 /*!
@@ -660,9 +716,9 @@ bool QChar::isPrint(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
     a separator character (Separator_* categories or certain code points
-    from Other_Control category); otherwise returns false.
+    from Other_Control category); otherwise returns \c false.
 */
 
 /*!
@@ -681,8 +737,8 @@ bool QT_FASTCALL QChar::isSpace_helper(uint ucs4)
 /*!
     \fn bool QChar::isMark() const
 
-    Returns true if the character is a mark (Mark_* categories);
-    otherwise returns false.
+    Returns \c true if the character is a mark (Mark_* categories);
+    otherwise returns \c false.
 
     See QChar::Category for more information regarding marks.
 */
@@ -691,8 +747,8 @@ bool QT_FASTCALL QChar::isSpace_helper(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a mark (Mark_* categories); otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a mark (Mark_* categories); otherwise returns \c false.
 */
 bool QChar::isMark(uint ucs4)
 {
@@ -707,16 +763,16 @@ bool QChar::isMark(uint ucs4)
 /*!
     \fn bool QChar::isPunct() const
 
-    Returns true if the character is a punctuation mark (Punctuation_*
-    categories); otherwise returns false.
+    Returns \c true if the character is a punctuation mark (Punctuation_*
+    categories); otherwise returns \c false.
 */
 
 /*!
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a punctuation mark (Punctuation_* categories); otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a punctuation mark (Punctuation_* categories); otherwise returns \c false.
 */
 bool QChar::isPunct(uint ucs4)
 {
@@ -735,16 +791,16 @@ bool QChar::isPunct(uint ucs4)
 /*!
     \fn bool QChar::isSymbol() const
 
-    Returns true if the character is a symbol (Symbol_* categories);
-    otherwise returns false.
+    Returns \c true if the character is a symbol (Symbol_* categories);
+    otherwise returns \c false.
 */
 
 /*!
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a symbol (Symbol_* categories); otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a symbol (Symbol_* categories); otherwise returns \c false.
 */
 bool QChar::isSymbol(uint ucs4)
 {
@@ -760,8 +816,8 @@ bool QChar::isSymbol(uint ucs4)
 /*!
     \fn bool QChar::isLetter() const
 
-    Returns true if the character is a letter (Letter_* categories);
-    otherwise returns false.
+    Returns \c true if the character is a letter (Letter_* categories);
+    otherwise returns \c false.
 */
 
 /*!
@@ -769,8 +825,8 @@ bool QChar::isSymbol(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a letter (Letter_* categories); otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a letter (Letter_* categories); otherwise returns \c false.
 */
 
 /*!
@@ -791,8 +847,8 @@ bool QT_FASTCALL QChar::isLetter_helper(uint ucs4)
 /*!
     \fn bool QChar::isNumber() const
 
-    Returns true if the character is a number (Number_* categories,
-    not just 0-9); otherwise returns false.
+    Returns \c true if the character is a number (Number_* categories,
+    not just 0-9); otherwise returns \c false.
 
     \sa isDigit()
 */
@@ -802,8 +858,8 @@ bool QT_FASTCALL QChar::isLetter_helper(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a number (Number_* categories, not just 0-9); otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a number (Number_* categories, not just 0-9); otherwise returns \c false.
 
     \sa isDigit()
 */
@@ -824,8 +880,8 @@ bool QT_FASTCALL QChar::isNumber_helper(uint ucs4)
 /*!
     \fn bool QChar::isLetterOrNumber() const
 
-    Returns true if the character is a letter or number (Letter_* or
-    Number_* categories); otherwise returns false.
+    Returns \c true if the character is a letter or number (Letter_* or
+    Number_* categories); otherwise returns \c false.
 */
 
 /*!
@@ -833,8 +889,8 @@ bool QT_FASTCALL QChar::isNumber_helper(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a letter or number (Letter_* or Number_* categories); otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a letter or number (Letter_* or Number_* categories); otherwise returns \c false.
 */
 
 /*!
@@ -858,8 +914,8 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
 /*!
     \fn bool QChar::isDigit() const
 
-    Returns true if the character is a decimal digit
-    (Number_DecimalDigit); otherwise returns false.
+    Returns \c true if the character is a decimal digit
+    (Number_DecimalDigit); otherwise returns \c false.
 
     \sa isNumber()
 */
@@ -869,8 +925,8 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4 is
-    a decimal digit (Number_DecimalDigit); otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4 is
+    a decimal digit (Number_DecimalDigit); otherwise returns \c false.
 
     \sa isNumber()
 */
@@ -879,7 +935,7 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
     \fn bool QChar::isNonCharacter() const
     \since 5.0
 
-    Returns true if the QChar is a non-character; false otherwise.
+    Returns \c true if the QChar is a non-character; false otherwise.
 
     Unicode has a certain number of code points that are classified
     as "non-characters:" that is, they can be used for internal purposes
@@ -891,14 +947,14 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
 /*!
     \fn bool QChar::isHighSurrogate() const
 
-    Returns true if the QChar is the high part of a UTF16 surrogate
+    Returns \c true if the QChar is the high part of a UTF16 surrogate
     (for example if its code point is in range [0xd800..0xdbff]); false otherwise.
 */
 
 /*!
     \fn bool QChar::isLowSurrogate() const
 
-    Returns true if the QChar is the low part of a UTF16 surrogate
+    Returns \c true if the QChar is the low part of a UTF16 surrogate
     (for example if its code point is in range [0xdc00..0xdfff]); false otherwise.
 */
 
@@ -906,7 +962,7 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
     \fn bool QChar::isSurrogate() const
     \since 5.0
 
-    Returns true if the QChar contains a code point that is in either
+    Returns \c true if the QChar contains a code point that is in either
     the high or the low part of the UTF-16 surrogate range
     (for example if its code point is in range [0xd800..0xdfff]); false otherwise.
 */
@@ -916,7 +972,7 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     is a non-character; false otherwise.
 
     Unicode has a certain number of code points that are classified
@@ -930,7 +986,7 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
     \fn static bool QChar::isHighSurrogate(uint ucs4)
     \overload
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     is the high part of a UTF16 surrogate
     (for example if its code point is in range [0xd800..0xdbff]); false otherwise.
 */
@@ -939,7 +995,7 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
     \fn static bool QChar::isLowSurrogate(uint ucs4)
     \overload
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     is the low part of a UTF16 surrogate
     (for example if its code point is in range [0xdc00..0xdfff]); false otherwise.
 */
@@ -949,7 +1005,7 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     contains a code point that is in either the high or the low part of the
     UTF-16 surrogate range (for example if its code point is in range [0xd800..0xdfff]);
     false otherwise.
@@ -958,7 +1014,7 @@ bool QT_FASTCALL QChar::isLetterOrNumber_helper(uint ucs4)
 /*!
     \fn static bool QChar::requiresSurrogates(uint ucs4)
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     can be split into the high and low parts of a UTF16 surrogate
     (for example if its code point is greater than or equals to 0x10000);
     false otherwise.
@@ -1045,7 +1101,32 @@ QChar::Direction QChar::direction(uint ucs4)
 }
 
 /*!
+    \fn QChar::JoiningType QChar::joiningType() const
+    \since 5.3
+
+    Returns information about the joining type attributes of the character
+    (needed for certain languages such as Arabic or Syriac).
+*/
+
+/*!
+    \overload
+    \since 5.3
+
+    Returns information about the joining type attributes of the UCS-4-encoded
+    character specified by \a ucs4
+    (needed for certain languages such as Arabic or Syriac).
+*/
+QChar::JoiningType QChar::joiningType(uint ucs4)
+{
+    if (ucs4 > LastValidCodePoint)
+        return QChar::Joining_None;
+    return QChar::JoiningType(qGetProp(ucs4)->joining);
+}
+
+#if QT_DEPRECATED_SINCE(5, 3)
+/*!
     \fn QChar::Joining QChar::joining() const
+    \deprecated in 5.3, use joiningType() instead.
 
     Returns information about the joining properties of the character
     (needed for certain languages such as Arabic).
@@ -1053,6 +1134,8 @@ QChar::Direction QChar::direction(uint ucs4)
 
 /*!
     \overload
+    \deprecated in 5.3, use joiningType() instead.
+
     Returns information about the joining properties of the UCS-4-encoded
     character specified by \a ucs4 (needed for certain languages such as Arabic).
 */
@@ -1060,14 +1143,21 @@ QChar::Joining QChar::joining(uint ucs4)
 {
     if (ucs4 > LastValidCodePoint)
         return QChar::OtherJoining;
-    return (QChar::Joining) qGetProp(ucs4)->joining;
+    switch (qGetProp(ucs4)->joining) {
+    case QChar::Joining_Causing: return QChar::Center;
+    case QChar::Joining_Dual: return QChar::Dual;
+    case QChar::Joining_Right: return QChar::Right;
+    default: break;
+    }
+    return QChar::OtherJoining;
 }
+#endif
 
 /*!
     \fn bool QChar::hasMirrored() const
 
-    Returns true if the character should be reversed if the text
-    direction is reversed; otherwise returns false.
+    Returns \c true if the character should be reversed if the text
+    direction is reversed; otherwise returns \c false.
 
     A bit faster equivalent of (ch.mirroredChar() != ch).
 
@@ -1078,8 +1168,8 @@ QChar::Joining QChar::joining(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
-    should be reversed if the text direction is reversed; otherwise returns false.
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
+    should be reversed if the text direction is reversed; otherwise returns \c false.
 
     A bit faster equivalent of (QChar::mirroredChar(ucs4) != ucs4).
 
@@ -1095,7 +1185,7 @@ bool QChar::hasMirrored(uint ucs4)
 /*!
     \fn bool QChar::isLower() const
 
-    Returns true if the character is a lowercase letter, for example
+    Returns \c true if the character is a lowercase letter, for example
     category() is Letter_Lowercase.
 
     \sa isUpper(), toLower(), toUpper()
@@ -1106,7 +1196,7 @@ bool QChar::hasMirrored(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     is a lowercase letter, for example category() is Letter_Lowercase.
 
     \sa isUpper(), toLower(), toUpper()
@@ -1115,7 +1205,7 @@ bool QChar::hasMirrored(uint ucs4)
 /*!
     \fn bool QChar::isUpper() const
 
-    Returns true if the character is an uppercase letter, for example
+    Returns \c true if the character is an uppercase letter, for example
     category() is Letter_Uppercase.
 
     \sa isLower(), toUpper(), toLower()
@@ -1126,7 +1216,7 @@ bool QChar::hasMirrored(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     is an uppercase letter, for example category() is Letter_Uppercase.
 
     \sa isLower(), toUpper(), toLower()
@@ -1135,7 +1225,7 @@ bool QChar::hasMirrored(uint ucs4)
 /*!
     \fn bool QChar::isTitleCase() const
 
-    Returns true if the character is a titlecase letter, for example
+    Returns \c true if the character is a titlecase letter, for example
     category() is Letter_Titlecase.
 
     \sa isLower(), toUpper(), toLower(), toTitleCase()
@@ -1146,7 +1236,7 @@ bool QChar::hasMirrored(uint ucs4)
     \overload
     \since 5.0
 
-    Returns true if the UCS-4-encoded character specified by \a ucs4
+    Returns \c true if the UCS-4-encoded character specified by \a ucs4
     is a titlecase letter, for example category() is Letter_Titlecase.
 
     \sa isLower(), toUpper(), toLower(), toTitleCase()
@@ -1333,7 +1423,7 @@ QChar::UnicodeVersion QChar::currentUnicodeVersion()
 
 
 template <typename T>
-static inline T toLowerCase_helper(T uc)
+Q_DECL_CONST_FUNCTION static inline T toLowerCase_helper(T uc)
 {
     const QUnicodeTables::Properties *p = qGetProp(uc);
     if (p->lowerCaseSpecial) {
@@ -1344,7 +1434,7 @@ static inline T toLowerCase_helper(T uc)
 }
 
 template <typename T>
-static inline T toUpperCase_helper(T uc)
+Q_DECL_CONST_FUNCTION static inline T toUpperCase_helper(T uc)
 {
     const QUnicodeTables::Properties *p = qGetProp(uc);
     if (p->upperCaseSpecial) {
@@ -1355,7 +1445,7 @@ static inline T toUpperCase_helper(T uc)
 }
 
 template <typename T>
-static inline T toTitleCase_helper(T uc)
+Q_DECL_CONST_FUNCTION static inline T toTitleCase_helper(T uc)
 {
     const QUnicodeTables::Properties *p = qGetProp(uc);
     if (p->titleCaseSpecial) {
@@ -1366,7 +1456,7 @@ static inline T toTitleCase_helper(T uc)
 }
 
 template <typename T>
-static inline T toCaseFolded_helper(T uc)
+Q_DECL_CONST_FUNCTION static inline T toCaseFolded_helper(T uc)
 {
     const QUnicodeTables::Properties *p = qGetProp(uc);
     if (p->caseFoldSpecial) {
@@ -1462,13 +1552,13 @@ static inline ushort foldCase(ushort ch)
     \fn QChar QChar::toCaseFolded() const
 
     Returns the case folded equivalent of the character.
-    For most Unicode characters this is the same as toLowerCase().
+    For most Unicode characters this is the same as toLower().
 */
 
 /*!
     \overload
     Returns the case folded equivalent of the UCS-4-encoded character specified
-    by \a ucs4. For most Unicode characters this is the same as toLowerCase().
+    by \a ucs4. For most Unicode characters this is the same as toLower().
 */
 uint QChar::toCaseFolded(uint ucs4)
 {
@@ -1583,8 +1673,8 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
 
     \relates QChar
 
-    Returns true if \a c1 and \a c2 are the same Unicode character;
-    otherwise returns false.
+    Returns \c true if \a c1 and \a c2 are the same Unicode character;
+    otherwise returns \c false.
 */
 
 /*!
@@ -1592,8 +1682,8 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
 
     \relates QChar
 
-    Returns true if \a c1 and \a c2 are not the same Unicode
-    character; otherwise returns false.
+    Returns \c true if \a c1 and \a c2 are not the same Unicode
+    character; otherwise returns \c false.
 */
 
 /*!
@@ -1601,8 +1691,8 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
 
     \relates QChar
 
-    Returns true if the numeric Unicode value of \a c1 is less than
-    or equal to that of \a c2; otherwise returns false.
+    Returns \c true if the numeric Unicode value of \a c1 is less than
+    or equal to that of \a c2; otherwise returns \c false.
 */
 
 /*!
@@ -1610,8 +1700,8 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
 
     \relates QChar
 
-    Returns true if the numeric Unicode value of \a c1 is greater than
-    or equal to that of \a c2; otherwise returns false.
+    Returns \c true if the numeric Unicode value of \a c1 is greater than
+    or equal to that of \a c2; otherwise returns \c false.
 */
 
 /*!
@@ -1619,8 +1709,8 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
 
     \relates QChar
 
-    Returns true if the numeric Unicode value of \a c1 is less than
-    that of \a c2; otherwise returns false.
+    Returns \c true if the numeric Unicode value of \a c1 is less than
+    that of \a c2; otherwise returns \c false.
 */
 
 /*!
@@ -1628,8 +1718,8 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
 
     \relates QChar
 
-    Returns true if the numeric Unicode value of \a c1 is greater than
-    that of \a c2; otherwise returns false.
+    Returns \c true if the numeric Unicode value of \a c1 is greater than
+    that of \a c2; otherwise returns \c false.
 */
 
 
@@ -1677,6 +1767,8 @@ struct UCS2Pair {
     ushort u2;
 };
 
+inline bool operator<(const UCS2Pair &ligature1, const UCS2Pair &ligature2)
+{ return ligature1.u1 < ligature2.u1; }
 inline bool operator<(ushort u1, const UCS2Pair &ligature)
 { return u1 < ligature.u1; }
 inline bool operator<(const UCS2Pair &ligature, ushort u1)
@@ -1687,6 +1779,8 @@ struct UCS2SurrogatePair {
     UCS2Pair p2;
 };
 
+inline bool operator<(const UCS2SurrogatePair &ligature1, const UCS2SurrogatePair &ligature2)
+{ return QChar::surrogateToUcs4(ligature1.p1.u1, ligature1.p1.u2) < QChar::surrogateToUcs4(ligature2.p1.u1, ligature2.p1.u2); }
 inline bool operator<(uint u1, const UCS2SurrogatePair &ligature)
 { return u1 < QChar::surrogateToUcs4(ligature.p1.u1, ligature.p1.u2); }
 inline bool operator<(const UCS2SurrogatePair &ligature, uint u1)
@@ -1719,13 +1813,13 @@ static uint inline ligatureHelper(uint u1, uint u2)
     ushort length = *ligatures++;
     if (QChar::requiresSurrogates(u1)) {
         const UCS2SurrogatePair *data = reinterpret_cast<const UCS2SurrogatePair *>(ligatures);
-        const UCS2SurrogatePair *r = qBinaryFind(data, data + length, u1);
-        if (r != data + length)
+        const UCS2SurrogatePair *r = std::lower_bound(data, data + length, u1);
+        if (r != data + length && QChar::surrogateToUcs4(r->p1.u1, r->p1.u2) == u1)
             return QChar::surrogateToUcs4(r->p2.u1, r->p2.u2);
     } else {
         const UCS2Pair *data = reinterpret_cast<const UCS2Pair *>(ligatures);
-        const UCS2Pair *r = qBinaryFind(data, data + length, ushort(u1));
-        if (r != data + length)
+        const UCS2Pair *r = std::lower_bound(data, data + length, ushort(u1));
+        if (r != data + length && r->u1 == ushort(u1))
             return r->u2;
     }
 
@@ -1739,10 +1833,10 @@ static void composeHelper(QString *str, QChar::UnicodeVersion version, int from)
     if (from < 0 || s.length() - from < 2)
         return;
 
-    int starter = 0; // starter position
     uint stcode = 0; // starter code point
-    int next = -1;
-    int lastCombining = 0;
+    int starter = -1; // starter position
+    int next = -1; // to prevent i == next
+    int lastCombining = 255; // to prevent combining > lastCombining
 
     int pos = from;
     while (pos < s.length()) {
@@ -1766,8 +1860,7 @@ static void composeHelper(QString *str, QChar::UnicodeVersion version, int from)
         }
 
         int combining = p->combiningClass;
-        if (i == next || combining > lastCombining) {
-            Q_ASSERT(starter >= from);
+        if ((i == next || combining > lastCombining) && starter >= from) {
             // allowed to form ligature with S
             uint ligature = ligatureHelper(stcode, uc);
             if (ligature) {
@@ -1883,6 +1976,67 @@ static void canonicalOrderHelper(QString *str, QChar::UnicodeVersion version, in
             goto advance;
         }
     }
+}
+
+// returns true if the text is in a desired Normalization Form already; false otherwise.
+// sets lastStable to the position of the last stable code point
+static bool normalizationQuickCheckHelper(QString *str, QString::NormalizationForm mode, int from, int *lastStable)
+{
+    Q_STATIC_ASSERT(QString::NormalizationForm_D == 0);
+    Q_STATIC_ASSERT(QString::NormalizationForm_C == 1);
+    Q_STATIC_ASSERT(QString::NormalizationForm_KD == 2);
+    Q_STATIC_ASSERT(QString::NormalizationForm_KC == 3);
+
+    enum { NFQC_YES = 0, NFQC_NO = 1, NFQC_MAYBE = 3 };
+
+    const ushort *string = reinterpret_cast<const ushort *>(str->constData());
+    int length = str->length();
+
+    // this avoids one out of bounds check in the loop
+    while (length > from && QChar::isHighSurrogate(string[length - 1]))
+        --length;
+
+    uchar lastCombining = 0;
+    for (int i = from; i < length; ++i) {
+        int pos = i;
+        uint uc = string[i];
+        if (uc < 0x80) {
+            // ASCII characters are stable code points
+            lastCombining = 0;
+            *lastStable = pos;
+            continue;
+        }
+
+        if (QChar::isHighSurrogate(uc)) {
+            ushort low = string[i + 1];
+            if (!QChar::isLowSurrogate(low)) {
+                // treat surrogate like stable code point
+                lastCombining = 0;
+                *lastStable = pos;
+                continue;
+            }
+            ++i;
+            uc = QChar::surrogateToUcs4(uc, low);
+        }
+
+        const QUnicodeTables::Properties *p = qGetProp(uc);
+
+        if (p->combiningClass < lastCombining && p->combiningClass > 0)
+            return false;
+
+        const uchar check = (p->nfQuickCheck >> (mode << 1)) & 0x03;
+        if (check != NFQC_YES)
+            return false; // ### can we quick check NFQC_MAYBE ?
+
+        lastCombining = p->combiningClass;
+        if (lastCombining == 0)
+            *lastStable = pos;
+    }
+
+    if (length != str->length()) // low surrogate parts at the end of text
+        *lastStable = str->length() - 1;
+
+    return true;
 }
 
 QT_END_NAMESPACE

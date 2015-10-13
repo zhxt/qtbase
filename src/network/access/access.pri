@@ -7,6 +7,9 @@ HEADERS += \
     access/qhttpnetworkreply_p.h \
     access/qhttpnetworkconnection_p.h \
     access/qhttpnetworkconnectionchannel_p.h \
+    access/qabstractprotocolhandler_p.h \
+    access/qhttpprotocolhandler_p.h \
+    access/qspdyprotocolhandler_p.h \
     access/qnetworkaccessauthenticationmanager_p.h \
     access/qnetworkaccessmanager.h \
     access/qnetworkaccessmanager_p.h \
@@ -43,6 +46,9 @@ SOURCES += \
     access/qhttpnetworkreply.cpp \
     access/qhttpnetworkconnection.cpp \
     access/qhttpnetworkconnectionchannel.cpp \
+    access/qabstractprotocolhandler.cpp \
+    access/qhttpprotocolhandler.cpp \
+    access/qspdyprotocolhandler.cpp \
     access/qnetworkaccessauthenticationmanager.cpp \
     access/qnetworkaccessmanager.cpp \
     access/qnetworkaccesscache.cpp \
@@ -64,6 +70,14 @@ SOURCES += \
     access/qhttpthreaddelegate.cpp \
     access/qhttpmultipart.cpp
 
-include($$PWD/../../3rdparty/zlib_dependency.pri)
+mac: LIBS_PRIVATE += -framework Security
 
-mac:LIBS_PRIVATE += -framework Security
+ios {
+    HEADERS += \
+        access/qnetworkreplynsurlconnectionimpl_p.h
+
+    OBJECTIVE_SOURCES += \
+        access/qnetworkreplynsurlconnectionimpl.mm
+}
+
+include($$PWD/../../3rdparty/zlib_dependency.pri)

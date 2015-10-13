@@ -12,7 +12,8 @@ HEADERS += socket/qabstractsocketengine_p.h \
            socket/qlocalserver.h \
            socket/qlocalserver_p.h \
            socket/qlocalsocket.h \
-           socket/qlocalsocket_p.h
+           socket/qlocalsocket_p.h \
+           socket/qtcpserver_p.h
 
 SOURCES += socket/qabstractsocketengine.cpp \
            socket/qhttpsocketengine.cpp \
@@ -24,8 +25,10 @@ SOURCES += socket/qabstractsocketengine.cpp \
            socket/qlocalsocket.cpp \
            socket/qlocalserver.cpp
 
-SOURCES += socket/qnativesocketengine.cpp
-HEADERS += socket/qnativesocketengine_p.h
+!winrt {
+    SOURCES += socket/qnativesocketengine.cpp
+    HEADERS += socket/qnativesocketengine_p.h
+}
 
 unix: {
     SOURCES += socket/qnativesocketengine_unix.cpp \
@@ -36,13 +39,22 @@ unix: {
 unix:HEADERS += \
                 socket/qnet_unix_p.h
 
-win32:SOURCES += socket/qnativesocketengine_win.cpp \
+win32:!winrt:SOURCES += socket/qnativesocketengine_win.cpp \
                 socket/qlocalsocket_win.cpp \
                 socket/qlocalserver_win.cpp
 
-win32:!wince*:LIBS += -ladvapi32
+win32:!wince:!winrt:LIBS_PRIVATE += -ladvapi32
 
-wince*: {
+winrt {
+    SOURCES += socket/qnativesocketengine_winrt.cpp \
+               socket/qlocalsocket_tcp.cpp \
+               socket/qlocalserver_tcp.cpp
+    HEADERS += socket/qnativesocketengine_winrt_p.h
+
+    DEFINES += QT_LOCALSOCKET_TCP
+}
+
+wince {
     SOURCES -= socket/qlocalsocket_win.cpp \
                socket/qlocalserver_win.cpp
     SOURCES += socket/qlocalsocket_tcp.cpp \

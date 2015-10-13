@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,8 +39,7 @@
 
     \ingroup thread
 
-    To start a computation, use one of the APIs in the
-    \l {Concurrent Programming}{Qt Concurrent} framework.
+    To start a computation, use one of the APIs in the \l {Qt Concurrent} framework.
 
     QFuture allows threads to be synchronized against one or more results
     which will be ready at a later point in time. The result can be of any type
@@ -93,12 +84,12 @@
 
     To interact with running tasks using signals and slots, use QFutureWatcher.
 
-    \sa QFutureWatcher, {Concurrent Programming}{Qt Concurrent}
+    \sa QFutureWatcher, {Qt Concurrent}
 */
 
 /*! \fn QFuture::QFuture()
 
-    Constructs an empty future.
+    Constructs an empty, canceled future.
 */
 
 /*! \fn QFuture::QFuture(const QFuture &other)
@@ -128,12 +119,12 @@
 
 /*! \fn bool QFuture::operator==(const QFuture &other) const
 
-    Returns true if \a other is a copy of this future; otherwise returns false.
+    Returns \c true if \a other is a copy of this future; otherwise returns \c false.
 */
 
 /*! \fn bool QFuture::operator!=(const QFuture &other) const
 
-    Returns true if \a other is \e not a copy of this future; otherwise returns
+    Returns \c true if \a other is \e not a copy of this future; otherwise returns
     false.
 */
 
@@ -155,11 +146,11 @@
 
 /*! \fn bool QFuture::isCanceled() const
 
-    Returns true if the asynchronous computation has been canceled with the
-    cancel() function; otherwise returns false.
+    Returns \c true if the asynchronous computation has been canceled with the
+    cancel() function; otherwise returns \c false.
 
     Be aware that the computation may still be running even though this
-    function returns true. See cancel() for more details.
+    function returns \c true. See cancel() for more details.
 */
 
 /*! \fn void QFuture::setPaused(bool paused)
@@ -183,11 +174,11 @@
 
 /*! \fn bool QFuture::isPaused() const
 
-    Returns true if the asynchronous computation has been paused with the
-    pause() function; otherwise returns false.
+    Returns \c true if the asynchronous computation has been paused with the
+    pause() function; otherwise returns \c false.
 
     Be aware that the computation may still be running even though this
-    function returns true. See setPaused() for more details.
+    function returns \c true. See setPaused() for more details.
 
     \sa setPaused(), togglePaused()
 */
@@ -220,20 +211,20 @@
 
 /*! \fn bool QFuture::isStarted() const
 
-    Returns true if the asynchronous computation represented by this future
-    has been started; otherwise returns false.
+    Returns \c true if the asynchronous computation represented by this future
+    has been started; otherwise returns \c false.
 */
 
 /*! \fn bool QFuture::isFinished() const
 
-    Returns true if the asynchronous computation represented by this future
-    has finished; otherwise returns false.
+    Returns \c true if the asynchronous computation represented by this future
+    has finished; otherwise returns \c false.
 */
 
 /*! \fn bool QFuture::isRunning() const
 
-    Returns true if the asynchronous computation represented by this future is
-    currently running; otherwise returns false.
+    Returns \c true if the asynchronous computation represented by this future is
+    currently running; otherwise returns \c false.
 */
 
 /*! \fn int QFuture::resultCount() const
@@ -302,8 +293,8 @@
 
 /*! \fn bool QFuture::isResultReadyAt(int index) const
 
-    Returns true if the result at \a index is immediately available; otherwise
-    returns false.
+    Returns \c true if the result at \a index is immediately available; otherwise
+    returns \c false.
 
     \sa resultAt(), resultCount()
 */
@@ -442,16 +433,16 @@
 
 /*! \fn bool QFuture::const_iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different result than this iterator;
-    otherwise returns false.
+    Returns \c true if \a other points to a different result than this iterator;
+    otherwise returns \c false.
 
     \sa operator==()
 */
 
 /*! \fn bool QFuture::const_iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same result as this iterator;
-    otherwise returns false.
+    Returns \c true if \a other points to the same result as this iterator;
+    otherwise returns \c false.
 
     \sa operator!=()
 */
@@ -617,7 +608,7 @@
 
 /*! \fn bool QFutureIterator::hasNext() const
 
-    Returns true if there is at least one result ahead of the iterator, e.g.,
+    Returns \c true if there is at least one result ahead of the iterator, e.g.,
     the iterator is \e not at the back of the result list; otherwise returns
     false.
 
@@ -646,7 +637,7 @@
 
 /*! \fn bool QFutureIterator::hasPrevious() const
 
-    Returns true if there is at least one result ahead of the iterator, e.g.,
+    Returns \c true if there is at least one result ahead of the iterator, e.g.,
     the iterator is \e not at the front of the result list; otherwise returns
     false.
 
@@ -676,7 +667,7 @@
 /*! \fn bool QFutureIterator::findNext(const T &value)
 
     Searches for \a value starting from the current iterator position forward.
-    Returns true if \a value is found; otherwise returns false.
+    Returns \c true if \a value is found; otherwise returns \c false.
 
     After the call, if \a value was found, the iterator is positioned just
     after the matching result; otherwise, the iterator is positioned at the
@@ -688,7 +679,7 @@
 /*! \fn bool QFutureIterator::findPrevious(const T &value)
 
     Searches for \a value starting from the current iterator position
-    backward. Returns true if \a value is found; otherwise returns false.
+    backward. Returns \c true if \a value is found; otherwise returns \c false.
 
     After the call, if \a value was found, the iterator is positioned just
     before the matching result; otherwise, the iterator is positioned at the

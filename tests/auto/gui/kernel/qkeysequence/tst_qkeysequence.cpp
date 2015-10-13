@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,13 +35,16 @@
 #include <QtTest/QtTest>
 #include <qkeysequence.h>
 #include <qpa/qplatformtheme.h>
+#include <qpa/qplatformtheme_p.h>
 #include <private/qkeysequence_p.h>
 #include <private/qguiapplication_p.h>
 #include <QTranslator>
 #include <QLibraryInfo>
 
 #ifdef Q_OS_MAC
+#ifdef Q_OS_OSX
 #include <Carbon/Carbon.h>
+#endif
 struct MacSpecialKey {
     int key;
     ushort macSymbol;
@@ -72,10 +67,12 @@ static const MacSpecialKey entries[NumEntries] = {
     { Qt::Key_Down, 0x2193 },
     { Qt::Key_PageUp, 0x21DE },
     { Qt::Key_PageDown, 0x21DF },
+#ifdef Q_OS_OSX
     { Qt::Key_Shift, kShiftUnicode },
     { Qt::Key_Control, kCommandUnicode },
     { Qt::Key_Meta, kControlUnicode },
     { Qt::Key_Alt, kOptionUnicode },
+#endif
     { Qt::Key_CapsLock, 0x21EA },
 };
 
@@ -119,10 +116,8 @@ private slots:
     void symetricConstructors();
     void checkMultipleNames();
     void checkMultipleCodes();
-#ifndef Q_OS_MAC
     void mnemonic_data();
     void mnemonic();
-#endif
     void toString_data();
     void toString();
     void toStringFromKeycode_data();
@@ -143,10 +138,8 @@ private slots:
     void standardKeys_data();
     void standardKeys();
     void keyBindings();
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
     void translated_data();
     void translated();
-#endif
     void i18nKeys_data();
     void i18nKeys();
 
@@ -306,16 +299,16 @@ void tst_QKeySequence::checkMultipleCodes()
 }
 
 /*
-* We must ensure that the keyBindings data is always sorted
+* We must ensure that the keyBindings data are always sorted by standardKey
 * so that we can safely perform binary searches.
 */
 #ifdef QT_BUILD_INTERNAL
 void tst_QKeySequence::ensureSorted()
 {
-    uint N = QKeySequencePrivate::numberOfKeyBindings;
-    uint val = QKeySequencePrivate::keyBindings[0].shortcut;
+    uint N = QPlatformThemePrivate::numberOfKeyBindings;
+    uint val = QPlatformThemePrivate::keyBindings[0].standardKey;
     for ( uint i = 1 ; i < N ; ++i) {
-        uint nextval = QKeySequencePrivate::keyBindings[i].shortcut;
+        uint nextval = QPlatformThemePrivate::keyBindings[i].standardKey;
         if (nextval < val)
             qDebug() << "Data not sorted at index " << i;
         QVERIFY(nextval >= val);
@@ -398,15 +391,17 @@ void tst_QKeySequence::keyBindings()
         expected  << ctrlC << ctrlInsert;
         break;
     default: // X11
-        expected  << ctrlC << QKeySequence(QStringLiteral("F16")) << ctrlInsert;
+        expected  << ctrlC << ctrlInsert << QKeySequence(QStringLiteral("F16"));
         break;
     }
     QCOMPARE(bindings, expected);
 }
 
-#ifndef Q_OS_MAC
 void tst_QKeySequence::mnemonic_data()
 {
+#ifdef Q_OS_MAC
+    QSKIP("Test not applicable to OS X");
+#endif
     QTest::addColumn<QString>("string");
     QTest::addColumn<QString>("key");
     QTest::addColumn<bool>("warning");
@@ -426,6 +421,7 @@ void tst_QKeySequence::mnemonic_data()
 
 void tst_QKeySequence::mnemonic()
 {
+#ifndef Q_OS_MAC
     QFETCH(QString, string);
     QFETCH(QString, key);
     QFETCH(bool, warning);
@@ -443,8 +439,8 @@ void tst_QKeySequence::mnemonic()
     QKeySequence res = QKeySequence(key);
 
     QCOMPARE(seq, res);
-}
 #endif
+}
 
 void tst_QKeySequence::toString_data()
 {
@@ -527,7 +523,7 @@ void tst_QKeySequence::toStringFromKeycode()
 
 void tst_QKeySequence::streamOperators_data()
 {
-	operatorQString_data();
+    operatorQString_data();
 }
 
 void tst_QKeySequence::streamOperators()
@@ -535,21 +531,21 @@ void tst_QKeySequence::streamOperators()
     QFETCH( int, modifiers );
     QFETCH( int, keycode );
 
-	QByteArray data;
-	QKeySequence refK( modifiers | keycode );
-	QKeySequence orgK( "Ctrl+A" );
-	QKeySequence copyOrgK = orgK;
-	QVERIFY( copyOrgK == orgK );
+    QByteArray data;
+    QKeySequence refK( modifiers | keycode );
+    QKeySequence orgK( "Ctrl+A" );
+    QKeySequence copyOrgK = orgK;
+    QVERIFY( copyOrgK == orgK );
 
-	QDataStream in(&data, QIODevice::WriteOnly);
-	in << refK;
-        QDataStream out(&data, QIODevice::ReadOnly);
-        out >> orgK;
+    QDataStream in(&data, QIODevice::WriteOnly);
+    in << refK;
+    QDataStream out(&data, QIODevice::ReadOnly);
+    out >> orgK;
 
-	QVERIFY( orgK == refK );
+    QVERIFY( orgK == refK );
 
-	// check if detached
-	QVERIFY( orgK != copyOrgK );
+    // check if detached
+    QVERIFY( orgK != copyOrgK );
 }
 
 
@@ -604,11 +600,6 @@ void tst_QKeySequence::parseString()
 {
     QFETCH( QString, strSequence );
     QFETCH( QKeySequence, keycode );
-
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("Win+A", "QTBUG-24406 - This test fails on OSX", Abort);
-    QEXPECT_FAIL("Simon+G", "QTBUG-24406 - This test fails on OSX", Abort);
-#endif
 
     QCOMPARE( QKeySequence(strSequence).toString(), keycode.toString() );
     QVERIFY( QKeySequence(strSequence) == keycode );
@@ -738,9 +729,12 @@ void tst_QKeySequence::listFromString()
     QCOMPARE(QKeySequence::listFromString(strSequences), sequences);
 }
 
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
 void tst_QKeySequence::translated_data()
 {
+#if defined (Q_OS_MAC) || defined (Q_OS_WINCE)
+    QSKIP("Test not applicable");
+#endif
+
     qApp->installTranslator(ourTranslator);
     qApp->installTranslator(qtTranslator);
 
@@ -768,6 +762,7 @@ void tst_QKeySequence::translated_data()
 
 void tst_QKeySequence::translated()
 {
+#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
     QFETCH(QString, transKey);
     QFETCH(QString, compKey);
 
@@ -779,8 +774,8 @@ void tst_QKeySequence::translated()
 
     qApp->removeTranslator(ourTranslator);
     qApp->removeTranslator(qtTranslator);
-}
 #endif
+}
 
 void tst_QKeySequence::i18nKeys_data()
 {

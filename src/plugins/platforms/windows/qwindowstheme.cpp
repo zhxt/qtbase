@@ -1,43 +1,41 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+
+// SHSTOCKICONINFO is only available since Vista
+#if _WIN32_WINNT < 0x0600
+#  undef _WIN32_WINNT
+#  define _WIN32_WINNT 0x0600
+#endif
 
 #include "qwindowstheme.h"
 #include "qwindowsdialoghelpers.h"
@@ -45,9 +43,17 @@
 #include "qwindowsintegration.h"
 #include "qt_windows.h"
 #include "qwindowsfontdatabase.h"
+#include "qwindowsscaling.h"
 #ifdef Q_OS_WINCE
 #  include "qplatformfunctions_wince.h"
 #  include "winuser.h"
+#else
+#  include <commctrl.h>
+#  include <objbase.h>
+#  ifndef Q_CC_MINGW
+#    include <commoncontrols.h>
+#  endif
+#  include <shellapi.h>
 #endif
 
 #include <QtCore/QVariant>
@@ -56,6 +62,7 @@
 #include <QtCore/QTextStream>
 #include <QtCore/QSysInfo>
 #include <QtCore/QCache>
+#include <QtGui/QColor>
 #include <QtGui/QPalette>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QPainter>
@@ -63,7 +70,23 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qsystemlibrary_p.h>
 
+#include <algorithm>
+
+#if defined(__IImageList_INTERFACE_DEFINED__) && defined(__IID_DEFINED__)
+#  define USE_IIMAGELIST
+#endif
+
 QT_BEGIN_NAMESPACE
+
+static inline COLORREF qColorToCOLORREF(const QColor &color)
+{
+    return RGB(color.red(), color.green(), color.blue());
+}
+
+static inline QColor COLORREFToQColor(COLORREF cr)
+{
+    return QColor(GetRValue(cr), GetGValue(cr), GetBValue(cr));
+}
 
 static inline QTextStream& operator<<(QTextStream &str, const QColor &c)
 {
@@ -125,7 +148,7 @@ static inline QColor mixColors(const QColor &c1, const QColor &c2)
 
 static inline QColor getSysColor(int index)
 {
-    return qColorToCOLORREF(GetSysColor(index));
+    return COLORREFToQColor(GetSysColor(index));
 }
 
 // from QStyle::standardPalette
@@ -211,12 +234,16 @@ static inline QPalette toolTipPalette(const QPalette &systemPalette)
     result.setColor(QPalette::All, QPalette::Text, tipTextColor);
     result.setColor(QPalette::All, QPalette::WindowText, tipTextColor);
     result.setColor(QPalette::All, QPalette::ButtonText, tipTextColor);
+    result.setColor(QPalette::All, QPalette::ToolTipBase, tipBgColor);
+    result.setColor(QPalette::All, QPalette::ToolTipText, tipTextColor);
     const QColor disabled =
         mixColors(result.foreground().color(), result.button().color());
     result.setColor(QPalette::Disabled, QPalette::WindowText, disabled);
     result.setColor(QPalette::Disabled, QPalette::Text, disabled);
+    result.setColor(QPalette::Disabled, QPalette::ToolTipText, disabled);
     result.setColor(QPalette::Disabled, QPalette::Base, Qt::white);
     result.setColor(QPalette::Disabled, QPalette::BrightText, Qt::white);
+    result.setColor(QPalette::Disabled, QPalette::ToolTipBase, Qt::white);
     return result;
 }
 
@@ -226,7 +253,6 @@ static inline QPalette menuPalette(const QPalette &systemPalette)
     const QColor menuColor(getSysColor(COLOR_MENU));
     const QColor menuTextColor(getSysColor(COLOR_MENUTEXT));
     const QColor disabled(getSysColor(COLOR_GRAYTEXT));
-    const bool isFlat = booleanSystemParametersInfo(SPI_GETFLATMENU, false);
     // we might need a special color group for the result.
     result.setColor(QPalette::Active, QPalette::Button, menuColor);
     result.setColor(QPalette::Active, QPalette::Text, menuTextColor);
@@ -235,6 +261,7 @@ static inline QPalette menuPalette(const QPalette &systemPalette)
     result.setColor(QPalette::Disabled, QPalette::WindowText, disabled);
     result.setColor(QPalette::Disabled, QPalette::Text, disabled);
 #ifndef Q_OS_WINCE
+    const bool isFlat = booleanSystemParametersInfo(SPI_GETFLATMENU, false);
     result.setColor(QPalette::Disabled, QPalette::Highlight,
                     getSysColor(isFlat ? COLOR_MENUHILIGHT : COLOR_HIGHLIGHT));
 #else
@@ -284,8 +311,8 @@ QWindowsTheme *QWindowsTheme::m_instance = 0;
 QWindowsTheme::QWindowsTheme()
 {
     m_instance = this;
-    qFill(m_fonts, m_fonts + NFonts, static_cast<QFont *>(0));
-    qFill(m_palettes, m_palettes + NPalettes, static_cast<QPalette *>(0));
+    std::fill(m_fonts, m_fonts + NFonts, static_cast<QFont *>(0));
+    std::fill(m_palettes, m_palettes + NPalettes, static_cast<QPalette *>(0));
     refresh();
 }
 
@@ -335,7 +362,7 @@ QVariant QWindowsTheme::themeHint(ThemeHint hint) const
     case UseFullScreenForPopupMenu:
         return QVariant(true);
     case DialogButtonBoxLayout:
-        return QVariant(int(0)); // QDialogButtonBox::WinLayout
+        return QVariant(QPlatformDialogHelper::WinLayout);
     case IconThemeSearchPaths:
         return QVariant(iconThemeSearchPaths());
     case StyleNames:
@@ -355,8 +382,17 @@ QVariant QWindowsTheme::themeHint(ThemeHint hint) const
     case IconPixmapSizes: {
         QList<int> sizes;
         sizes << 16 << 32;
+#ifdef USE_IIMAGELIST
+        sizes << 48; // sHIL_EXTRALARGE
+        if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA)
+            sizes << 256; // SHIL_JUMBO
+#endif // USE_IIMAGELIST
         return QVariant::fromValue(sizes);
     }
+    case DialogSnapToDefaultButton:
+        return QVariant(booleanSystemParametersInfo(SPI_GETSNAPTODEFBUTTON, false));
+    case ContextMenuOnMouseRelease:
+        return QVariant(true);
     default:
         break;
     }
@@ -366,7 +402,7 @@ QVariant QWindowsTheme::themeHint(ThemeHint hint) const
 void QWindowsTheme::clearPalettes()
 {
     qDeleteAll(m_palettes, m_palettes + NPalettes);
-    qFill(m_palettes, m_palettes + NPalettes, static_cast<QPalette *>(0));
+    std::fill(m_palettes, m_palettes + NPalettes, static_cast<QPalette *>(0));
 }
 
 void QWindowsTheme::refreshPalettes()
@@ -378,16 +414,12 @@ void QWindowsTheme::refreshPalettes()
     m_palettes[ToolTipPalette] = new QPalette(toolTipPalette(*m_palettes[SystemPalette]));
     m_palettes[MenuPalette] = new QPalette(menuPalette(*m_palettes[SystemPalette]));
     m_palettes[MenuBarPalette] = menuBarPalette(*m_palettes[MenuPalette]);
-    if (QWindowsContext::verboseTheming)
-        qDebug() << __FUNCTION__ << '\n'
-                 << "  system=" << paletteToString(*m_palettes[SystemPalette])
-                 << "  tooltip=" << paletteToString(*m_palettes[ToolTipPalette]);
 }
 
 void QWindowsTheme::clearFonts()
 {
     qDeleteAll(m_fonts, m_fonts + NFonts);
-    qFill(m_fonts, m_fonts + NFonts, static_cast<QFont *>(0));
+    std::fill(m_fonts, m_fonts + NFonts, static_cast<QFont *>(0));
 }
 
 void QWindowsTheme::refreshFonts()
@@ -404,6 +436,8 @@ void QWindowsTheme::refreshFonts()
     const QFont messageBoxFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfMessageFont);
     const QFont statusFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfStatusFont);
     const QFont titleFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfCaptionFont);
+    QFont fixedFont(QStringLiteral("Courier New"), messageBoxFont.pointSize());
+    fixedFont.setStyleHint(QFont::TypeWriter);
 
     LOGFONT lfIconTitleFont;
     SystemParametersInfo(SPI_GETICONTITLELOGFONT, sizeof(lfIconTitleFont), &lfIconTitleFont, 0);
@@ -418,11 +452,7 @@ void QWindowsTheme::refreshFonts()
     m_fonts[MdiSubWindowTitleFont] = new QFont(titleFont);
     m_fonts[DockWidgetTitleFont] = new QFont(titleFont);
     m_fonts[ItemViewFont] = new QFont(iconTitleFont);
-
-    if (QWindowsContext::verboseTheming)
-        qDebug() << __FUNCTION__ << '\n'
-                 << "  menuFont=" << menuFont
-                 << "  messageBox=" << MessageBoxFont;
+    m_fonts[FixedFont] = new QFont(fixedFont);
 #endif // !Q_OS_WINCE
 }
 
@@ -465,6 +495,8 @@ static QPixmap loadIconFromShell32(int resourceId, QSizeF size)
 
 QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
 {
+    const int scaleFactor = QWindowsScaling::factor();
+    const QSizeF pixmapSize = size * scaleFactor;
     int resourceId = -1;
     LPCTSTR iconName = 0;
     switch (sp) {
@@ -531,9 +563,10 @@ QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) con
             SHSTOCKICONINFO iconInfo;
             memset(&iconInfo, 0, sizeof(iconInfo));
             iconInfo.cbSize = sizeof(iconInfo);
-            const int iconSize = size.width() > 16 ? SHGFI_LARGEICON : SHGFI_SMALLICON;
+            const int iconSize = pixmapSize.width() > 16 ? SHGFI_LARGEICON : SHGFI_SMALLICON;
             if (QWindowsContext::shell32dll.sHGetStockIconInfo(SIID_SHIELD, SHGFI_ICON | iconSize, &iconInfo) == S_OK) {
                 pixmap = qt_pixmapFromWinHICON(iconInfo.hIcon);
+                pixmap.setDevicePixelRatio(scaleFactor);
                 DestroyIcon(iconInfo.hIcon);
                 return pixmap;
             }
@@ -545,13 +578,14 @@ QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) con
     }
 
     if (resourceId != -1) {
-        QPixmap pixmap = loadIconFromShell32(resourceId, size);
+        QPixmap pixmap = loadIconFromShell32(resourceId, pixmapSize);
         if (!pixmap.isNull()) {
             if (sp == FileLinkIcon || sp == DirLinkIcon || sp == DirLinkOpenIcon) {
                 QPainter painter(&pixmap);
-                QPixmap link = loadIconFromShell32(30, size);
-                painter.drawPixmap(0, 0, size.width(), size.height(), link);
+                QPixmap link = loadIconFromShell32(30, pixmapSize);
+                painter.drawPixmap(0, 0, pixmapSize.width(), pixmapSize.height(), link);
             }
+            pixmap.setDevicePixelRatio(scaleFactor);
             return pixmap;
         }
     }
@@ -559,6 +593,7 @@ QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) con
     if (iconName) {
         HICON iconHandle = LoadIcon(NULL, iconName);
         QPixmap pixmap = qt_pixmapFromWinHICON(iconHandle);
+        pixmap.setDevicePixelRatio(scaleFactor);
         DestroyIcon(iconHandle);
         if (!pixmap.isNull())
             return pixmap;
@@ -567,11 +602,24 @@ QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) con
     return QPlatformTheme::standardPixmap(sp, size);
 }
 
-static QString dirIconPixmapCacheKey(int iIcon, int iconSize)
+enum { // Shell image list ids
+    sHIL_EXTRALARGE = 0x2, // 48x48 or user-defined
+    sHIL_JUMBO = 0x4 // 256x256 (Vista or later)
+};
+
+static QString dirIconPixmapCacheKey(int iIcon, int iconSize, int imageListSize)
 {
     QString key = QLatin1String("qt_dir_") + QString::number(iIcon);
     if (iconSize == SHGFI_LARGEICON)
         key += QLatin1Char('l');
+    switch (imageListSize) {
+    case sHIL_EXTRALARGE:
+        key += QLatin1Char('e');
+        break;
+    case sHIL_JUMBO:
+        key += QLatin1Char('j');
+        break;
+    }
     return key;
 }
 
@@ -595,7 +643,40 @@ public:
     void operator delete (void *) {}
 };
 
-QPixmap QWindowsTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &size) const
+// Shell image list helper functions.
+
+static QPixmap pixmapFromShellImageList(int iImageList, const SHFILEINFO &info)
+{
+    QPixmap result;
+#ifdef USE_IIMAGELIST
+    // For MinGW:
+    static const IID iID_IImageList = {0x46eb5926, 0x582e, 0x4017, {0x9f, 0xdf, 0xe8, 0x99, 0x8d, 0xaa, 0x9, 0x50}};
+
+    if (!QWindowsContext::shell32dll.sHGetImageList)
+        return result;
+    if (iImageList == sHIL_JUMBO && QSysInfo::WindowsVersion < QSysInfo::WV_VISTA)
+        return result;
+
+    IImageList *imageList = 0;
+    HRESULT hr = QWindowsContext::shell32dll.sHGetImageList(iImageList, iID_IImageList, (void **)&imageList);
+    if (hr != S_OK)
+        return result;
+    HICON hIcon;
+    hr = imageList->GetIcon(info.iIcon, ILD_TRANSPARENT, &hIcon);
+    if (hr == S_OK) {
+        result = qt_pixmapFromWinHICON(hIcon);
+        DestroyIcon(hIcon);
+    }
+    imageList->Release();
+#else
+    Q_UNUSED(iImageList)
+    Q_UNUSED(info)
+#endif // USE_IIMAGELIST
+    return result;
+}
+
+QPixmap QWindowsTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &size,
+                                      QPlatformTheme::IconOptions iconOptions) const
 {
     /* We don't use the variable, but by storing it statically, we
      * ensure CoInitialize is only called once. */
@@ -604,17 +685,26 @@ QPixmap QWindowsTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &s
 
     static QCache<QString, FakePointer<int> > dirIconEntryCache(1000);
     static QMutex mx;
+    static int defaultFolderIIcon = -1;
+    const bool useDefaultFolderIcon = iconOptions & QPlatformTheme::DontUseCustomDirectoryIcons;
 
     QPixmap pixmap;
     const QString filePath = QDir::toNativeSeparators(fileInfo.filePath());
-    int iconSize = size.width() > 16 ? SHGFI_LARGEICON : SHGFI_SMALLICON;
-
+    const int width = size.width();
+    const int iconSize = width > 16 ? SHGFI_LARGEICON : SHGFI_SMALLICON;
+    const int requestedImageListSize =
+#ifdef USE_IIMAGELIST
+        width > 48 ? sHIL_JUMBO : (width > 32 ? sHIL_EXTRALARGE : 0);
+#else
+        0;
+#endif // !USE_IIMAGELIST
     bool cacheableDirIcon = fileInfo.isDir() && !fileInfo.isRoot();
     if (cacheableDirIcon) {
         QMutexLocker locker(&mx);
-        int iIcon = **dirIconEntryCache.object(filePath);
+        int iIcon = (useDefaultFolderIcon && defaultFolderIIcon >= 0) ? defaultFolderIIcon
+                                                                      : **dirIconEntryCache.object(filePath);
         if (iIcon) {
-            QPixmapCache::find(dirIconPixmapCacheKey(iIcon, iconSize), pixmap);
+            QPixmapCache::find(dirIconPixmapCacheKey(iIcon, iconSize, requestedImageListSize), pixmap);
             if (pixmap.isNull()) // Let's keep both caches in sync
                 dirIconEntryCache.remove(filePath);
             else
@@ -629,15 +719,26 @@ QPixmap QWindowsTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &s
 #else
         iconSize|SHGFI_SYSICONINDEX;
 #endif // Q_OS_WINCE
-    unsigned long val = SHGetFileInfo((const wchar_t *)filePath.utf16(), 0,
-                                      &info, sizeof(SHFILEINFO), flags);
+    unsigned long val = 0;
+    if (cacheableDirIcon && useDefaultFolderIcon) {
+        flags |= SHGFI_USEFILEATTRIBUTES;
+        val = SHGetFileInfo(L"dummy",
+                            FILE_ATTRIBUTE_DIRECTORY,
+                            &info, sizeof(SHFILEINFO), flags);
+    } else {
+        val = SHGetFileInfo(reinterpret_cast<const wchar_t *>(filePath.utf16()), 0,
+                            &info, sizeof(SHFILEINFO), flags);
+    }
 
     // Even if GetFileInfo returns a valid result, hIcon can be empty in some cases
     if (val && info.hIcon) {
         QString key;
         if (cacheableDirIcon) {
+            if (useDefaultFolderIcon && defaultFolderIIcon < 0)
+                defaultFolderIIcon = info.iIcon;
+
             //using the unique icon index provided by windows save us from duplicate keys
-            key = dirIconPixmapCacheKey(info.iIcon, iconSize);
+            key = dirIconPixmapCacheKey(info.iIcon, iconSize, requestedImageListSize);
             QPixmapCache::find(key, pixmap);
             if (!pixmap.isNull()) {
                 QMutexLocker locker(&mx);
@@ -646,7 +747,13 @@ QPixmap QWindowsTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &s
         }
 
         if (pixmap.isNull()) {
-            pixmap = qt_pixmapFromWinHICON(info.hIcon);
+            if (requestedImageListSize) {
+                pixmap = pixmapFromShellImageList(requestedImageListSize, info);
+                if (pixmap.isNull() && requestedImageListSize == sHIL_JUMBO)
+                    pixmap = pixmapFromShellImageList(sHIL_EXTRALARGE, info);
+            }
+            if (pixmap.isNull())
+                pixmap = qt_pixmapFromWinHICON(info.hIcon);
             if (!pixmap.isNull()) {
                 if (cacheableDirIcon) {
                     QMutexLocker locker(&mx);

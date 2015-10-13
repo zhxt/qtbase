@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -89,12 +81,18 @@ public:
           uniformRowHeights(false), rootDecoration(true),
           itemsExpandable(true), sortingEnabled(false),
           expandsOnDoubleClick(true),
-          allColumnsShowFocus(false), current(0), spanning(false),
+          allColumnsShowFocus(false), customIndent(false), current(0), spanning(false),
           animationsEnabled(false), columnResizeTimerID(0),
-          autoExpandDelay(-1), hoverBranch(-1), geometryRecursionBlock(false), hasRemovedItems(false) {}
+          autoExpandDelay(-1), hoverBranch(-1), geometryRecursionBlock(false), hasRemovedItems(false),
+          treePosition(0) {}
 
     ~QTreeViewPrivate() {}
     void initialize();
+    int logicalIndexForTree() const;
+    inline bool isTreePosition(int logicalIndex) const
+    {
+        return logicalIndex == logicalIndexForTree();
+    }
 
     QItemViewPaintPairs draggablePaintPairs(const QModelIndexList &indexes, QRect *r) const;
     void adjustViewOptionsForIndex(QStyleOptionViewItem *option, const QModelIndex &current) const;
@@ -148,6 +146,7 @@ public:
 #endif
 
     int firstVisibleItem(int *offset = 0) const;
+    int lastVisibleItem(int firstVisual = -1, int offset = -1) const;
     int columnAt(int x) const;
     bool hasVisibleChildren( const QModelIndex& parent) const;
 
@@ -171,7 +170,7 @@ public:
     // logicalIndices: vector of currently visibly logical indices
     // itemPositions: vector of view item positions (beginning/middle/end/onlyone)
     void calcLogicalIndices(QVector<int> *logicalIndices, QVector<QStyleOptionViewItem::ViewItemPosition> *itemPositions, int left, int right) const;
-
+    int widthHintForIndex(const QModelIndex &index, int hint, const QStyleOptionViewItem &option, int i) const;
     QHeaderView *header;
     int indent;
 
@@ -184,6 +183,7 @@ public:
     bool sortingEnabled;
     bool expandsOnDoubleClick;
     bool allColumnsShowFocus;
+    bool customIndent;
 
     // used for drawing
     mutable QPair<int,int> leftAndRight;
@@ -210,6 +210,8 @@ public:
     QSet<QPersistentModelIndex> hiddenIndexes;
 
     inline bool isRowHidden(const QModelIndex &idx) const {
+        if (hiddenIndexes.isEmpty())
+            return false;
         //We first check if the idx is a QPersistentModelIndex, because creating QPersistentModelIndex is slow
         return isPersistent(idx) && hiddenIndexes.contains(idx);
     }
@@ -232,6 +234,10 @@ public:
         return (viewIndex(index) + (header ? 1 : 0)) * model->columnCount()+index.column();
     }
 
+    int accessibleTree2Index(const QModelIndex &index) const;
+
+    void updateIndentationFromStyle();
+
     // used for spanning rows
     QVector<QPersistentModelIndex> spanningIndexes;
 
@@ -251,6 +257,9 @@ public:
 
     // If we should clean the set
     bool hasRemovedItems;
+
+    // tree position
+    int treePosition;
 };
 
 QT_END_NAMESPACE

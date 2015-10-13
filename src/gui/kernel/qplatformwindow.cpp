@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -87,11 +79,13 @@ QPlatformWindow *QPlatformWindow::parent() const
 }
 
 /*!
-    Returns the platform screen handle corresponding to this platform window.
+    Returns the platform screen handle corresponding to this platform window,
+    or null if the window is not associated with a screen.
 */
 QPlatformScreen *QPlatformWindow::screen() const
 {
-    return window()->screen()->handle();
+    QScreen *scr = window()->screen();
+    return scr ? scr->handle() : Q_NULLPTR;
 }
 
 /*!
@@ -125,6 +119,18 @@ QRect QPlatformWindow::geometry() const
 {
     Q_D(const QPlatformWindow);
     return d->rect;
+}
+
+/*!
+    Returns the geometry of a window in 'normal' state
+    (neither maximized, fullscreen nor minimized) for saving geometries to
+    application settings.
+
+    \since 5.3
+*/
+QRect QPlatformWindow::normalGeometry() const
+{
+    return QRect();
 }
 
 QMargins QPlatformWindow::frameMargins() const
@@ -167,7 +173,7 @@ bool QPlatformWindow::isExposed() const
 }
 
 /*!
-    Returns true if the window should appear active from a style perspective.
+    Returns \c true if the window should appear active from a style perspective.
 
     This function can make platform-specific isActive checks, such as checking
     if the QWindow is embedded in an active native window.
@@ -178,7 +184,7 @@ bool QPlatformWindow::isActive() const
 }
 
 /*!
-    Returns true if the window is a descendant of an embedded non-Qt window.
+    Returns \c true if the window is a descendant of an embedded non-Qt window.
     Example of an embedded non-Qt window is the parent window of an in-process QAxServer.
 
     If \a parentWindow is nonzero, only check if the window is embedded in the
@@ -449,7 +455,7 @@ bool QPlatformWindow::frameStrutEventsEnabled() const
 QString QPlatformWindow::formatWindowTitle(const QString &title, const QString &separator)
 {
     QString fullTitle = title;
-    if (QGuiApplicationPrivate::displayName) {
+    if (QGuiApplicationPrivate::displayName && !title.endsWith(*QGuiApplicationPrivate::displayName)) {
         // Append display name, if set.
         if (!fullTitle.isEmpty())
             fullTitle += separator;
@@ -459,6 +465,29 @@ QString QPlatformWindow::formatWindowTitle(const QString &title, const QString &
         fullTitle = QCoreApplication::applicationName();
     }
     return fullTitle;
+}
+
+/*!
+    Helper function for finding the new screen for \a newGeometry in response to
+    a geometry changed event. Returns the new screen if the window was moved to
+    another virtual sibling. If the screen changes, the platform plugin should call
+    QWindowSystemInterface::handleWindowScreenChanged().
+    \note: The current screen will always be returned for child windows since
+    they should never signal screen changes.
+
+    \since 5.4
+    \sa QWindowSystemInterface::handleWindowScreenChanged()
+*/
+QPlatformScreen *QPlatformWindow::screenForGeometry(const QRect &newGeometry) const
+{
+    QPlatformScreen *currentScreen = screen();
+    if (!parent() && currentScreen && !currentScreen->geometry().intersects(newGeometry)) {
+        Q_FOREACH (QPlatformScreen* screen, currentScreen->virtualSiblings()) {
+            if (screen->geometry().intersects(newGeometry))
+                return screen;
+        }
+    }
+    return currentScreen;
 }
 
 /*!
@@ -487,6 +516,43 @@ bool QPlatformWindow::isAlertState() const
     return false;
 }
 
+// Return the effective screen for the initial geometry of a window. In a
+// multimonitor-setup, try to find the right screen by checking the transient
+// parent or the mouse cursor for parentless windows (cf QTBUG-34204,
+// QDialog::adjustPosition()).
+static inline const QScreen *effectiveScreen(const QWindow *window)
+{
+    if (!window)
+        return QGuiApplication::primaryScreen();
+    const QScreen *screen = window->screen();
+    if (!screen)
+        return QGuiApplication::primaryScreen();
+    const QList<QScreen *> siblings = screen->virtualSiblings();
+#ifndef QT_NO_CURSOR
+    if (siblings.size() > 1) {
+        const QPoint referencePoint = window->transientParent() ? window->transientParent()->geometry().center() : QCursor::pos();
+        foreach (const QScreen *sibling, siblings)
+            if (sibling->geometry().contains(referencePoint))
+                return sibling;
+    }
+#endif
+    return screen;
+}
+
+/*!
+    Invalidates the window's surface by releasing its surface buffers.
+
+    Many platforms do not support releasing the surface memory,
+    and the default implementation does nothing.
+
+    The platform window is expected to recreate the surface again if
+    it is needed. For instance, if an OpenGL context is made current
+    on this window.
+ */
+void QPlatformWindow::invalidateSurface()
+{
+}
+
 /*!
     Helper function to get initial geometry on windowing systems which do not
     do smart positioning and also do not provide a means of centering a
@@ -500,18 +566,18 @@ QRect QPlatformWindow::initialGeometry(const QWindow *w,
     const QRect &initialGeometry, int defaultWidth, int defaultHeight)
 {
     QRect rect(initialGeometry);
-    if (rect.isNull()) {
-        QSize minimumSize = w->minimumSize();
-        if (minimumSize.width() > 0 || minimumSize.height() > 0) {
-            rect.setSize(minimumSize);
-        } else {
-            rect.setWidth(defaultWidth);
-            rect.setHeight(defaultHeight);
-        }
+    if (rect.width() == 0) {
+        const int minWidth = w->minimumWidth();
+        rect.setWidth(minWidth > 0 ? minWidth : defaultWidth);
     }
-    if (w->isTopLevel() && qt_window_private(const_cast<QWindow*>(w))->positionAutomatic) {
-        if (const QPlatformScreen *platformScreen = QPlatformScreen::platformScreenForWindow(w)) {
-            const QRect availableGeometry = platformScreen->availableGeometry();
+    if (rect.height() == 0) {
+        const int minHeight = w->minimumHeight();
+        rect.setHeight(minHeight > 0 ? minHeight : defaultHeight);
+    }
+    if (w->isTopLevel() && qt_window_private(const_cast<QWindow*>(w))->positionAutomatic
+        && w->type() != Qt::Popup) {
+        if (const QScreen *screen = effectiveScreen(w)) {
+            const QRect availableGeometry = screen->availableGeometry();
             // Center unless the geometry ( + unknown window frame) is too large for the screen).
             if (rect.height() < (availableGeometry.height() * 8) / 9
                 && rect.width() < (availableGeometry.width() * 8) / 9) {
@@ -528,6 +594,36 @@ QRect QPlatformWindow::initialGeometry(const QWindow *w,
         }
     }
     return rect;
+}
+
+/*!
+    Requests an QEvent::UpdateRequest event. The event will be
+    delivered to the QWindow.
+
+    QPlatformWindow subclasses can re-implement this function to
+    provide display refresh synchronized updates. The event
+    should be delivered using QWindowPrivate::deliverUpdateRequest()
+    to not get out of sync with the the internal state of QWindow.
+
+    The default implementation posts an UpdateRequest event to the
+    window after 5 ms. The additional time is there to give the event
+    loop a bit of idle time to gather system events.
+
+*/
+void QPlatformWindow::requestUpdate()
+{
+    static int timeout = -1;
+    if (timeout == -1) {
+        bool ok = false;
+        timeout = qEnvironmentVariableIntValue("QT_QPA_UPDATE_IDLE_TIME", &ok);
+        if (!ok)
+            timeout = 5;
+    }
+
+    QWindow *w = window();
+    QWindowPrivate *wp = (QWindowPrivate *) QObjectPrivate::get(w);
+    Q_ASSERT(wp->updateTimer == 0);
+    wp->updateTimer = w->startTimer(timeout, Qt::PreciseTimer);
 }
 
 /*!

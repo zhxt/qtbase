@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -76,6 +68,7 @@ public slots:
 private slots:
     void getSetCheck();
     void lineBreaking();
+#ifdef QT_BUILD_INTERNAL
     void simpleBoundingRect();
     void threeLineBoundingRect();
     void boundingRectWithLongLineAndNoWrap();
@@ -86,20 +79,25 @@ private slots:
     void cursorToXForSetColumns();
     void cursorToXForTrailingSpaces_data();
     void cursorToXForTrailingSpaces();
+    void cursorToXInvalidInput();
     void horizontalAlignment_data();
     void horizontalAlignment();
     void horizontalAlignmentMultiline_data();
     void horizontalAlignmentMultiline();
+#endif
     void defaultWordSeparators_data();
     void defaultWordSeparators();
     void cursorMovementFromInvalidPositions();
     void cursorMovementInsideSpaces();
     void charWordStopOnLineSeparator();
+#ifdef QT_BUILD_INTERNAL
     void xToCursorAtEndOfLine();
+#endif
     void boundingRectTopLeft();
     void graphemeBoundaryForSurrogatePairs();
     void tabStops();
     void integerOverflow();
+#ifdef QT_BUILD_INTERNAL
     void testDefaultTabs();
     void testTabs();
     void testMultilineTab();
@@ -110,6 +108,7 @@ private slots:
     void testMultiTab();
     void testTabDPIScale();
     void tabsForRtl();
+#endif
     void tabHeight();
     void capitalization_allUpperCase();
     void capitalization_allUpperCase_newline();
@@ -122,14 +121,18 @@ private slots:
     void boundingRectForUnsetLineWidth();
     void boundingRectForSetLineWidth();
     void glyphLessItems();
+    void justifyTrailingSpaces();
+    void layoutWithCustomTabStops();
 
     // QTextLine stuff
+#ifdef QT_BUILD_INTERNAL
     void setNumColumnsWrapAtWordBoundaryOrAnywhere();
     void setNumColumnsWordWrap();
     void smallTextLengthNoWrap();
     void smallTextLengthWordWrap();
     void smallTextLengthWrapAtWordBoundaryOrAnywhere();
     void testLineBreakingAllSpaces();
+#endif
     void lineWidthFromBOM();
     void textWidthVsWIdth();
     void textWithSurrogates_qtbug15679();
@@ -138,6 +141,7 @@ private slots:
     void cursorInLigatureWithMultipleLines();
     void xToCursorForLigatures();
     void cursorInNonStopChars();
+    void nbsp();
 
 private:
     QFont testFont;
@@ -147,7 +151,7 @@ private:
 void tst_QTextLayout::getSetCheck()
 {
     QString str("Bogus text");
-    QTextLayout layout(str, testFont);
+    QTextLayout layout(str);
     layout.beginLayout();
     QTextEngine *engine = layout.engine();
     QTextInlineObject obj1(0, engine);
@@ -181,13 +185,18 @@ void tst_QTextLayout::getSetCheck()
     QCOMPARE(true, obj2.cacheEnabled());
 }
 
+#ifdef QT_BUILD_INTERNAL
 QT_BEGIN_NAMESPACE
-extern void qt_setQtEnableTestFont(bool value);
+// qfontdatabase.cpp
+Q_AUTOTEST_EXPORT void qt_setQtEnableTestFont(bool value);
 QT_END_NAMESPACE
+#endif
 
 tst_QTextLayout::tst_QTextLayout()
 {
+#ifdef QT_BUILD_INTERNAL
     qt_setQtEnableTestFont(true);
+#endif
 }
 
 tst_QTextLayout::~tst_QTextLayout()
@@ -197,10 +206,14 @@ tst_QTextLayout::~tst_QTextLayout()
 void tst_QTextLayout::init()
 {
     testFont = QFont();
+#ifdef QT_BUILD_INTERNAL
     testFont.setFamily("__Qt__Box__Engine__");
+#endif
     testFont.setPixelSize(TESTFONT_SIZE);
     testFont.setWeight(QFont::Normal);
+#ifdef QT_BUILD_INTERNAL
     QCOMPARE(QFontMetrics(testFont).width('a'), testFont.pixelSize());
+#endif
 }
 
 void tst_QTextLayout::cleanup()
@@ -212,63 +225,63 @@ void tst_QTextLayout::lineBreaking()
 {
 #if 0
     struct Breaks {
-	const char *utf8;
-	uchar breaks[32];
+        const char *utf8;
+        uchar breaks[32];
     };
     Breaks brks[] = {
-	{ "11", { false, 0xff } },
-	{ "aa", { false, 0xff } },
-	{ "++", { false, 0xff } },
-	{ "--", { false, 0xff } },
-	{ "((", { false, 0xff } },
-	{ "))", { false, 0xff } },
-	{ "..", { false, 0xff } },
-	{ "\"\"", { false, 0xff } },
-	{ "$$", { false, 0xff } },
-	{ "!!", { false, 0xff } },
-	{ "??", { false, 0xff } },
-	{ ",,", { false, 0xff } },
+        { "11", { false, 0xff } },
+        { "aa", { false, 0xff } },
+        { "++", { false, 0xff } },
+        { "--", { false, 0xff } },
+        { "((", { false, 0xff } },
+        { "))", { false, 0xff } },
+        { "..", { false, 0xff } },
+        { "\"\"", { false, 0xff } },
+        { "$$", { false, 0xff } },
+        { "!!", { false, 0xff } },
+        { "??", { false, 0xff } },
+        { ",,", { false, 0xff } },
 
-	{ ")()", { true, false, 0xff } },
-	{ "?!?", { false, false, 0xff } },
-	{ ".,.", { false, false, 0xff } },
-	{ "+-+", { false, false, 0xff } },
-	{ "+=+", { false, false, 0xff } },
-	{ "+(+", { false, false, 0xff } },
-	{ "+)+", { false, false, 0xff } },
+        { ")()", { true, false, 0xff } },
+        { "?!?", { false, false, 0xff } },
+        { ".,.", { false, false, 0xff } },
+        { "+-+", { false, false, 0xff } },
+        { "+=+", { false, false, 0xff } },
+        { "+(+", { false, false, 0xff } },
+        { "+)+", { false, false, 0xff } },
 
-	{ "a b", { false, true, 0xff } },
-	{ "a(b", { false, false, 0xff } },
-	{ "a)b", { false, false, 0xff } },
-	{ "a-b", { false, true, 0xff } },
-	{ "a.b", { false, false, 0xff } },
-	{ "a+b", { false, false, 0xff } },
-	{ "a?b", { false, false, 0xff } },
-	{ "a!b", { false, false, 0xff } },
-	{ "a$b", { false, false, 0xff } },
-	{ "a,b", { false, false, 0xff } },
-	{ "a/b", { false, false, 0xff } },
-	{ "1/2", { false, false, 0xff } },
-	{ "./.", { false, false, 0xff } },
-	{ ",/,", { false, false, 0xff } },
-	{ "!/!", { false, false, 0xff } },
-	{ "\\/\\", { false, false, 0xff } },
-	{ "1 2", { false, true, 0xff } },
-	{ "1(2", { false, false, 0xff } },
-	{ "1)2", { false, false, 0xff } },
-	{ "1-2", { false, false, 0xff } },
-	{ "1.2", { false, false, 0xff } },
-	{ "1+2", { false, false, 0xff } },
-	{ "1?2", { false, true, 0xff } },
-	{ "1!2", { false, true, 0xff } },
-	{ "1$2", { false, false, 0xff } },
-	{ "1,2", { false, false, 0xff } },
-	{ "1/2", { false, false, 0xff } },
-	{ "\330\260\331\216\331\204\331\220\331\203\331\216", { false, false, false, false, false, 0xff } },
-	{ "\330\247\331\204\331\205 \330\247\331\204\331\205", { false, false, false, true, false, false, 0xff } },
-	{ "1#2", { false, false, 0xff } },
-	{ "!#!", { false, false, 0xff } },
-	{ 0, {} }
+        { "a b", { false, true, 0xff } },
+        { "a(b", { false, false, 0xff } },
+        { "a)b", { false, false, 0xff } },
+        { "a-b", { false, true, 0xff } },
+        { "a.b", { false, false, 0xff } },
+        { "a+b", { false, false, 0xff } },
+        { "a?b", { false, false, 0xff } },
+        { "a!b", { false, false, 0xff } },
+        { "a$b", { false, false, 0xff } },
+        { "a,b", { false, false, 0xff } },
+        { "a/b", { false, false, 0xff } },
+        { "1/2", { false, false, 0xff } },
+        { "./.", { false, false, 0xff } },
+        { ",/,", { false, false, 0xff } },
+        { "!/!", { false, false, 0xff } },
+        { "\\/\\", { false, false, 0xff } },
+        { "1 2", { false, true, 0xff } },
+        { "1(2", { false, false, 0xff } },
+        { "1)2", { false, false, 0xff } },
+        { "1-2", { false, false, 0xff } },
+        { "1.2", { false, false, 0xff } },
+        { "1+2", { false, false, 0xff } },
+        { "1?2", { false, true, 0xff } },
+        { "1!2", { false, true, 0xff } },
+        { "1$2", { false, false, 0xff } },
+        { "1,2", { false, false, 0xff } },
+        { "1/2", { false, false, 0xff } },
+        { "\330\260\331\216\331\204\331\220\331\203\331\216", { false, false, false, false, false, 0xff } },
+        { "\330\247\331\204\331\205 \330\247\331\204\331\205", { false, false, false, true, false, false, 0xff } },
+        { "1#2", { false, false, 0xff } },
+        { "!#!", { false, false, 0xff } },
+        { 0, {} }
     };
     Breaks *b = brks;
     while (b->utf8) {
@@ -290,6 +303,7 @@ void tst_QTextLayout::lineBreaking()
 #endif
 }
 
+#ifdef QT_BUILD_INTERNAL
 void tst_QTextLayout::simpleBoundingRect()
 {
     /* just check if boundingRect() gives sane values. The text is not broken. */
@@ -309,9 +323,6 @@ void tst_QTextLayout::simpleBoundingRect()
 
 void tst_QTextLayout::threeLineBoundingRect()
 {
-#if defined(Q_OS_MAC)
-    QSKIP("QTestFontEngine on the mac does not support logclusters at the moment");
-#endif
     /* stricter check. break text into three lines */
 
     QString firstWord("hello");
@@ -430,9 +441,6 @@ void tst_QTextLayout::forcedBreaks()
 
 void tst_QTextLayout::breakAny()
 {
-#if defined(Q_OS_MAC)
-    QSKIP("QTestFontEngine on the mac does not support logclusters at the moment");
-#endif
     QString text = "ABCD";
 
     QTextLayout layout(text, testFont);
@@ -473,9 +481,6 @@ void tst_QTextLayout::breakAny()
 
 void tst_QTextLayout::noWrap()
 {
-#if defined(Q_OS_MAC)
-    QSKIP("QTestFontEngine on the mac does not support logclusters at the moment");
-#endif
     QString text = "AB CD";
 
     QTextLayout layout(text, testFont);
@@ -679,6 +684,28 @@ void tst_QTextLayout::cursorToXForTrailingSpaces()
     QCOMPARE(line.cursorToX(0), cursorAt0);
     QCOMPARE(line.cursorToX(4), cursorAt4);
     QCOMPARE(line.cursorToX(6), cursorAt6);
+}
+
+void tst_QTextLayout::cursorToXInvalidInput()
+{
+    QTextLayout layout("aaa", testFont);
+
+    layout.beginLayout();
+    QTextLine line = layout.createLine();
+    line.setLineWidth(5);
+    layout.endLayout();
+
+    int cursorPos;
+
+    cursorPos = 0;
+    layout.lineAt(0).cursorToX(&cursorPos);
+    QCOMPARE(cursorPos, 0);
+    cursorPos = -300;
+    layout.lineAt(0).cursorToX(&cursorPos);
+    QCOMPARE(cursorPos, 0);
+    cursorPos = 300;
+    layout.lineAt(0).cursorToX(&cursorPos);
+    QCOMPARE(cursorPos, 3);
 }
 
 void tst_QTextLayout::horizontalAlignment_data()
@@ -963,6 +990,7 @@ void tst_QTextLayout::horizontalAlignmentMultiline()
     QCOMPARE(rect.left(), lastLeft);
     QCOMPARE(rect.right(), lastRight);
 }
+#endif
 
 void tst_QTextLayout::defaultWordSeparators_data()
 {
@@ -1000,7 +1028,7 @@ void tst_QTextLayout::defaultWordSeparators()
     QFETCH(QString, text);
     QFETCH(int, startPos);
     QFETCH(int, endPos);
-    QTextLayout layout(text, testFont);
+    QTextLayout layout(text);
 
     QCOMPARE(layout.nextCursorPosition(startPos, QTextLayout::SkipWords), endPos);
     QCOMPARE(layout.previousCursorPosition(endPos, QTextLayout::SkipWords), startPos);
@@ -1010,7 +1038,7 @@ void tst_QTextLayout::cursorMovementFromInvalidPositions()
 {
     int badpos = 10000;
 
-    QTextLayout layout("ABC", testFont);
+    QTextLayout layout("ABC");
 
     QCOMPARE(layout.previousCursorPosition(-badpos, QTextLayout::SkipCharacters), -badpos);
     QCOMPARE(layout.nextCursorPosition(-badpos, QTextLayout::SkipCharacters), -badpos);
@@ -1021,13 +1049,13 @@ void tst_QTextLayout::cursorMovementFromInvalidPositions()
 
 void tst_QTextLayout::cursorMovementInsideSpaces()
 {
-    QTextLayout layout("ABC            DEF", testFont);
+    QTextLayout layout("ABC            DEF");
 
     QCOMPARE(layout.previousCursorPosition(6, QTextLayout::SkipWords), 0);
     QCOMPARE(layout.nextCursorPosition(6, QTextLayout::SkipWords), 15);
 
 
-    QTextLayout layout2("ABC\t\t\t\t\t\t\t\t\t\t\t\tDEF", testFont);
+    QTextLayout layout2("ABC\t\t\t\t\t\t\t\t\t\t\t\tDEF");
 
     QCOMPARE(layout2.previousCursorPosition(6, QTextLayout::SkipWords), 0);
     QCOMPARE(layout2.nextCursorPosition(6, QTextLayout::SkipWords), 15);
@@ -1039,18 +1067,16 @@ void tst_QTextLayout::charWordStopOnLineSeparator()
     QString txt;
     txt.append(lineSeparator);
     txt.append(lineSeparator);
-    QTextLayout layout(txt, testFont);
+    QTextLayout layout(txt);
     QTextEngine *engine = layout.engine();
     const QCharAttributes *attrs = engine->attributes();
     QVERIFY(attrs);
     QVERIFY(attrs[1].graphemeBoundary);
 }
 
+#ifdef QT_BUILD_INTERNAL
 void tst_QTextLayout::xToCursorAtEndOfLine()
 {
-#if defined(Q_OS_MAC)
-    QSKIP("QTestFontEngine on the mac does not support logclusters at the moment");
-#endif
     QString text = "FirstLine SecondLine";
     text.replace('\n', QChar::LineSeparator);
 
@@ -1072,13 +1098,14 @@ void tst_QTextLayout::xToCursorAtEndOfLine()
     line = layout.lineAt(1);
     QCOMPARE(line.xToCursor(100000), 20);
 }
+#endif
 
 void tst_QTextLayout::boundingRectTopLeft()
 {
     QString text = "FirstLine\nSecondLine";
     text.replace('\n', QChar::LineSeparator);
 
-    QTextLayout layout(text, testFont);
+    QTextLayout layout(text);
     layout.setCacheEnabled(true);
 
     layout.beginLayout();
@@ -1100,7 +1127,7 @@ void tst_QTextLayout::graphemeBoundaryForSurrogatePairs()
     txt.append(0xd87e);
     txt.append(0xdc25);
     txt.append("b");
-    QTextLayout layout(txt, testFont);
+    QTextLayout layout(txt);
     QTextEngine *engine = layout.engine();
     const QCharAttributes *attrs = engine->attributes();
     QVERIFY(attrs);
@@ -1112,17 +1139,14 @@ void tst_QTextLayout::graphemeBoundaryForSurrogatePairs()
 
 void tst_QTextLayout::tabStops()
 {
-#if defined(Q_OS_MAC)
-    QSKIP("QTestFontEngine on the mac does not support logclusters at the moment");
-#endif
     QString txt("Hello there\tworld");
-    QTextLayout layout(txt, testFont);
+    QTextLayout layout(txt);
     layout.beginLayout();
     QTextLine line = layout.createLine();
 
     QVERIFY(line.isValid());
     line.setNumColumns(11);
-    QCOMPARE(line.textLength(), TESTFONT_SIZE);
+    QCOMPARE(line.textLength(), 12);
 
     line = layout.createLine();
     QVERIFY(line.isValid());
@@ -1139,7 +1163,7 @@ void tst_QTextLayout::integerOverflow()
     for (int i = 0; i < 8; ++i)
         txt += txt;
 
-    QTextLayout layout(txt, testFont);
+    QTextLayout layout(txt);
     layout.beginLayout();
     QTextLine line = layout.createLine();
 
@@ -1152,6 +1176,7 @@ void tst_QTextLayout::integerOverflow()
     layout.endLayout();
 }
 
+#ifdef QT_BUILD_INTERNAL
 void tst_QTextLayout::setNumColumnsWrapAtWordBoundaryOrAnywhere()
 {
     QString txt("This is a small test text");
@@ -1277,6 +1302,13 @@ void tst_QTextLayout::smallTextLengthWrapAtWordBoundaryOrAnywhere()
 void tst_QTextLayout::testDefaultTabs()
 {
     QTextLayout layout("Foo\tBar\ta slightly longer text\tend.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     layout.beginLayout();
     QTextLine line = layout.createLine();
@@ -1319,6 +1351,13 @@ void tst_QTextLayout::testDefaultTabs()
 void tst_QTextLayout::testTabs()
 {
     QTextLayout layout("Foo\tBar.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     QTextOption option = layout.textOption();
     option.setTabStop(150);
@@ -1336,6 +1375,13 @@ void tst_QTextLayout::testTabs()
 void tst_QTextLayout::testMultilineTab()
 {
     QTextLayout layout("Lorem ipsum dolor sit\tBar.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     // test if this works on the second line.
     layout.beginLayout();
@@ -1345,12 +1391,20 @@ void tst_QTextLayout::testMultilineTab()
     line.setLineWidth(220.);
     layout.endLayout();
 
+
     QCOMPARE(line.cursorToX(22), 80.);
 }
 
 void tst_QTextLayout::testMultiTab()
 {
     QTextLayout layout("Foo\t\t\tBar.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     layout.beginLayout();
     QTextLine line = layout.createLine();
@@ -1364,6 +1418,13 @@ void tst_QTextLayout::testTabsInAlignedParag()
 {
     QTextLayout layout("Foo\tsome more words", testFont);
     layout.setCacheEnabled(true);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     QTextOption option = layout.textOption();
     // right
     option.setAlignment(Qt::AlignRight);
@@ -1423,6 +1484,12 @@ void tst_QTextLayout::testRightTab()
     */
     layout.setCacheEnabled(true);
 
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     QTextOption option = layout.textOption();
     QList<QTextOption::Tab> tabs;
     QTextOption::Tab tab;
@@ -1460,6 +1527,13 @@ void tst_QTextLayout::testRightTab()
 void tst_QTextLayout::testCenteredTab()
 {
     QTextLayout layout("Foo\tBar", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     // test if centering the tab works.  We expect the center of 'Bar.' to be at the tab point.
     QTextOption option = layout.textOption();
@@ -1481,6 +1555,13 @@ void tst_QTextLayout::testCenteredTab()
 void tst_QTextLayout::testDelimiterTab()
 {
     QTextLayout layout("Foo\tBar. Barrabas", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     // try the different delimiter characters to see if the alignment works there.
     QTextOption option = layout.textOption();
@@ -1533,6 +1614,12 @@ void tst_QTextLayout::tabsForRtl()
      d) center tab is still a centered tab.
     */
     layout.setCacheEnabled(true);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
 
     QTextOption option = layout.textOption();
     QList<QTextOption::Tab> tabs;
@@ -1587,6 +1674,8 @@ void tst_QTextLayout::testTabDPIScale()
             case QPaintDevice::PdmPhysicalDpiX:
             case QPaintDevice::PdmPhysicalDpiY:
                 return 72;
+            case QPaintDevice::PdmDevicePixelRatio:
+                ; // fall through
             }
             return 0;
         }
@@ -1628,22 +1717,23 @@ void tst_QTextLayout::testTabDPIScale()
     QCOMPARE(line.cursorToX(12), tabs.at(1).position * scale - TESTFONT_SIZE * 5);
     QCOMPARE(line.cursorToX(18), tabs.at(2).position * scale - TESTFONT_SIZE * 3 / 2.0);
 }
+#endif
 
 void tst_QTextLayout::tabHeight()
 {
-    QTextLayout layout("\t", testFont);
+    QTextLayout layout("\t");
     layout.setCacheEnabled(true);
     layout.beginLayout();
     QTextLine line = layout.createLine();
     layout.endLayout();
 
-    QCOMPARE(qRound(line.ascent()), QFontMetrics(testFont).ascent());
-    QCOMPARE(qRound(line.descent()), QFontMetrics(testFont).descent());
+    QCOMPARE(qRound(line.ascent()), QFontMetrics(layout.font()).ascent());
+    QCOMPARE(qRound(line.descent()), QFontMetrics(layout.font()).descent());
 }
 
 void tst_QTextLayout::capitalization_allUpperCase()
 {
-    QFont font(testFont);
+    QFont font;
     font.setCapitalization(QFont::AllUppercase);
     QTextLayout layout("Test", font);
     layout.setCacheEnabled(true);
@@ -1659,7 +1749,7 @@ void tst_QTextLayout::capitalization_allUpperCase()
 
 void tst_QTextLayout::capitalization_allUpperCase_newline()
 {
-    QFont font(testFont);
+    QFont font;
     font.setCapitalization(QFont::AllUppercase);
 
     QString tmp = "hello\nworld!";
@@ -1681,7 +1771,7 @@ void tst_QTextLayout::capitalization_allUpperCase_newline()
 
 void tst_QTextLayout::capitalization_allLowerCase()
 {
-    QFont font(testFont);
+    QFont font;
     font.setCapitalization(QFont::AllLowercase);
     QTextLayout layout("Test", font);
     layout.setCacheEnabled(true);
@@ -1697,7 +1787,7 @@ void tst_QTextLayout::capitalization_allLowerCase()
 
 void tst_QTextLayout::capitalization_smallCaps()
 {
-    QFont font(testFont);
+    QFont font;
     font.setCapitalization(QFont::SmallCaps);
     QTextLayout layout("Test", font);
     layout.setCacheEnabled(true);
@@ -1714,7 +1804,7 @@ void tst_QTextLayout::capitalization_smallCaps()
 
 void tst_QTextLayout::capitalization_capitalize()
 {
-    QFont font(testFont);
+    QFont font;
     font.setCapitalization(QFont::Capitalize);
     QTextLayout layout("hello\tworld", font);
     layout.setCacheEnabled(true);
@@ -1737,7 +1827,7 @@ void tst_QTextLayout::longText()
     QString longText(128000, 'a');
 
     {
-        QTextLayout layout(longText, testFont);
+        QTextLayout layout(longText);
         layout.setCacheEnabled(true);
         layout.beginLayout();
         QTextLine line = layout.createLine();
@@ -1747,7 +1837,7 @@ void tst_QTextLayout::longText()
     }
 
     for (int cap = QFont::MixedCase; cap < QFont::Capitalize + 1; ++cap) {
-        QFont f(testFont);
+        QFont f;
         f.setCapitalization(QFont::Capitalization(cap));
         QTextLayout layout(longText, f);
         layout.setCacheEnabled(true);
@@ -1759,7 +1849,7 @@ void tst_QTextLayout::longText()
     }
 
     {
-        QTextLayout layout(longText, testFont);
+        QTextLayout layout(longText);
         layout.setCacheEnabled(true);
         layout.setFlags(Qt::TextForceLeftToRight);
         layout.beginLayout();
@@ -1770,7 +1860,7 @@ void tst_QTextLayout::longText()
     }
 
     {
-        QTextLayout layout(longText, testFont);
+        QTextLayout layout(longText);
         layout.setCacheEnabled(true);
         layout.setFlags(Qt::TextForceRightToLeft);
         layout.beginLayout();
@@ -1783,7 +1873,8 @@ void tst_QTextLayout::longText()
 
 void tst_QTextLayout::widthOfTabs()
 {
-    QTextEngine engine("ddd\t\t", testFont);
+    QTextEngine engine;
+    engine.text = "ddd\t\t";
     engine.ignoreBidi = true;
     engine.itemize();
     QCOMPARE(qRound(engine.width(0, 5)), qRound(engine.boundingBox(0, 5).width));
@@ -1929,13 +2020,16 @@ void tst_QTextLayout::textWithSurrogates_qtbug15679()
 void tst_QTextLayout::textWidthWithStackedTextEngine()
 {
     QString text = QString::fromUtf8("คลิก ถัดไป เพื่อดำเนินการต่อ");
+
     QTextLayout layout(text);
     layout.setCacheEnabled(true);
     layout.beginLayout();
     QTextLine line = layout.createLine();
     layout.endLayout();
-    QFontMetricsF fm(layout.font());
-    QCOMPARE(line.naturalTextWidth(), fm.width(text));
+
+    QStackTextEngine layout2(text, layout.font());
+
+    QVERIFY(layout2.width(0, text.size()).toReal() >= line.naturalTextWidth());
 }
 
 void tst_QTextLayout::textWidthWithLineSeparator()
@@ -1956,27 +2050,24 @@ void tst_QTextLayout::textWidthWithLineSeparator()
 
 void tst_QTextLayout::cursorInLigatureWithMultipleLines()
 {
-#if !defined(Q_OS_MAC)
-    QSKIP("This test can only be run on Mac");
-#endif
     QTextLayout layout("first line finish", QFont("Times", 20));
     layout.setCacheEnabled(true);
     layout.beginLayout();
     QTextLine line = layout.createLine();
-    line.setLineWidth(70);
-    line = layout.createLine();
+    line.setNumColumns(10);
+    QTextLine line2 = layout.createLine();
     layout.endLayout();
 
-    // The second line will be "finish", with "fi" as a ligature
-    QEXPECT_FAIL("", "QTBUG-26403", Abort);
-    QVERIFY(line.cursorToX(0) != line.cursorToX(1));
+    // The second line will be "finish"
+    QCOMPARE(layout.text().mid(line2.textStart(), line2.textLength()), QString::fromLatin1("finish"));
+
+    QVERIFY(line.cursorToX(1) != line.cursorToX(0));
+    QCOMPARE(line2.cursorToX(line2.textStart()), line.cursorToX(0));
+    QCOMPARE(line2.cursorToX(line2.textStart() + 1), line.cursorToX(1));
 }
 
 void tst_QTextLayout::xToCursorForLigatures()
 {
-#if !defined(Q_OS_MAC)
-    QSKIP("This test can only be run on Mac");
-#endif
     QTextLayout layout("fi", QFont("Times", 20));
     layout.setCacheEnabled(true);
     layout.beginLayout();
@@ -1999,9 +2090,6 @@ void tst_QTextLayout::xToCursorForLigatures()
 
 void tst_QTextLayout::cursorInNonStopChars()
 {
-#if defined(Q_OS_MAC)
-    QSKIP("This test can not be run on Mac");
-#endif
     QTextLayout layout(QString::fromUtf8("\xE0\xA4\xA4\xE0\xA5\x8D\xE0\xA4\xA8"));
     layout.setCacheEnabled(true);
     layout.beginLayout();
@@ -2010,6 +2098,76 @@ void tst_QTextLayout::cursorInNonStopChars()
 
     QVERIFY(line.cursorToX(1) == line.cursorToX(3));
     QVERIFY(line.cursorToX(2) == line.cursorToX(3));
+}
+
+void tst_QTextLayout::justifyTrailingSpaces()
+{
+    QTextLayout layout(QStringLiteral("     t"));
+    layout.setTextOption(QTextOption(Qt::AlignJustify));
+    layout.beginLayout();
+
+    QTextLine line = layout.createLine();
+    line.setLineWidth(5);
+
+    layout.endLayout();
+
+    QVERIFY(qFuzzyIsNull(layout.lineAt(0).cursorToX(0)));
+}
+
+void tst_QTextLayout::nbsp()
+{
+    QString s = QString() + QChar(' ') + QChar('a') + QString(10, QChar::Nbsp) + QChar('a') + QChar(' ') + QChar('A');
+    QString text = s + s + s + s + s + s + s + s + s + s + s + s + s + s;
+    QTextLayout layout(text);
+    layout.setCacheEnabled(true);
+    layout.beginLayout();
+    layout.createLine();
+    layout.endLayout();
+
+    int naturalWidth = qCeil(layout.lineAt(0).naturalTextWidth());
+    int lineWidth = naturalWidth;
+
+    layout.beginLayout();
+    QTextLine line = layout.createLine();
+    while (lineWidth-- > naturalWidth / 2) {
+        line.setLineWidth(lineWidth);
+        QVERIFY(text.at(line.textLength()-1).unicode() != QChar::Nbsp);
+    }
+
+    layout.endLayout();
+}
+
+void tst_QTextLayout::layoutWithCustomTabStops()
+{
+    QScopedPointer<QTextLayout> textLayout(new QTextLayout);
+    QList<QTextOption::Tab> tabStops;
+
+    const int tabWidth = 18;
+    const int maxTabPos = 2500;
+    for (int tabPos = tabWidth; tabPos < maxTabPos; tabPos += tabWidth)
+        tabStops << QTextOption::Tab(tabPos, QTextOption::LeftTab);
+
+    QTextOption textOption;
+    textOption.setTabs(tabStops);
+    textLayout->setTextOption(textOption);
+
+    textLayout->setText(QStringLiteral("\ta aa aa aa aa aa aa"));
+
+    textLayout->beginLayout();
+    textLayout->createLine();
+    textLayout->endLayout();
+
+    qreal shortWidth = textLayout->maximumWidth();
+
+    textLayout->setText(QStringLiteral("\ta aa aa aa aa aa aa aa aa aa aa aa aa a"));
+
+    textLayout->beginLayout();
+    textLayout->createLine();
+    textLayout->endLayout();
+
+    qreal longWidth = textLayout->maximumWidth();
+
+    QVERIFY(longWidth > shortWidth);
 }
 
 QTEST_MAIN(tst_QTextLayout)

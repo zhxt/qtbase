@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -55,6 +47,7 @@
 
 #include "QtGui/qfont.h"
 #include "QtCore/qmap.h"
+#include "QtCore/qhash.h"
 #include "QtCore/qobject.h"
 #include "QtCore/qstringlist.h"
 #include <QtGui/qfontdatabase.h>
@@ -91,7 +84,7 @@ struct QFontDef
     uint weight     :  7; // 0-99
     uint fixedPitch :  1;
     uint style      :  2;
-    uint stretch    : 12; // 0-400
+    uint stretch    : 12; // 0-4000
 
     uint hintingPreference : 2;
     uint ignorePitch : 1;
@@ -109,7 +102,7 @@ struct QFontDef
                     && styleStrategy == other.styleStrategy
                     && ignorePitch == other.ignorePitch && fixedPitch == other.fixedPitch
                     && family == other.family
-                    && (styleName.isEmpty() || other.styleName.isEmpty() || styleName == other.styleName)
+                    && styleName == other.styleName
                     && hintingPreference == other.hintingPreference
                           ;
     }
@@ -122,7 +115,7 @@ struct QFontDef
         if (styleHint != other.styleHint) return styleHint < other.styleHint;
         if (styleStrategy != other.styleStrategy) return styleStrategy < other.styleStrategy;
         if (family != other.family) return family < other.family;
-        if (!styleName.isEmpty() && !other.styleName.isEmpty() && styleName != other.styleName)
+        if (styleName != other.styleName)
             return styleName < other.styleName;
         if (hintingPreference != other.hintingPreference) return hintingPreference < other.hintingPreference;
 
@@ -133,6 +126,22 @@ struct QFontDef
     }
 };
 
+inline uint qHash(const QFontDef &fd, uint seed = 0) Q_DECL_NOTHROW
+{
+    return qHash(qRound64(fd.pixelSize*10000)) // use only 4 fractional digits
+        ^  qHash(fd.weight)
+        ^  qHash(fd.style)
+        ^  qHash(fd.stretch)
+        ^  qHash(fd.styleHint)
+        ^  qHash(fd.styleStrategy)
+        ^  qHash(fd.ignorePitch)
+        ^  qHash(fd.fixedPitch)
+        ^  qHash(fd.family, seed)
+        ^  qHash(fd.styleName)
+        ^  qHash(fd.hintingPreference)
+        ;
+}
+
 class QFontEngineData
 {
 public:
@@ -140,7 +149,7 @@ public:
     ~QFontEngineData();
 
     QAtomicInt ref;
-    QFontCache *fontCache;
+    const int fontCacheId;
 
     QFontEngine *engines[QChar::ScriptCount];
 
@@ -166,8 +175,6 @@ public:
     int dpi;
     int screen;
 
-
-    uint rawMode    :  1;
     uint underline  :  1;
     uint overline   :  1;
     uint strikeOut  :  1;
@@ -206,25 +213,37 @@ public:
     QFontCache();
     ~QFontCache();
 
+    int id() const { return m_id; }
+
     void clear();
 
     struct Key {
-        Key() : script(0), screen(0) { }
-        Key(const QFontDef &d, int c, int s = 0)
-            : def(d), script(c), screen(s) { }
+        Key() : script(0), multi(0), screen(0) { }
+        Key(const QFontDef &d, uchar c, bool m = 0, uchar s = 0)
+            : def(d), script(c), multi(m), screen(s) { }
 
         QFontDef def;
-        int script;
-        int screen;
+        uchar script;
+        uchar multi: 1;
+        uchar screen: 7;
 
         inline bool operator<(const Key &other) const
         {
             if (script != other.script) return script < other.script;
             if (screen != other.screen) return screen < other.screen;
+            if (multi != other.multi) return multi < other.multi;
+            if (multi && def.fallBackFamilies.size() != other.def.fallBackFamilies.size())
+                return def.fallBackFamilies.size() < other.def.fallBackFamilies.size();
             return def < other.def;
         }
         inline bool operator==(const Key &other) const
-        { return def == other.def && script == other.script && screen == other.screen; }
+        {
+            return script == other.script
+                    && screen == other.screen
+                    && multi == other.multi
+                    && (!multi || def.fallBackFamilies == other.def.fallBackFamilies)
+                    && def == other.def;
+        }
     };
 
     // QFontEngineData cache
@@ -256,13 +275,14 @@ public:
 private:
     void increaseCost(uint cost);
     void decreaseCost(uint cost);
-    void timerEvent(QTimerEvent *event);
+    void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
 
     static const uint min_cost;
     uint total_cost, max_cost;
     uint current_timestamp;
     bool fast;
     int timer_id;
+    const int m_id;
 };
 
 Q_GUI_EXPORT int qt_defaultDpiX();

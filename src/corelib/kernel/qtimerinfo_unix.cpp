@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -108,7 +100,7 @@ timespec qAbsTimespec(const timespec &t)
 }
 
 /*
-  Returns true if the real time clock has changed by more than 10%
+  Returns \c true if the real time clock has changed by more than 10%
   relative to the processor time since the last time this function was
   called. This presumably means that the system time has been changed.
 
@@ -153,7 +145,7 @@ void QTimerInfoList::timerRepair(const timespec &diff)
 {
     // repair all timers
     for (int i = 0; i < size(); ++i) {
-        register QTimerInfo *t = at(i);
+        QTimerInfo *t = at(i);
         t->timeout = t->timeout + diff;
     }
 }
@@ -182,7 +174,7 @@ void QTimerInfoList::timerInsert(QTimerInfo *ti)
 {
     int index = size();
     while (index--) {
-        register const QTimerInfo * const t = at(index);
+        const QTimerInfo * const t = at(index);
         if (!(ti->timeout < t->timeout))
             break;
     }
@@ -215,11 +207,13 @@ static timespec roundToMillisecond(timespec val)
 #ifdef QTIMERINFO_DEBUG
 QDebug operator<<(QDebug s, timeval tv)
 {
+    QDebugStateSaver saver(s);
     s.nospace() << tv.tv_sec << "." << qSetFieldWidth(6) << qSetPadChar(QChar(48)) << tv.tv_usec << reset;
-    return s.space();
+    return s;
 }
 QDebug operator<<(QDebug s, Qt::TimerType t)
 {
+    QDebugStateSaver saver(s);
     s << (t == Qt::PreciseTimer ? "P" :
           t == Qt::CoarseTimer ? "C" : "VC");
     return s;
@@ -244,8 +238,8 @@ static void calculateCoarseTimerTimeout(QTimerInfo *t, timespec currentTime)
     //
     // The objective is to make most timers wake up at the same time, thereby reducing CPU wakeups.
 
-    register uint interval = uint(t->interval);
-    register uint msec = uint(t->timeout.tv_nsec) / 1000 / 1000;
+    uint interval = uint(t->interval);
+    uint msec = uint(t->timeout.tv_nsec) / 1000 / 1000;
     Q_ASSERT(interval >= 20);
 
     // Calculate how much we can round and still keep within 5% error
@@ -256,14 +250,14 @@ static void calculateCoarseTimerTimeout(QTimerInfo *t, timespec currentTime)
         if (interval < 50) {
             // round to even
             // round towards multiples of 50 ms
-            register bool roundUp = (msec % 50) >= 25;
+            bool roundUp = (msec % 50) >= 25;
             msec >>= 1;
             msec |= uint(roundUp);
             msec <<= 1;
         } else {
             // round to multiple of 4
             // round towards multiples of 100 ms
-            register bool roundUp = (msec % 100) >= 50;
+            bool roundUp = (msec % 100) >= 50;
             msec >>= 2;
             msec |= uint(roundUp);
             msec <<= 2;
@@ -423,7 +417,7 @@ int QTimerInfoList::timerRemainingTime(int timerId)
     timespec tm = {0, 0};
 
     for (int i = 0; i < count(); ++i) {
-        register QTimerInfo *t = at(i);
+        QTimerInfo *t = at(i);
         if (t->id == timerId) {
             if (currentTime < t->timeout) {
                 // time to wait
@@ -509,7 +503,7 @@ bool QTimerInfoList::unregisterTimer(int timerId)
 {
     // set timer inactive
     for (int i = 0; i < count(); ++i) {
-        register QTimerInfo *t = at(i);
+        QTimerInfo *t = at(i);
         if (t->id == timerId) {
             // found it
             removeAt(i);
@@ -530,7 +524,7 @@ bool QTimerInfoList::unregisterTimers(QObject *object)
     if (isEmpty())
         return false;
     for (int i = 0; i < count(); ++i) {
-        register QTimerInfo *t = at(i);
+        QTimerInfo *t = at(i);
         if (t->obj == object) {
             // object found
             removeAt(i);
@@ -550,7 +544,7 @@ QList<QAbstractEventDispatcher::TimerInfo> QTimerInfoList::registeredTimers(QObj
 {
     QList<QAbstractEventDispatcher::TimerInfo> list;
     for (int i = 0; i < count(); ++i) {
-        register const QTimerInfo * const t = at(i);
+        const QTimerInfo * const t = at(i);
         if (t->obj == object) {
             list << QAbstractEventDispatcher::TimerInfo(t->id,
                                                         (t->timerType == Qt::VeryCoarseTimer

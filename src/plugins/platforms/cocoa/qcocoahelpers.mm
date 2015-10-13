@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -52,6 +44,8 @@
 #ifndef QT_NO_WIDGETS
 #include <QtWidgets/QWidget>
 #endif
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -72,68 +66,77 @@ void *qt_mac_QStringListToNSMutableArrayVoid(const QStringList &list)
 {
     NSMutableArray *result = [NSMutableArray arrayWithCapacity:list.size()];
     for (int i=0; i<list.size(); ++i){
-        [result addObject:reinterpret_cast<const NSString *>(QCFString::toCFStringRef(list[i]))];
+        [result addObject:list[i].toNSString()];
     }
     return result;
 }
 
-static void drawImageReleaseData (void *info, const void *, size_t)
+static void qt_mac_deleteImage(void *image, const void *, size_t)
 {
-    delete static_cast<QImage *>(info);
+    delete static_cast<QImage *>(image);
 }
 
-CGImageRef qt_mac_image_to_cgimage(const QImage &img)
+// Creates a CGDataProvider with the data from the given image.
+// The data provider retains a copy of the image.
+CGDataProviderRef qt_mac_CGDataProvider(const QImage &image)
 {
-    if (img.width() <= 0 || img.height() <= 0) {
-        qWarning() << Q_FUNC_INFO <<
-            "trying to set" << img.width() << "x" << img.height() << "size for CGImage";
-        return 0;
-    }
+    return CGDataProviderCreateWithData(new QImage(image), image.bits(),
+                                        image.byteCount(), qt_mac_deleteImage);
+}
 
-    QImage *image;
-    if (img.depth() != 32)
-        image = new QImage(img.convertToFormat(QImage::Format_ARGB32_Premultiplied));
-    else
-        image = new QImage(img);
+CGImageRef qt_mac_toCGImage(const QImage &inImage)
+{
+    if (inImage.isNull())
+        return 0;
+
+    QImage image = inImage;
 
     uint cgflags = kCGImageAlphaNone;
-    switch (image->format()) {
-    case QImage::Format_ARGB32_Premultiplied:
-        cgflags = kCGImageAlphaPremultipliedFirst;
-        break;
+    switch (image.format()) {
     case QImage::Format_ARGB32:
-        cgflags = kCGImageAlphaFirst;
+        cgflags = kCGImageAlphaFirst | kCGBitmapByteOrder32Host;
         break;
     case QImage::Format_RGB32:
-        cgflags = kCGImageAlphaNoneSkipFirst;
+        cgflags = kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Host;
+        break;
+    case QImage::Format_RGB888:
+        cgflags = kCGImageAlphaNone | kCGBitmapByteOrder32Big;
+        break;
+    case QImage::Format_RGBA8888_Premultiplied:
+        cgflags = kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big;
+        break;
+    case QImage::Format_RGBA8888:
+        cgflags = kCGImageAlphaLast | kCGBitmapByteOrder32Big;
+        break;
+    case QImage::Format_RGBX8888:
+        cgflags = kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big;
+        break;
     default:
+        // Everything not recognized explicitly is converted to ARGB32_Premultiplied.
+        image = inImage.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        // no break;
+    case QImage::Format_ARGB32_Premultiplied:
+        cgflags = kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host;
         break;
     }
-    cgflags |= kCGBitmapByteOrder32Host;
-    QCFType<CGDataProviderRef> dataProvider = CGDataProviderCreateWithData(image,
-                                                          static_cast<const QImage *>(image)->bits(),
-                                                          image->byteCount(),
-                                                          drawImageReleaseData);
 
-    return CGImageCreate(image->width(), image->height(), 8, 32,
-                                        image->bytesPerLine(),
-                                        qt_mac_genericColorSpace(),
-                                        cgflags, dataProvider, 0, false, kCGRenderingIntentDefault);
+    QCFType<CGDataProviderRef> dataProvider = qt_mac_CGDataProvider(image);
+    return CGImageCreate(image.width(), image.height(), 8, 32,
+                         image.bytesPerLine(),
+                         qt_mac_genericColorSpace(),
+                         cgflags, dataProvider, 0, false, kCGRenderingIntentDefault);
+}
 
+CGImageRef qt_mac_toCGImageMask(const QImage &image)
+{
+    QCFType<CGDataProviderRef> dataProvider = qt_mac_CGDataProvider(image);
+    return CGImageMaskCreate(image.width(), image.height(), 8, image.depth(),
+                              image.bytesPerLine(), dataProvider, NULL, false);
 }
 
 NSImage *qt_mac_cgimage_to_nsimage(CGImageRef image)
 {
-    QCocoaAutoReleasePool pool;
-    NSImage *newImage = 0;
-    NSRect imageRect = NSMakeRect(0.0, 0.0, CGImageGetWidth(image), CGImageGetHeight(image));
-    newImage = [[NSImage alloc] initWithSize:imageRect.size];
-    [newImage lockFocus];
-    {
-        CGContextRef imageContext = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-        CGContextDrawImage(imageContext, *(CGRect*)&imageRect, image);
-    }
-    [newImage unlockFocus];
+    NSImage *newImage = [[NSImage alloc] initWithCGImage:image size:NSZeroSize];
     return newImage;
 }
 
@@ -142,9 +145,27 @@ NSImage *qt_mac_create_nsimage(const QPixmap &pm)
     if (pm.isNull())
         return 0;
     QImage image = pm.toImage();
-    CGImageRef cgImage = qt_mac_image_to_cgimage(image);
+    CGImageRef cgImage = qt_mac_toCGImage(image);
     NSImage *nsImage = qt_mac_cgimage_to_nsimage(cgImage);
     CGImageRelease(cgImage);
+    return nsImage;
+}
+
+NSImage *qt_mac_create_nsimage(const QIcon &icon)
+{
+    if (icon.isNull())
+        return nil;
+
+    NSImage *nsImage = [[NSImage alloc] init];
+    foreach (QSize size, icon.availableSizes()) {
+        QPixmap pm = icon.pixmap(size);
+        QImage image = pm.toImage();
+        CGImageRef cgImage = qt_mac_toCGImage(image);
+        NSBitmapImageRep *imageRep = [[NSBitmapImageRep alloc] initWithCGImage:cgImage];
+        [nsImage addRepresentation:imageRep];
+        [imageRep release];
+        CGImageRelease(cgImage);
+    }
     return nsImage;
 }
 
@@ -197,6 +218,24 @@ QColor qt_mac_toQColor(const NSColor *color)
     return qtColor;
 }
 
+QColor qt_mac_toQColor(CGColorRef color)
+{
+    QColor qtColor;
+    CGColorSpaceModel model = CGColorSpaceGetModel(CGColorGetColorSpace(color));
+    const CGFloat *components = CGColorGetComponents(color);
+    if (model == kCGColorSpaceModelRGB) {
+        qtColor.setRgbF(components[0], components[1], components[2], components[3]);
+    } else if (model == kCGColorSpaceModelCMYK) {
+        qtColor.setCmykF(components[0], components[1], components[2], components[3]);
+    } else if (model == kCGColorSpaceModelMonochrome) {
+        qtColor.setRgbF(components[0], components[0], components[0], components[1]);
+    } else {
+        // Colorspace we can't deal with.
+        qWarning("Qt: qt_mac_toQColor: cannot convert from colorspace model: %d", model);
+        Q_ASSERT(false);
+    }
+    return qtColor;
+}
 
 // Use this method to keep all the information in the TextSegment. As long as it is ordered
 // we are in OK shape, and we can influence that ourselves.
@@ -314,19 +353,19 @@ QChar qt_mac_qtKey2CocoaKey(Qt::Key key)
         mustInit = false;
         for (int i=0; i<NumEntries; ++i)
             rev_entries[i] = entries[i];
-        qSort(rev_entries.begin(), rev_entries.end(), qtKey2CocoaKeySortLessThan);
+        std::sort(rev_entries.begin(), rev_entries.end(), qtKey2CocoaKeySortLessThan);
     }
     const QVector<KeyPair>::iterator i
-            = qBinaryFind(rev_entries.begin(), rev_entries.end(), key);
-    if (i == rev_entries.end())
+            = std::lower_bound(rev_entries.begin(), rev_entries.end(), key);
+    if ((i == rev_entries.end()) || (key < *i))
         return QChar();
     return i->cocoaKey;
 }
 
 Qt::Key qt_mac_cocoaKey2QtKey(QChar keyCode)
 {
-    const KeyPair *i = qBinaryFind(entries, end, keyCode);
-    if (i == end)
+    const KeyPair *i = std::lower_bound(entries, end, keyCode);
+    if ((i == end) || (keyCode < *i))
         return Qt::Key(keyCode.toUpper().unicode());
     return i->qtKey;
 }
@@ -457,6 +496,18 @@ QString qt_mac_removeMnemonics(const QString &original)
             --l;
             if (l == 0)
                 break;
+        } else if (original.at(currPos) == QLatin1Char('(') && l >= 4 &&
+                   original.at(currPos + 1) == QLatin1Char('&') &&
+                   original.at(currPos + 2) != QLatin1Char('&') &&
+                   original.at(currPos + 3) == QLatin1Char(')')) {
+            /* remove mnemonics its format is "\s*(&X)" */
+            int n = 0;
+            while (finalDest > n && returnText.at(finalDest - n - 1).isSpace())
+                ++n;
+            finalDest -= n;
+            currPos += 4;
+            l -= 4;
+            continue;
         }
         returnText[finalDest] = original.at(currPos);
         ++currPos;
@@ -502,7 +553,6 @@ CGColorSpaceRef qt_mac_displayColorSpace(const QWidget *widget)
     CGColorSpaceRef colorSpace;
 
     CGDirectDisplayID displayID;
-    CMProfileRef displayProfile = 0;
     if (widget == 0) {
         displayID = CGMainDisplayID();
     } else {
@@ -520,18 +570,11 @@ CGColorSpaceRef qt_mac_displayColorSpace(const QWidget *widget)
     if ((colorSpace = m_displayColorSpaceHash.value(displayID)))
         return colorSpace;
 
-    CMError err = CMGetProfileByAVID((CMDisplayIDType)displayID, &displayProfile);
-    if (err == noErr) {
-        colorSpace = CGColorSpaceCreateWithPlatformColorSpace(displayProfile);
-    } else if (widget) {
-        return qt_mac_displayColorSpace(0); // fall back on main display
-    }
-
+    colorSpace = CGDisplayCopyColorSpace(displayID);
     if (colorSpace == 0)
         colorSpace = CGColorSpaceCreateDeviceRGB();
 
     m_displayColorSpaceHash.insert(displayID, colorSpace);
-    CMCloseProfile(displayProfile);
     if (!m_postRoutineRegistered) {
         m_postRoutineRegistered = true;
         void qt_mac_cleanUpMacColorSpaces();
@@ -585,28 +628,43 @@ QString qt_mac_applicationName()
     return appName;
 }
 
-/*
-    Mac window coordinates are in the first quadrant: 0, 0 is at the lower-left
-    corner of the primary screen. This function converts the given rect to an
-    NSRect for the window geometry, flipping from 4th quadrant to 1st quadrant
-    and simultaneously ensuring that as much of the window as possible will be
-    onscreen. If the rect is too tall for the screen, the OS will reduce the
-    window's height anyway; but by moving the window upwards we can have more
-    of it onscreen.  But the application can still control the y coordinate
-    in case it really wants the window to be positioned partially offscreen.
-*/
-NSRect qt_mac_flipRect(const QRect &rect, QWindow *window)
+int qt_mac_mainScreenHeight()
 {
-    QPlatformScreen *onScreen = QPlatformScreen::platformScreenForWindow(window);
-    int flippedY = onScreen->geometry().height() - (rect.y() + rect.height());
+    QCocoaAutoReleasePool pool;
+    // The first screen in the screens array is documented
+    // to have the (0,0) origin.
+    NSRect screenFrame = [[[NSScreen screens] firstObject] frame];
+    return screenFrame.size.height;
+}
 
-    // In case of automatic positioning, try to put as much of the window onscreen as possible.
-    if (window->isTopLevel() && qt_window_private(const_cast<QWindow*>(window))->positionAutomatic && flippedY < 0)
-        flippedY = onScreen->geometry().height() - onScreen->availableGeometry().height() - onScreen->availableGeometry().y();
-#ifdef QT_COCOA_ENABLE_WINDOW_DEBUG
-    qDebug() << Q_FUNC_INFO << rect << "flippedY" << flippedY <<
-                "screen" << onScreen->geometry() << "available" << onScreen->availableGeometry();
-#endif
+int qt_mac_flipYCoordinate(int y)
+{
+    return qt_mac_mainScreenHeight() - y;
+}
+
+qreal qt_mac_flipYCoordinate(qreal y)
+{
+    return qt_mac_mainScreenHeight() - y;
+}
+
+QPointF qt_mac_flipPoint(const NSPoint &p)
+{
+    return QPointF(p.x, qt_mac_flipYCoordinate(p.y));
+}
+
+NSPoint qt_mac_flipPoint(const QPoint &p)
+{
+    return NSMakePoint(p.x(), qt_mac_flipYCoordinate(p.y()));
+}
+
+NSPoint qt_mac_flipPoint(const QPointF &p)
+{
+    return NSMakePoint(p.x(), qt_mac_flipYCoordinate(p.y()));
+}
+
+NSRect qt_mac_flipRect(const QRect &rect)
+{
+    int flippedY = qt_mac_flipYCoordinate(rect.y() + rect.height());
     return NSMakeRect(rect.x(), flippedY, rect.width(), rect.height());
 }
 
@@ -709,16 +767,7 @@ bool qt_mac_execute_apple_script(const QString &script, AEDesc *ret)
 
 QString qt_mac_removeAmpersandEscapes(QString s)
 {
-    int i = 0;
-    while (i < s.size()) {
-        ++i;
-        if (s.at(i-1) != QLatin1Char('&'))
-            continue;
-        if (i < s.size() && s.at(i) == QLatin1Char('&'))
-            ++i;
-        s.remove(i-1,1);
-    }
-    return s.trimmed();
+    return qt_mac_removeMnemonics(s).trimmed();
 }
 
 /*! \internal
@@ -727,7 +776,7 @@ QString qt_mac_removeAmpersandEscapes(QString s)
  returned if it can't be obtained. It is the caller's responsibility to
  CGContextRelease the context when finished using it.
 
- \warning This function is only available on Mac OS X.
+ \warning This function is only available on OS X.
  \warning This function is duplicated in qmacstyle_mac.mm
  */
 CGContextRef qt_mac_cg_context(QPaintDevice *pdev)
@@ -762,99 +811,6 @@ CGContextRef qt_mac_cg_context(QPaintDevice *pdev)
     CGContextTranslateCTM(ret, 0, image->height());
     CGContextScaleCTM(ret, 1, -1);
     return ret;
-}
-
-// qpaintengine_mac.mm
-extern void qt_mac_cgimage_data_free(void *, const void *memoryToFree, size_t);
-
-CGImageRef qt_mac_toCGImage(const QImage &qImage, bool isMask, uchar **dataCopy)
-{
-    int width = qImage.width();
-    int height = qImage.height();
-
-    if (width <= 0 || height <= 0) {
-        qWarning() << Q_FUNC_INFO <<
-            "setting invalid size" << width << "x" << height << "for qnsview image";
-        return 0;
-    }
-
-    const uchar *imageData = qImage.bits();
-    if (dataCopy) {
-        *dataCopy = static_cast<uchar *>(malloc(qImage.byteCount()));
-        memcpy(*dataCopy, imageData, qImage.byteCount());
-    }
-    int bitDepth = qImage.depth();
-    int colorBufferSize = 8;
-    int bytesPrLine = qImage.bytesPerLine();
-
-    CGDataProviderRef cgDataProviderRef = CGDataProviderCreateWithData(
-                NULL,
-                dataCopy ? *dataCopy : imageData,
-                qImage.byteCount(),
-                dataCopy ? qt_mac_cgimage_data_free : NULL);
-
-    CGImageRef cgImage = 0;
-    if (isMask) {
-        cgImage = CGImageMaskCreate(width,
-                                    height,
-                                    colorBufferSize,
-                                    bitDepth,
-                                    bytesPrLine,
-                                    cgDataProviderRef,
-                                    NULL,
-                                    false);
-    } else {
-        // Try get a device color space. Using the device color space means
-        // that the CGImage can be drawn to screen without per-pixel color
-        // space conversion, at the cost of less color accuracy.
-        CGColorSpaceRef cgColourSpaceRef = 0;
-        CMProfileRef sysProfile;
-        if (CMGetSystemProfile(&sysProfile) == noErr)
-        {
-            cgColourSpaceRef = CGColorSpaceCreateWithPlatformColorSpace(sysProfile);
-            CMCloseProfile(sysProfile);
-        }
-
-        // Fall back to Generic RGB if a profile was not found.
-        if (!cgColourSpaceRef)
-            cgColourSpaceRef = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
-
-        // Create a CGBitmapInfo contiaining the image format.
-        // Support the 8-bit per component (A)RGB formats.
-        CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Little;
-        switch (qImage.format()) {
-            case QImage::Format_ARGB32_Premultiplied :
-                bitmapInfo |= kCGImageAlphaPremultipliedFirst;
-            break;
-            case QImage::Format_ARGB32 :
-                bitmapInfo |= kCGImageAlphaFirst;
-            break;
-            case QImage::Format_RGB32 :
-                bitmapInfo |= kCGImageAlphaNoneSkipFirst;
-            break;
-            case QImage::Format_RGB888 :
-                bitmapInfo |= kCGImageAlphaNone;
-            break;
-            default:
-                qWarning() << "qt_mac_toCGImage: Unsupported image format" << qImage.format();
-            break;
-        }
-
-        cgImage = CGImageCreate(width,
-                                height,
-                                colorBufferSize,
-                                bitDepth,
-                                bytesPrLine,
-                                cgColourSpaceRef,
-                                bitmapInfo,
-                                cgDataProviderRef,
-                                NULL,
-                                false,
-                                kCGRenderingIntentDefault);
-        CGColorSpaceRelease(cgColourSpaceRef);
-    }
-    CGDataProviderRelease(cgDataProviderRef);
-    return cgImage;
 }
 
 QImage qt_mac_toQImage(CGImageRef image)

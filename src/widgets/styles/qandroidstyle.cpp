@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2013 BogDan Vatra <bogdan@kde.org>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,7 +38,6 @@
 #include <QFile>
 #include <QFont>
 #include <QApplication>
-#include <QTime>
 #include <qdrawutil.h>
 #include <QPixmapCache>
 #include <QFileInfo>
@@ -54,52 +45,42 @@
 #include <QPainter>
 #include <QJsonDocument>
 #include <QJsonObject>
-
 #include <QDebug>
+
+#include <QGuiApplication>
+#include <qpa/qplatformnativeinterface.h>
+#include <qpa/qplatformtheme.h>
 
 QT_BEGIN_NAMESPACE
 
 namespace {
-    const int textStyle_bold = 1;
-    const int textStyle_italic = 2;
-
-    const int typeface_sans = 1;
-    const int typeface_serif = 2;
-    const int typeface_monospace = 3;
-
     const quint32 NO_COLOR = 1;
     const quint32 TRANSPARENT_COLOR = 0;
 }
 
-
 QAndroidStyle::QAndroidStyle()
-    : QCommonStyle()
+    : QFusionStyle()
 {
-    QString stylePath(QLatin1String(qgetenv("MINISTRO_ANDROID_STYLE_PATH")));
+    QPixmapCache::clear();
+    checkBoxControl = NULL;
+    QPlatformNativeInterface *nativeInterface = QGuiApplication::platformNativeInterface();
+    QPalette *standardPalette = reinterpret_cast<QPalette *>(nativeInterface->nativeResourceForIntegration("AndroidStandardPalette"));
+    if (standardPalette)
+        m_standardPalette = *standardPalette;
 
-    if (stylePath.isEmpty())
-        stylePath = QLatin1String("/data/data/org.kde.necessitas.ministro/files/qt/style/");
-    Q_ASSERT(!stylePath.isEmpty());
-
-    QFile f(stylePath + QLatin1String("style.json"));
-    if (!f.open(QIODevice::ReadOnly))
-        return;
-
-    QJsonParseError error;
-    QJsonDocument document = QJsonDocument::fromJson(f.readAll(), &error);
-    if (document.isNull())  {
-        qCritical() << error.errorString();
-        return;
+    QHash<QByteArray, QFont> *qwidgetsFonts = reinterpret_cast<QHash<QByteArray, QFont> *>(nativeInterface->nativeResourceForIntegration("AndroidQWidgetFonts"));
+    if (qwidgetsFonts) {
+        for (auto it = qwidgetsFonts->constBegin(); it != qwidgetsFonts->constEnd(); ++it)
+            QApplication::setFont(it.value(), it.key());
+        qwidgetsFonts->clear(); // free the memory
     }
 
-    if (!document.isObject()) {
-        qCritical() << "Style.json does not contain a valid style.";
+    QJsonObject *object = reinterpret_cast<QJsonObject *>(nativeInterface->nativeResourceForIntegration("AndroidStyleData"));
+    if (!object)
         return;
-    }
 
-    QJsonObject object = document.object();
-    for (QJsonObject::const_iterator objectIterator = object.constBegin();
-         objectIterator != object.constEnd();
+    for (QJsonObject::const_iterator objectIterator = object->constBegin();
+         objectIterator != object->constEnd();
          ++objectIterator) {
         QString key = objectIterator.key();
         QJsonValue value = objectIterator.value();
@@ -109,72 +90,15 @@ QAndroidStyle::QAndroidStyle()
         }
 
         QJsonObject item = value.toObject();
-        QJsonObject::const_iterator attributeIterator = item.find(QLatin1String("qtClass"));
-        if (attributeIterator != item.constEnd()) {
-            // The item has palette and font information for a specific Qt Class (e.g. QWidget, QPushButton, etc.)
-            const QString qtClassName = attributeIterator.value().toString();
-
-            // Extract font information
-            QFont font;
-
-            // Font size (in pixels)
-            attributeIterator = item.find(QLatin1String("TextAppearance_textSize"));
-            if (attributeIterator != item.constEnd())
-                font.setPixelSize(int(attributeIterator.value().toDouble()));
-
-            // Font style
-            attributeIterator = item.find(QLatin1String("TextAppearance_textStyle"));
-            if (attributeIterator != item.constEnd()) {
-                const int style = int(attributeIterator.value().toDouble());
-                font.setBold(style & textStyle_bold);
-                font.setItalic(style & textStyle_italic);
-            }
-
-            // Font typeface
-            attributeIterator = item.find(QLatin1String("TextAppearance_typeface"));
-            if (attributeIterator != item.constEnd()) {
-                QFont::StyleHint styleHint = QFont::AnyStyle;
-                switch (int(attributeIterator.value().toDouble())) {
-                case typeface_sans:
-                    styleHint = QFont::SansSerif;
-                    break;
-                case typeface_serif:
-                    styleHint = QFont::Serif;
-                    break;
-                case typeface_monospace:
-                    styleHint = QFont::Monospace;
-                    break;
-                }
-                font.setStyleHint(styleHint, QFont::PreferMatch);
-            }
-            QApplication::setFont(font, qtClassName.toUtf8());
-            // Extract font information
-
-            // Extract palette information
-            QPalette palette;
-            attributeIterator = item.find(QLatin1String("TextAppearance_textColor"));
-            if (attributeIterator != item.constEnd())
-                setPaletteColor(attributeIterator.value().toObject().toVariantMap(), palette, QPalette::WindowText);
-
-            attributeIterator = item.find(QLatin1String("TextAppearance_textColorLink"));
-            if (attributeIterator != item.constEnd())
-                setPaletteColor(attributeIterator.value().toObject().toVariantMap(), palette, QPalette::Link);
-
-            attributeIterator = item.find(QLatin1String("TextAppearance_textColorHighlight"));
-            if (attributeIterator != item.constEnd())
-                palette.setColor(QPalette::Highlight, QRgb(int(attributeIterator.value().toDouble())));
-            palette.setColor(QPalette::Window, Qt::black);
-            QApplication::setPalette(palette, qtClassName.toUtf8());
-            if (QLatin1String("QWidget") == qtClassName)
-                m_standardPalette = palette;
-            // Extract palette information
-        }
         QAndroidStyle::ItemType itemType = qtControl(key);
         if (QC_UnknownType == itemType)
             continue;
 
         switch (itemType) {
         case QC_Checkbox:
+            checkBoxControl = new AndroidCompoundButtonControl(item.toVariantMap(), itemType);
+            m_androidControlsHash[int(itemType)] = checkBoxControl;
+            break;
         case QC_RadioButton:
             m_androidControlsHash[int(itemType)] = new AndroidCompoundButtonControl(item.toVariantMap(),
                                                                                     itemType);
@@ -201,90 +125,12 @@ QAndroidStyle::QAndroidStyle()
             break;
         }
     }
-    QApplication::setPalette(QApplication::palette("simple_list_item"), "QListView");
-    QApplication::setFont(QApplication::font("simple_list_item"), "QListView");
-    QApplication::setPalette(QApplication::palette("simple_list_item"), "QAbstractItemView");
-    QApplication::setFont(QApplication::font("simple_list_item"), "QAbstractItemView");
+    *object = QJsonObject(); // free memory
 }
 
 QAndroidStyle::~QAndroidStyle()
 {
     qDeleteAll(m_androidControlsHash);
-}
-
-
-void QAndroidStyle::setPaletteColor(const QVariantMap &object,
-                                    QPalette &palette,
-                                    QPalette::ColorRole role)
-{
-    // QPalette::Active -> ENABLED_FOCUSED_WINDOW_FOCUSED_STATE_SET
-    palette.setColor(QPalette::Active,
-                     role,
-                     QRgb(object.value(QLatin1String("ENABLED_FOCUSED_WINDOW_FOCUSED_STATE_SET")).toInt()));
-
-    // QPalette::Inactive -> ENABLED_STATE_SET
-    palette.setColor(QPalette::Inactive,
-                     role,
-                     QRgb(object.value(QLatin1String("ENABLED_STATE_SET")).toInt()));
-
-    // QPalette::Disabled -> EMPTY_STATE_SET
-    palette.setColor(QPalette::Disabled,
-                     role,
-                     QRgb(object.value(QLatin1String("EMPTY_STATE_SET")).toInt()));
-
-    palette.setColor(QPalette::Current, role, palette.color(QPalette::Active, role));
-
-    if (role == QPalette::WindowText) {
-        // QPalette::BrightText -> PRESSED
-        // QPalette::Active -> PRESSED_ENABLED_FOCUSED_WINDOW_FOCUSED_STATE_SET
-        palette.setColor(QPalette::Active,
-                         QPalette::BrightText,
-                         QRgb(object.value(QLatin1String("PRESSED_ENABLED_FOCUSED_WINDOW_FOCUSED_STATE_SET")).toInt()));
-
-        // QPalette::Inactive -> PRESSED_ENABLED_STATE_SET
-        palette.setColor(QPalette::Inactive,
-                         QPalette::BrightText,
-                         QRgb(object.value(QLatin1String("PRESSED_ENABLED_STATE_SET")).toInt()));
-
-        // QPalette::Disabled -> PRESSED_STATE_SET
-        palette.setColor(QPalette::Disabled,
-                         QPalette::BrightText,
-                         QRgb(object.value(QLatin1String("PRESSED_STATE_SET")).toInt()));
-
-        palette.setColor(QPalette::Current, QPalette::BrightText, palette.color(QPalette::Active, QPalette::BrightText));
-
-        // QPalette::HighlightedText -> SELECTED
-        // QPalette::Active -> ENABLED_SELECTED_WINDOW_FOCUSED_STATE_SET
-        palette.setColor(QPalette::Active,
-                         QPalette::HighlightedText,
-                         QRgb(object.value(QLatin1String("ENABLED_SELECTED_WINDOW_FOCUSED_STATE_SET")).toInt()));
-
-        // QPalette::Inactive -> ENABLED_SELECTED_STATE_SET
-        palette.setColor(QPalette::Inactive,
-                         QPalette::HighlightedText,
-                         QRgb(object.value(QLatin1String("ENABLED_SELECTED_STATE_SET")).toInt()));
-
-        // QPalette::Disabled -> SELECTED_STATE_SET
-        palette.setColor(QPalette::Disabled,
-                         QPalette::HighlightedText,
-                         QRgb(object.value(QLatin1String("SELECTED_STATE_SET")).toInt()));
-
-        palette.setColor(QPalette::Current,
-                         QPalette::HighlightedText,
-                         palette.color(QPalette::Active, QPalette::HighlightedText));
-
-        // Same colors for Text
-        palette.setColor(QPalette::Active, QPalette::Text, palette.color(QPalette::Active, role));
-        palette.setColor(QPalette::Inactive, QPalette::Text, palette.color(QPalette::Inactive, role));
-        palette.setColor(QPalette::Disabled, QPalette::Text, palette.color(QPalette::Disabled, role));
-        palette.setColor(QPalette::Current, QPalette::Text, palette.color(QPalette::Current, role));
-
-        // And for ButtonText
-        palette.setColor(QPalette::Active, QPalette::ButtonText, palette.color(QPalette::Active, role));
-        palette.setColor(QPalette::Inactive, QPalette::ButtonText, palette.color(QPalette::Inactive, role));
-        palette.setColor(QPalette::Disabled, QPalette::ButtonText, palette.color(QPalette::Disabled, role));
-        palette.setColor(QPalette::Current, QPalette::ButtonText, palette.color(QPalette::Current, role));
-    }
 }
 
 QAndroidStyle::ItemType QAndroidStyle::qtControl(const QString &android)
@@ -318,8 +164,6 @@ QAndroidStyle::ItemType QAndroidStyle::qtControl(QStyle::ComplexControl control)
         return QC_Combobox;
     case CC_Slider:
         return QC_Slider;
-    case CC_GroupBox:
-        return QC_View;
     default:
         return QC_UnknownType;
     }
@@ -339,6 +183,8 @@ QAndroidStyle::ItemType QAndroidStyle::qtControl(QStyle::ContentsType contentsTy
     case CT_ProgressBar:
         return QC_ProgressBar;
     case CT_Slider:
+        return QC_Slider;
+    case CT_ScrollBar:
         return QC_Slider;
     case CT_TabWidget:
         return QC_Tab;
@@ -383,6 +229,9 @@ QAndroidStyle::ItemType QAndroidStyle::qtControl(QStyle::ControlElement controlE
     case CE_ComboBoxLabel:
         return QC_Combobox;
 
+    case CE_ShapedFrame:
+        return QC_View;
+
     default:
         return QC_UnknownType;
     }
@@ -394,6 +243,10 @@ QAndroidStyle::ItemType QAndroidStyle::qtControl(QStyle::PrimitiveElement primit
     case QStyle::PE_PanelLineEdit:
     case QStyle::PE_FrameLineEdit:
         return QC_EditText;
+
+    case QStyle::PE_IndicatorViewItemCheck:
+    case QStyle::PE_IndicatorCheckBox:
+        return QC_Checkbox;
 
     case QStyle::PE_FrameWindow:
     case QStyle::PE_Widget:
@@ -435,10 +288,32 @@ void QAndroidStyle::drawPrimitive(PrimitiveElement pe,
     AndroidControlsHash::const_iterator it = itemType != QC_UnknownType
                                              ? m_androidControlsHash.find(itemType)
                                              : m_androidControlsHash.end();
-    if (it != m_androidControlsHash.end())
-        it.value()->drawControl(opt, p, w);
-    else
-        QCommonStyle::drawPrimitive(pe, opt, p, w);
+    if (it != m_androidControlsHash.end()) {
+        if (itemType != QC_EditText) {
+            it.value()->drawControl(opt, p, w);
+        } else {
+            QStyleOption copy(*opt);
+            copy.state &= ~QStyle::State_Sunken;
+            it.value()->drawControl(&copy, p, w);
+        }
+    } else if (pe == PE_FrameGroupBox) {
+        if (const QStyleOptionFrame *frame = qstyleoption_cast<const QStyleOptionFrame *>(opt)) {
+            const QStyleOptionFrameV2 *frame2 = qstyleoption_cast<const QStyleOptionFrameV2 *>(opt);
+            if (frame2 && (frame2->features & QStyleOptionFrameV2::Flat)) {
+                QRect fr = frame->rect;
+                QPoint p1(fr.x(), fr.y() + 1);
+                QPoint p2(fr.x() + fr.width(), p1.y());
+                qDrawShadeLine(p, p1, p2, frame->palette, true,
+                               frame->lineWidth, frame->midLineWidth);
+            } else {
+                qDrawShadeRect(p, frame->rect.x(), frame->rect.y(), frame->rect.width(),
+                               frame->rect.height(), frame->palette, true,
+                               frame->lineWidth, frame->midLineWidth);
+            }
+        }
+    } else {
+        QFusionStyle::drawPrimitive(pe, opt, p, w);
+    }
 }
 
 
@@ -452,16 +327,17 @@ void QAndroidStyle::drawControl(QStyle::ControlElement element,
                                              ? m_androidControlsHash.find(itemType)
                                              : m_androidControlsHash.end();
     if (it != m_androidControlsHash.end()) {
-        it.value()->drawControl(opt, p, w);
+        AndroidControl *androidControl = it.value();
+        androidControl->drawControl(opt, p, w);
 
         switch (itemType) {
         case QC_Button:
             if (const QStyleOptionButton *buttonOption =
                 qstyleoption_cast<const QStyleOptionButton *>(opt)) {
-                QMargins padding = it.value()->padding();
-                QStyleOptionButton copy (*buttonOption);
+                QMargins padding = androidControl->padding();
+                QStyleOptionButton copy(*buttonOption);
                 copy.rect.adjust(padding.left(), padding.top(), -padding.right(), -padding.bottom());
-                QCommonStyle::drawControl(CE_PushButtonLabel, &copy, p, w);
+                QFusionStyle::drawControl(CE_PushButtonLabel, &copy, p, w);
             }
             break;
         case QC_Checkbox:
@@ -472,26 +348,25 @@ void QAndroidStyle::drawControl(QStyle::ControlElement element,
                 QStyleOptionButton subopt(*btn);
                 subopt.rect = subElementRect(isRadio ? SE_RadioButtonContents
                                              : SE_CheckBoxContents, btn, w);
-                QCommonStyle::drawControl(isRadio ? CE_RadioButtonLabel : CE_CheckBoxLabel, &subopt, p, w);
+                QFusionStyle::drawControl(isRadio ? CE_RadioButtonLabel : CE_CheckBoxLabel, &subopt, p, w);
             }
             break;
         case QC_Combobox:
             if (const QStyleOptionComboBox *comboboxOption =
                 qstyleoption_cast<const QStyleOptionComboBox *>(opt)) {
-                QMargins padding = it.value()->padding();
+                QMargins padding = androidControl->padding();
                 QStyleOptionComboBox copy (*comboboxOption);
                 copy.rect.adjust(padding.left(), padding.top(), -padding.right(), -padding.bottom());
-                p->setFont(QApplication::font("simple_spinner_item"));
-                p->setPen(QApplication::palette("QPushButton").color(QPalette::Active, QPalette::Text));
-                QCommonStyle::drawControl(CE_ComboBoxLabel, comboboxOption, p, w);
+                QFusionStyle::drawControl(CE_ComboBoxLabel, comboboxOption, p, w);
             }
             break;
         default:
+            QFusionStyle::drawControl(element, opt, p, w);
             break;
         }
+    } else {
+        QFusionStyle::drawControl(element, opt, p, w);
     }
-    else
-        QCommonStyle::drawControl(element, opt, p, w);
 }
 
 QRect QAndroidStyle::subElementRect(SubElement subElement,
@@ -504,7 +379,7 @@ QRect QAndroidStyle::subElementRect(SubElement subElement,
                                              : m_androidControlsHash.end();
     if (it != m_androidControlsHash.end())
         return it.value()->subElementRect(subElement, option, widget);
-    return QCommonStyle::subElementRect(subElement, option, widget);
+    return QFusionStyle::subElementRect(subElement, option, widget);
 }
 
 void QAndroidStyle::drawComplexControl(ComplexControl cc,
@@ -516,10 +391,74 @@ void QAndroidStyle::drawComplexControl(ComplexControl cc,
     AndroidControlsHash::const_iterator it = itemType != QC_UnknownType
                                              ? m_androidControlsHash.find(itemType)
                                              : m_androidControlsHash.end();
-    if (it != m_androidControlsHash.end())
+    if (it != m_androidControlsHash.end()) {
         it.value()->drawControl(opt, p, widget);
-    else
-        QCommonStyle::drawComplexControl(cc, opt, p, widget);
+        return;
+    }
+    if (cc == CC_GroupBox) {
+        if (const QStyleOptionGroupBox *groupBox = qstyleoption_cast<const QStyleOptionGroupBox *>(opt)) {
+            // Draw frame
+            QRect textRect = subControlRect(CC_GroupBox, opt, SC_GroupBoxLabel, widget);
+            QRect checkBoxRect;
+            if (groupBox->subControls & SC_GroupBoxCheckBox)
+                checkBoxRect = subControlRect(CC_GroupBox, opt, SC_GroupBoxCheckBox, widget);
+            if (groupBox->subControls & QStyle::SC_GroupBoxFrame) {
+                QStyleOptionFrameV2 frame;
+                frame.QStyleOption::operator=(*groupBox);
+                frame.features = groupBox->features;
+                frame.lineWidth = groupBox->lineWidth;
+                frame.midLineWidth = groupBox->midLineWidth;
+                frame.rect = subControlRect(CC_GroupBox, opt, SC_GroupBoxFrame, widget);
+                p->save();
+                QRegion region(groupBox->rect);
+                if (!groupBox->text.isEmpty()) {
+                    bool ltr = groupBox->direction == Qt::LeftToRight;
+                    QRect finalRect;
+                    if (groupBox->subControls & QStyle::SC_GroupBoxCheckBox) {
+                        finalRect = checkBoxRect.united(textRect);
+                        finalRect.adjust(ltr ? -4 : 0, 0, ltr ? 0 : 4, 0);
+                    } else {
+                        finalRect = textRect;
+                    }
+                    region -= finalRect;
+                }
+                p->setClipRegion(region);
+                drawPrimitive(PE_FrameGroupBox, &frame, p, widget);
+                p->restore();
+            }
+
+            // Draw title
+            if ((groupBox->subControls & QStyle::SC_GroupBoxLabel) && !groupBox->text.isEmpty()) {
+                QColor textColor = groupBox->textColor;
+                if (textColor.isValid())
+                    p->setPen(textColor);
+                int alignment = int(groupBox->textAlignment);
+                if (!styleHint(QStyle::SH_UnderlineShortcut, opt, widget))
+                    alignment |= Qt::TextHideMnemonic;
+
+                drawItemText(p, textRect, Qt::TextShowMnemonic | Qt::AlignHCenter | alignment,
+                             groupBox->palette, groupBox->state & State_Enabled, groupBox->text,
+                             textColor.isValid() ? QPalette::NoRole : QPalette::WindowText);
+
+                if (groupBox->state & State_HasFocus) {
+                    QStyleOptionFocusRect fropt;
+                    fropt.QStyleOption::operator=(*groupBox);
+                    fropt.rect = textRect;
+                    drawPrimitive(PE_FrameFocusRect, &fropt, p, widget);
+                }
+            }
+
+            // Draw checkbox
+            if (groupBox->subControls & SC_GroupBoxCheckBox) {
+                QStyleOptionButton box;
+                box.QStyleOption::operator=(*groupBox);
+                box.rect = checkBoxRect;
+                checkBoxControl->drawControl(&box, p, widget);
+            }
+        }
+        return;
+    }
+    QFusionStyle::drawComplexControl(cc, opt, p, widget);
 }
 
 QStyle::SubControl QAndroidStyle::hitTestComplexControl(ComplexControl cc,
@@ -549,7 +488,7 @@ QStyle::SubControl QAndroidStyle::hitTestComplexControl(ComplexControl cc,
             break;
         }
     }
-    return QCommonStyle::hitTestComplexControl(cc, opt, pt, widget);
+    return QFusionStyle::hitTestComplexControl(cc, opt, pt, widget);
 }
 
 QRect QAndroidStyle::subControlRect(ComplexControl cc,
@@ -563,7 +502,54 @@ QRect QAndroidStyle::subControlRect(ComplexControl cc,
                                              : m_androidControlsHash.end();
     if (it != m_androidControlsHash.end())
         return it.value()->subControlRect(opt, sc, widget);
-    return QCommonStyle::subControlRect(cc, opt, sc, widget);
+    QRect rect = opt->rect;
+    switch (cc) {
+        case CC_GroupBox: {
+            if (const QStyleOptionGroupBox *groupBox = qstyleoption_cast<const QStyleOptionGroupBox *>(opt)) {
+                QSize textSize = opt->fontMetrics.boundingRect(groupBox->text).size() + QSize(2, 2);
+                QSize checkBoxSize = checkBoxControl->size(opt);
+                int indicatorWidth = checkBoxSize.width();
+                int indicatorHeight = checkBoxSize.height();
+                QRect checkBoxRect;
+                if (opt->subControls & QStyle::SC_GroupBoxCheckBox) {
+                    checkBoxRect.setWidth(indicatorWidth);
+                    checkBoxRect.setHeight(indicatorHeight);
+                }
+                checkBoxRect.moveLeft(1);
+                QRect textRect = checkBoxRect;
+                textRect.setSize(textSize);
+                if (opt->subControls & QStyle::SC_GroupBoxCheckBox)
+                    textRect.translate(indicatorWidth + 5, (indicatorHeight - textSize.height()) / 2);
+                if (sc == SC_GroupBoxFrame) {
+                    rect = opt->rect.adjusted(0, 0, 0, 0);
+                    rect.translate(0, textRect.height() / 2);
+                    rect.setHeight(rect.height() - textRect.height() / 2);
+                } else if (sc == SC_GroupBoxContents) {
+                    QRect frameRect = opt->rect.adjusted(0, 0, 0, -groupBox->lineWidth);
+                    int margin = 3;
+                    int leftMarginExtension = 0;
+                    int topMargin = qMax(pixelMetric(PM_ExclusiveIndicatorHeight), opt->fontMetrics.height()) + groupBox->lineWidth;
+                    frameRect.adjust(leftMarginExtension + margin, margin + topMargin, -margin, -margin - groupBox->lineWidth);
+                    frameRect.translate(0, textRect.height() / 2);
+                    rect = frameRect;
+                    rect.setHeight(rect.height() - textRect.height() / 2);
+                } else if (sc == SC_GroupBoxCheckBox) {
+                    rect = checkBoxRect;
+                } else if (sc == SC_GroupBoxLabel) {
+                    rect = textRect;
+                }
+                return visualRect(opt->direction, opt->rect, rect);
+            }
+
+            return rect;
+        }
+
+        default:
+            break;
+    }
+
+
+    return QFusionStyle::subControlRect(cc, opt, sc, widget);
 }
 
 int QAndroidStyle::pixelMetric(PixelMetric metric, const QStyleOption *option,
@@ -575,9 +561,14 @@ int QAndroidStyle::pixelMetric(PixelMetric metric, const QStyleOption *option,
     case PM_FocusFrameHMargin:
     case PM_ComboBoxFrameWidth:
     case PM_SpinBoxFrameWidth:
+    case PM_ScrollBarExtent:
         return 0;
+    case PM_IndicatorWidth:
+        return checkBoxControl->size(option).width();
+    case PM_IndicatorHeight:
+        return checkBoxControl->size(option).height();
     default:
-        return QCommonStyle::pixelMetric(metric, option, widget);
+        return QFusionStyle::pixelMetric(metric, option, widget);
     }
 
 }
@@ -587,13 +578,62 @@ QSize QAndroidStyle::sizeFromContents(ContentsType ct,
                                       const QSize &contentsSize,
                                       const QWidget *w) const
 {
-    QSize sz=QCommonStyle::sizeFromContents(ct, opt, contentsSize, w);
+    QSize sz = QFusionStyle::sizeFromContents(ct, opt, contentsSize, w);
+    if (ct == CT_HeaderSection) {
+        if (const QStyleOptionHeader *hdr = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
+            bool nullIcon = hdr->icon.isNull();
+            int margin = pixelMetric(QStyle::PM_HeaderMargin, hdr, w);
+            int iconSize = nullIcon ? 0 : checkBoxControl->size(opt).width();
+            QSize txt;
+/*
+ * These next 4 lines are a bad hack to fix a bug in case a QStyleSheet is applied at QApplication level.
+ * In that case, even if the stylesheet does not refer to headers, the header font is changed to application
+ * font, which is wrong. Even worst, hdr->fontMetrics(...) does not report the proper size.
+ */
+            if (qApp->styleSheet().isEmpty())
+                txt = hdr->fontMetrics.size(0, hdr->text);
+            else
+                txt = qApp->fontMetrics().size(0, hdr->text);
+
+            sz.setHeight(margin + qMax(iconSize, txt.height()) + margin);
+            sz.setWidth((nullIcon ? 0 : margin) + iconSize
+                        + (hdr->text.isNull() ? 0 : margin) + txt.width() + margin);
+            if (hdr->sortIndicator != QStyleOptionHeader::None) {
+                int margin = pixelMetric(QStyle::PM_HeaderMargin, hdr, w);
+                if (hdr->orientation == Qt::Horizontal)
+                    sz.rwidth() += sz.height() + margin;
+                else
+                    sz.rheight() += sz.width() + margin;
+            }
+            return sz;
+        }
+    }
     const ItemType itemType = qtControl(ct);
     AndroidControlsHash::const_iterator it = itemType != QC_UnknownType
                                              ? m_androidControlsHash.find(itemType)
                                              : m_androidControlsHash.end();
     if (it != m_androidControlsHash.end())
         return it.value()->sizeFromContents(opt, sz, w);
+    if (ct == CT_GroupBox) {
+        if (const QStyleOptionGroupBox *groupBox = qstyleoption_cast<const QStyleOptionGroupBox *>(opt)) {
+            QSize textSize = opt->fontMetrics.boundingRect(groupBox->text).size() + QSize(2, 2);
+            QSize checkBoxSize = checkBoxControl->size(opt);
+            int indicatorWidth = checkBoxSize.width();
+            int indicatorHeight = checkBoxSize.height();
+            QRect checkBoxRect;
+            if (groupBox->subControls & QStyle::SC_GroupBoxCheckBox) {
+                checkBoxRect.setWidth(indicatorWidth);
+                checkBoxRect.setHeight(indicatorHeight);
+            }
+            checkBoxRect.moveLeft(1);
+            QRect textRect = checkBoxRect;
+            textRect.setSize(textSize);
+            if (groupBox->subControls & QStyle::SC_GroupBoxCheckBox)
+                textRect.translate(indicatorWidth + 5, (indicatorHeight - textSize.height()) / 2);
+            QRect u = textRect.united(checkBoxRect);
+            sz = QSize(sz.width(), sz.height() + u.height());
+        }
+    }
     return sz;
 }
 
@@ -601,19 +641,46 @@ QPixmap QAndroidStyle::standardPixmap(StandardPixmap standardPixmap,
                                       const QStyleOption *opt,
                                       const QWidget *widget) const
 {
-    return QCommonStyle::standardPixmap(standardPixmap, opt, widget);
+    return QFusionStyle::standardPixmap(standardPixmap, opt, widget);
 }
 
 QPixmap QAndroidStyle::generatedIconPixmap(QIcon::Mode iconMode,
                                            const QPixmap &pixmap,
                                            const QStyleOption *opt) const
 {
-    return QCommonStyle::generatedIconPixmap(iconMode, pixmap, opt);
+    return QFusionStyle::generatedIconPixmap(iconMode, pixmap, opt);
+}
+
+int QAndroidStyle::styleHint(QStyle::StyleHint hint, const QStyleOption *option, const QWidget *widget, QStyleHintReturn *returnData) const
+{
+    switch (hint) {
+    case SH_Slider_AbsoluteSetButtons:
+        return Qt::LeftButton;
+
+    case SH_Slider_PageSetButtons:
+        return 0;
+
+    case SH_RequestSoftwareInputPanel:
+        return RSIP_OnMouseClick;
+
+    default:
+        return QFusionStyle::styleHint(hint, option, widget, returnData);
+    }
 }
 
 QPalette QAndroidStyle::standardPalette() const
 {
     return m_standardPalette;
+}
+
+void QAndroidStyle::polish(QWidget *widget)
+{
+    widget->setAttribute(Qt::WA_StyledBackground, true);
+}
+
+void QAndroidStyle::unpolish(QWidget *widget)
+{
+    widget->setAttribute(Qt::WA_StyledBackground, false);
 }
 
 QAndroidStyle::AndroidDrawable::AndroidDrawable(const QVariantMap &drawable,
@@ -678,6 +745,13 @@ QMargins QAndroidStyle::AndroidDrawable::extractMargins(const QVariantMap &value
     return m;
 }
 
+void QAndroidStyle::AndroidDrawable::setPaddingLeftToSizeWidth()
+{
+    QSize sz = size();
+    if (m_padding.isNull() && !sz.isNull())
+        m_padding.setLeft(sz.width());
+}
+
 
 QAndroidStyle::AndroidImageDrawable::AndroidImageDrawable(const QVariantMap &drawable,
                                                           QAndroidStyle::ItemType itemType)
@@ -704,7 +778,7 @@ void QAndroidStyle::AndroidImageDrawable::draw(QPainter *painter, const QStyleOp
         QPixmapCache::insert(m_hashKey, pm);
     }
 
-    painter->drawPixmap(opt->rect.x(), (opt->rect.height() - pm.height()) / 2, pm);
+    painter->drawPixmap(opt->rect.x(), opt->rect.y() + (opt->rect.height() - pm.height()) / 2, pm);
 }
 
 QSize QAndroidStyle::AndroidImageDrawable::size() const
@@ -764,7 +838,7 @@ void QAndroidStyle::Android9PatchDrawable::extractIntArray(const QVariantList &v
 }
 
 
-void QAndroidStyle::Android9PatchDrawable::draw(QPainter * painter, const QStyleOption *opt) const
+void QAndroidStyle::Android9PatchDrawable::draw(QPainter *painter, const QStyleOption *opt) const
 {
     if (m_hashKey.isEmpty())
         m_hashKey = QFileInfo(m_filePath).fileName();
@@ -775,7 +849,7 @@ void QAndroidStyle::Android9PatchDrawable::draw(QPainter * painter, const QStyle
         QPixmapCache::insert(m_hashKey, pixmap);
     }
 
-    const QRect &bounds=opt->rect;
+    const QRect &bounds = opt->rect;
 
     // shamelessly stolen from Android's sources (NinepatchImpl.cpp) and adapted for Qt
     const int pixmapWidth = pixmap.width();
@@ -867,6 +941,8 @@ void QAndroidStyle::Android9PatchDrawable::draw(QPainter * painter, const QStyle
               i <= numXDivs && src.left() < bitmapWidth;
               i++, xIsStretchable = !xIsStretchable) {
             color = m_chunkData.colors[colorIndex++];
+            if (color != TRANSPARENT_COLOR)
+                color = NO_COLOR;
             if (i == numXDivs) {
                 src.setRight(bitmapWidth);
                 dst.setRight(bounds.right());
@@ -904,7 +980,7 @@ void QAndroidStyle::Android9PatchDrawable::draw(QPainter * painter, const QStyle
             if (color == TRANSPARENT_COLOR)
                 goto nextDiv;
             if (color != NO_COLOR)
-                painter->fillRect(dst, (QRgb)color);
+                painter->fillRect(dst, QRgb(color));
             else
                 painter->drawPixmap(dst, pixmap, src);
 nextDiv:
@@ -928,11 +1004,11 @@ QAndroidStyle::AndroidGradientDrawable::AndroidGradientDrawable(const QVariantMa
 
     QVariantList colors = drawable.value(QLatin1String("colors")).toList();
     QVariantList positions = drawable.value(QLatin1String("positions")).toList();
-    int min=colors.size() < positions.size() ? colors.size() : positions.size();
+    int min = colors.size() < positions.size() ? colors.size() : positions.size();
     for (int i = 0; i < min; i++)
-        m_gradient.setColorAt(positions.at(i).toDouble(), (QRgb)colors.at(i).toInt());
+        m_gradient.setColorAt(positions.at(i).toDouble(), QRgb(colors.at(i).toInt()));
 
-    QByteArray orientation=drawable.value(QLatin1String("orientation")).toByteArray();
+    QByteArray orientation = drawable.value(QLatin1String("orientation")).toByteArray();
     if (orientation == "TOP_BOTTOM") // draw the gradient from the top to the bottom
         m_orientation = TOP_BOTTOM;
     else if (orientation == "TR_BL") // draw the gradient from the top-right to the bottom-left
@@ -965,43 +1041,43 @@ void QAndroidStyle::AndroidGradientDrawable::draw(QPainter *painter, const QStyl
     switch (m_orientation) {
     case TOP_BOTTOM:
         // draw the gradient from the top to the bottom
-        m_gradient.setStart(width/2,0);
-        m_gradient.setFinalStop(width/2,height);
+        m_gradient.setStart(width / 2, 0);
+        m_gradient.setFinalStop(width / 2, height);
         break;
     case TR_BL:
         // draw the gradient from the top-right to the bottom-left
-        m_gradient.setStart(width,0);
-        m_gradient.setFinalStop(0,height);
+        m_gradient.setStart(width, 0);
+        m_gradient.setFinalStop(0, height);
         break;
     case RIGHT_LEFT:
         // draw the gradient from the right to the left
-        m_gradient.setStart(width,height/2);
-        m_gradient.setFinalStop(0,height/2);
+        m_gradient.setStart(width, height / 2);
+        m_gradient.setFinalStop(0, height / 2);
         break;
     case BR_TL:
         // draw the gradient from the bottom-right to the top-left
-        m_gradient.setStart(width,height);
-        m_gradient.setFinalStop(0,0);
+        m_gradient.setStart(width, height);
+        m_gradient.setFinalStop(0, 0);
         break;
     case BOTTOM_TOP:
         // draw the gradient from the bottom to the top
-        m_gradient.setStart(width/2,height);
-        m_gradient.setFinalStop(width/2,0);
+        m_gradient.setStart(width / 2, height);
+        m_gradient.setFinalStop(width / 2, 0);
         break;
     case BL_TR:
         // draw the gradient from the bottom-left to the top-right
-        m_gradient.setStart(0,height);
-        m_gradient.setFinalStop(width,0);
+        m_gradient.setStart(0, height);
+        m_gradient.setFinalStop(width, 0);
         break;
     case LEFT_RIGHT:
         // draw the gradient from the left to the right
-        m_gradient.setStart(0,height/2);
-        m_gradient.setFinalStop(width,height/2);
+        m_gradient.setStart(0, height / 2);
+        m_gradient.setFinalStop(width, height / 2);
         break;
     case TL_BR:
         // draw the gradient from the top-left to the bottom-right
-        m_gradient.setStart(0,0);
-        m_gradient.setFinalStop(width,height);
+        m_gradient.setStart(0, 0);
+        m_gradient.setFinalStop(width, height);
         break;
     }
 
@@ -1016,7 +1092,7 @@ void QAndroidStyle::AndroidGradientDrawable::draw(QPainter *painter, const QStyl
 
 QSize QAndroidStyle::AndroidGradientDrawable::size() const
 {
-    return QSize(m_radius*2, m_radius*2);
+    return QSize(m_radius * 2, m_radius * 2);
 }
 
 QAndroidStyle::AndroidClipDrawable::AndroidClipDrawable(const QVariantMap &drawable,
@@ -1048,9 +1124,9 @@ void QAndroidStyle::AndroidClipDrawable::draw(QPainter *painter, const QStyleOpt
 {
     QStyleOption copy(*opt);
     if (m_orientation == Qt::Horizontal)
-        copy.rect.setWidth(copy.rect.width()*m_factor);
+        copy.rect.setWidth(copy.rect.width() * m_factor);
     else
-        copy.rect.setHeight(copy.rect.height()*m_factor);
+        copy.rect.setHeight(copy.rect.height() * m_factor);
 
     m_drawable->draw(painter, &copy);
 }
@@ -1088,12 +1164,20 @@ QAndroidStyle::AndroidDrawableType QAndroidStyle::AndroidStateDrawable::type() c
 
 void QAndroidStyle::AndroidStateDrawable::draw(QPainter *painter, const QStyleOption *opt) const
 {
-    const AndroidDrawable *drawable=bestAndroidStateMatch(opt);
+    const AndroidDrawable *drawable = bestAndroidStateMatch(opt);
     if (drawable)
         drawable->draw(painter, opt);
 }
+QSize QAndroidStyle::AndroidStateDrawable::sizeImage(const QStyleOption *opt) const
+{
+    QSize s;
+    const AndroidDrawable *drawable = bestAndroidStateMatch(opt);
+    if (drawable)
+        s = drawable->size();
+    return s;
+}
 
-const QAndroidStyle::AndroidDrawable* QAndroidStyle::AndroidStateDrawable::bestAndroidStateMatch(const QStyleOption *opt) const
+const QAndroidStyle::AndroidDrawable * QAndroidStyle::AndroidStateDrawable::bestAndroidStateMatch(const QStyleOption *opt) const
 {
     const AndroidDrawable *bestMatch = 0;
     if (!opt) {
@@ -1102,37 +1186,37 @@ const QAndroidStyle::AndroidDrawable* QAndroidStyle::AndroidStateDrawable::bestA
         return bestMatch;
     }
 
-    uint bestCost=0xffff;
+    uint bestCost = 0xffff;
     foreach (const StateType & state, m_states) {
         if (int(opt->state) == state.first)
             return state.second;
-        uint cost = 0;
+        uint cost = 1;
 
         int difference = int(opt->state^state.first);
 
         if (difference & QStyle::State_Active)
-            cost += 1000;
+            cost <<= 1;
 
         if (difference & QStyle::State_Enabled)
-            cost += 1000;
+            cost <<= 1;
 
-        if ((m_itemType == QC_Button || m_itemType == QC_EditText) && (difference & QStyle::State_Raised))
-            cost += 1000;
+        if (difference & QStyle::State_Raised)
+            cost <<= 1;
 
-        if ((m_itemType == QC_Button || m_itemType == QC_EditText) && (difference & QStyle::State_Sunken))
-            cost += 1000;
+        if (difference & QStyle::State_Sunken)
+            cost <<= 1;
 
         if (difference & QStyle::State_Off)
-            cost += 1000;
+            cost <<= 1;
 
         if (difference & QStyle::State_On)
-            cost += 1000;
+            cost <<= 1;
 
         if (difference & QStyle::State_HasFocus)
-            cost += 1000;
+            cost <<= 1;
 
         if (difference & QStyle::State_Selected)
-            cost += 1000;
+            cost <<= 1;
 
         if (cost < bestCost) {
             bestCost = cost;
@@ -1144,21 +1228,30 @@ const QAndroidStyle::AndroidDrawable* QAndroidStyle::AndroidStateDrawable::bestA
 
 int QAndroidStyle::AndroidStateDrawable::extractState(const QVariantMap &value)
 {
-    int state = QStyle::State_None;
-    foreach (const QString key, value.keys()) {
+    int state = QStyle::State_Enabled | QStyle::State_Active;;
+    foreach (const QString &key, value.keys()) {
         bool val = value.value(key).toString() == QLatin1String("true");
-        if (key == QLatin1String("enabled") && val) {
-            state |= QStyle::State_Enabled;
+        if (key == QLatin1String("enabled")) {
+            if (val)
+                state |= QStyle::State_Enabled;
+            else
+                state &= ~QStyle::State_Enabled;
             continue;
         }
 
-        if (key == QLatin1String("window_focused") && val) {
-            state |= QStyle::State_Active;
+        if (key == QLatin1String("window_focused")) {
+            if (val)
+                state |= QStyle::State_Active;
+            else
+                state &= ~QStyle::State_Active;
             continue;
         }
 
-        if (key == QLatin1String("focused") && val) {
-            state |= QStyle::State_HasFocus;
+        if (key == QLatin1String("focused")) {
+            if (val)
+                state |= QStyle::State_HasFocus;
+            else
+                state &= ~QStyle::State_HasFocus;
             continue;
         }
 
@@ -1168,33 +1261,48 @@ int QAndroidStyle::AndroidStateDrawable::extractState(const QVariantMap &value)
         }
 
         if (key == QLatin1String("pressed")) {
-            state |= val ? QStyle::State_Raised : QStyle::State_Sunken;
-            state |= QStyle::State_Enabled | QStyle::State_HasFocus;
+            state |= val ? QStyle::State_Sunken : QStyle::State_Raised;
             continue;
         }
 
-        if (key == QLatin1String("selected") && val) {
-            state |= QStyle::State_Selected;
-            state |= QStyle::State_Enabled | QStyle::State_HasFocus;
+        if (key == QLatin1String("selected")) {
+            if (val)
+                state |= QStyle::State_Selected;
+            else
+                state &= ~QStyle::State_Selected;
             continue;
         }
 
-        if (key == QLatin1String("active") && val) {
-            state |= QStyle::State_Active;
+        if (key == QLatin1String("active")) {
+            if (val)
+                state |= QStyle::State_Active;
+            else
+                state &= ~QStyle::State_Active;
             continue;
         }
 
-        // Keep misspelling for compatibility
-        if (key == QLatin1String("backgroud") && val)
+        if (key == QLatin1String("multiline"))
+            return 0;
+
+        if (key == QLatin1String("background") && val)
             return -1;
     }
     return state;
+}
+
+void QAndroidStyle::AndroidStateDrawable::setPaddingLeftToSizeWidth()
+{
+    foreach (const StateType type, m_states)
+        const_cast<AndroidDrawable *>(type.second)->setPaddingLeftToSizeWidth();
 }
 
 QAndroidStyle::AndroidLayerDrawable::AndroidLayerDrawable(const QVariantMap &drawable,
                                                           QAndroidStyle::ItemType itemType)
     : AndroidDrawable(drawable, itemType)
 {
+    m_id = 0;
+    m_factor = 1;
+    m_orientation = Qt::Horizontal;
     QVariantList layers = drawable.value(QLatin1String("layers")).toList();
     foreach (QVariant layer, layers) {
         QVariantMap layerMap = layer.toMap();
@@ -1219,10 +1327,27 @@ QAndroidStyle::AndroidDrawableType QAndroidStyle::AndroidLayerDrawable::type() c
     return QAndroidStyle::Layer;
 }
 
+void QAndroidStyle::AndroidLayerDrawable::setFactor(int id, double factor, Qt::Orientation orientation)
+{
+    m_id = id;
+    m_factor = factor;
+    m_orientation = orientation;
+}
+
 void QAndroidStyle::AndroidLayerDrawable::draw(QPainter *painter, const QStyleOption *opt) const
 {
-    foreach (const LayerType &layer, m_layers)
-        layer.second->draw(painter, opt);
+    foreach (const LayerType &layer, m_layers) {
+        if (layer.first == m_id) {
+            QStyleOption copy(*opt);
+            if (m_orientation == Qt::Horizontal)
+                copy.rect.setWidth(copy.rect.width() * m_factor);
+            else
+                copy.rect.setHeight(copy.rect.height() * m_factor);
+            layer.second->draw(painter, &copy);
+        } else {
+            layer.second->draw(painter, opt);
+        }
+    }
 }
 
 QAndroidStyle::AndroidDrawable *QAndroidStyle::AndroidLayerDrawable::layer(int id) const
@@ -1251,7 +1376,7 @@ QAndroidStyle::AndroidControl::AndroidControl(const QVariantMap &control,
         m_background = 0;
 
     it = control.find(QLatin1String("View_minWidth"));
-    if (it!=control.end())
+    if (it != control.end())
         m_minSize.setWidth(it.value().toInt());
 
     it = control.find(QLatin1String("View_minHeight"));
@@ -1274,17 +1399,47 @@ QAndroidStyle::AndroidControl::~AndroidControl()
 
 void QAndroidStyle::AndroidControl::drawControl(const QStyleOption *opt, QPainter *p, const QWidget * /* w */)
 {
-    if (m_background)
+    if (m_background) {
         m_background->draw(p, opt);
+    } else {
+        if (const QStyleOptionFrame *frame = qstyleoption_cast<const QStyleOptionFrame *>(opt)) {
+            if ((frame->state & State_Sunken) || (frame->state & State_Raised)) {
+                qDrawShadePanel(p, frame->rect, frame->palette, frame->state & State_Sunken,
+                                frame->lineWidth);
+            } else {
+                qDrawPlainRect(p, frame->rect, frame->palette.foreground().color(), frame->lineWidth);
+            }
+        } else {
+            if (const QStyleOptionFocusRect *fropt = qstyleoption_cast<const QStyleOptionFocusRect *>(opt)) {
+                QColor bg = fropt->backgroundColor;
+                QPen oldPen = p->pen();
+                if (bg.isValid()) {
+                    int h, s, v;
+                    bg.getHsv(&h, &s, &v);
+                    if (v >= 128)
+                        p->setPen(Qt::black);
+                    else
+                        p->setPen(Qt::white);
+                } else {
+                    p->setPen(opt->palette.foreground().color());
+                }
+                QRect focusRect = opt->rect.adjusted(1, 1, -1, -1);
+                p->drawRect(focusRect.adjusted(0, 0, -1, -1)); //draw pen inclusive
+                p->setPen(oldPen);
+            } else {
+                p->fillRect(opt->rect, opt->palette.brush(QPalette::Background));
+            }
+        }
+    }
 }
 
 QRect QAndroidStyle::AndroidControl::subElementRect(QStyle::SubElement /* subElement */,
                                                     const QStyleOption *option,
                                                     const QWidget * /* widget */) const
 {
-    if (const AndroidDrawable *drawable=m_background) {
+    if (const AndroidDrawable *drawable = backgroundDrawable()) {
         if (drawable->type() == State)
-            drawable = static_cast<const AndroidStateDrawable *>(m_background)->bestAndroidStateMatch(option);
+            drawable = static_cast<const AndroidStateDrawable *>(backgroundDrawable())->bestAndroidStateMatch(option);
 
         const QMargins &padding = drawable->padding();
 
@@ -1300,7 +1455,6 @@ QRect QAndroidStyle::AndroidControl::subElementRect(QStyle::SubElement /* subEle
         return visualRect(option->direction, option->rect, r);
     }
     return option->rect;
-
 }
 
 QRect QAndroidStyle::AndroidControl::subControlRect(const QStyleOptionComplex *option,
@@ -1315,10 +1469,10 @@ QSize QAndroidStyle::AndroidControl::sizeFromContents(const QStyleOption *opt,
                                                       const QWidget * /* w */) const
 {
     QSize sz;
-    if (const AndroidDrawable *drawable=m_background) {
+    if (const AndroidDrawable *drawable = backgroundDrawable()) {
 
         if (drawable->type() == State)
-            drawable = static_cast<const AndroidStateDrawable*>(m_background)->bestAndroidStateMatch(opt);
+            drawable = static_cast<const AndroidStateDrawable*>(backgroundDrawable())->bestAndroidStateMatch(opt);
         const QMargins &padding = drawable->padding();
         sz.setWidth(padding.left() + padding.right());
         sz.setHeight(padding.top() + padding.bottom());
@@ -1337,13 +1491,27 @@ QSize QAndroidStyle::AndroidControl::sizeFromContents(const QStyleOption *opt,
 
 QMargins QAndroidStyle::AndroidControl::padding()
 {
-    if (const AndroidDrawable *drawable = m_background)
-    {
+    if (const AndroidDrawable *drawable = m_background) {
         if (drawable->type() == State)
-            drawable=static_cast<const AndroidStateDrawable *>(m_background)->bestAndroidStateMatch(0);
+            drawable = static_cast<const AndroidStateDrawable *>(m_background)->bestAndroidStateMatch(0);
         return drawable->padding();
     }
     return QMargins();
+}
+
+QSize QAndroidStyle::AndroidControl::size(const QStyleOption *option)
+{
+    if (const AndroidDrawable *drawable = backgroundDrawable()) {
+        if (drawable->type() == State)
+            drawable = static_cast<const AndroidStateDrawable *>(backgroundDrawable())->bestAndroidStateMatch(option);
+        return drawable->size();
+    }
+    return QSize();
+}
+
+const QAndroidStyle::AndroidDrawable *QAndroidStyle::AndroidControl::backgroundDrawable() const
+{
+    return m_background;
 }
 
 QAndroidStyle::AndroidCompoundButtonControl::AndroidCompoundButtonControl(const QVariantMap &control,
@@ -1351,10 +1519,12 @@ QAndroidStyle::AndroidCompoundButtonControl::AndroidCompoundButtonControl(const 
     : AndroidControl(control, itemType)
 {
     QVariantMap::const_iterator it = control.find(QLatin1String("CompoundButton_button"));
-    if (it != control.end())
+    if (it != control.end()) {
         m_button = AndroidDrawable::fromMap(it.value().toMap(), itemType);
-    else
+        const_cast<AndroidDrawable *>(m_button)->setPaddingLeftToSizeWidth();
+    } else {
         m_button = 0;
+    }
 }
 
 QAndroidStyle::AndroidCompoundButtonControl::~AndroidCompoundButtonControl()
@@ -1369,6 +1539,28 @@ void QAndroidStyle::AndroidCompoundButtonControl::drawControl(const QStyleOption
     AndroidControl::drawControl(opt, p, w);
     if (m_button)
         m_button->draw(p, opt);
+}
+
+QMargins QAndroidStyle::AndroidCompoundButtonControl::padding()
+{
+    if (m_button)
+        return m_button->padding();
+    return AndroidControl::padding();
+}
+
+QSize QAndroidStyle::AndroidCompoundButtonControl::size(const QStyleOption *option)
+{
+    if (m_button) {
+        if (m_button->type() == State)
+            return static_cast<const AndroidStateDrawable *>(m_button)->bestAndroidStateMatch(option)->size();
+        return m_button->size();
+    }
+    return AndroidControl::size(option);
+}
+
+const QAndroidStyle::AndroidDrawable * QAndroidStyle::AndroidCompoundButtonControl::backgroundDrawable() const
+{
+    return m_background ? m_background : m_button;
 }
 
 QAndroidStyle::AndroidProgressBarControl::AndroidProgressBarControl(const QVariantMap &control,
@@ -1429,8 +1621,11 @@ void QAndroidStyle::AndroidProgressBarControl::drawControl(const QStyleOption *o
         if (m_progressDrawable->type() == QAndroidStyle::Layer) {
             QAndroidStyle::AndroidDrawable *clipDrawable = static_cast<QAndroidStyle::AndroidLayerDrawable *>(m_progressDrawable)->layer(m_progressId);
             if (clipDrawable->type() == QAndroidStyle::Clip)
-                static_cast<QAndroidStyle::AndroidClipDrawable *>(clipDrawable)->setFactor(double(progressBarV2.progress/(progressBarV2.maximum-progressBarV2.minimum)),
+                static_cast<QAndroidStyle::AndroidClipDrawable *>(clipDrawable)->setFactor(double(progressBarV2.progress) / double(progressBarV2.maximum - progressBarV2.minimum),
                                                                                            progressBarV2.orientation);
+            else
+                static_cast<QAndroidStyle::AndroidLayerDrawable *>(m_progressDrawable)->setFactor(m_progressId, double(progressBarV2.progress) / double(progressBarV2.maximum - progressBarV2.minimum),
+                                                                                                  progressBarV2.orientation);
         }
         m_progressDrawable->draw(p, option);
     }
@@ -1448,12 +1643,11 @@ QRect QAndroidStyle::AndroidProgressBarControl::subElementRect(QStyle::SubElemen
             return option->rect;
 
         QMargins padding = m_background->padding();
-        QRect p(padding.left(), padding.top(), padding.right()-padding.left(), padding.bottom()-padding.top());
+        QRect p(padding.left(), padding.top(), padding.right() - padding.left(), padding.bottom() - padding.top());
         padding = m_indeterminateDrawable->padding();
-        p |= QRect(padding.left(), padding.top(), padding.right()-padding.left(), padding.bottom()-padding.top());
+        p |= QRect(padding.left(), padding.top(), padding.right() - padding.left(), padding.bottom() - padding.top());
         padding = m_progressDrawable->padding();
-        p |= QRect(padding.left(), padding.top(), padding.right()-padding.left(), padding.bottom()-padding.top());
-
+        p |= QRect(padding.left(), padding.top(), padding.right() - padding.left(), padding.bottom() - padding.top());
         QRect r = option->rect.adjusted(p.left(), p.top(), -p.right(), -p.bottom());
 
         if (horizontal) {
@@ -1523,27 +1717,45 @@ void QAndroidStyle::AndroidSeekBarControl::drawControl(const QStyleOption *optio
 
     if (const QStyleOptionSlider *styleOption =
            qstyleoption_cast<const QStyleOptionSlider *>(option)) {
-        double factor = double(styleOption->sliderPosition/(styleOption->maximum-styleOption->minimum));
-        if (m_progressDrawable->type()==QAndroidStyle::Layer) {
+        double factor = double(styleOption->sliderPosition - styleOption->minimum)
+                / double(styleOption->maximum - styleOption->minimum);
+
+        // Android does not have a vertical slider. To support the vertical orientation, we rotate
+        // the painter and pretend that we are horizontal.
+        if (styleOption->orientation == Qt::Vertical)
+            factor = 1 - factor;
+
+        if (m_progressDrawable->type() == QAndroidStyle::Layer) {
             QAndroidStyle::AndroidDrawable *clipDrawable = static_cast<QAndroidStyle::AndroidLayerDrawable *>(m_progressDrawable)->layer(m_progressId);
             if (clipDrawable->type() == QAndroidStyle::Clip)
-                static_cast<QAndroidStyle::AndroidClipDrawable *>(clipDrawable)->setFactor(factor, styleOption->orientation);
+                static_cast<QAndroidStyle::AndroidClipDrawable *>(clipDrawable)->setFactor(factor, Qt::Horizontal);
+            else
+                static_cast<QAndroidStyle::AndroidLayerDrawable *>(m_progressDrawable)->setFactor(m_progressId, factor, Qt::Horizontal);
         }
-        const AndroidDrawable *drawable=m_seekBarThumb;
+        const AndroidDrawable *drawable = m_seekBarThumb;
         if (drawable->type() == State)
             drawable = static_cast<const QAndroidStyle::AndroidStateDrawable *>(m_seekBarThumb)->bestAndroidStateMatch(option);
         QStyleOption copy(*option);
-        copy.rect.setY((copy.rect.height()-m_minSize.height())/2);
-        copy.rect.setHeight(m_minSize.height());
-        copy.rect.setWidth(copy.rect.width()-drawable->size().width());
-        copy.rect.translate(drawable->size().width()/2,0);
+
+        p->save();
+
+        if (styleOption->orientation == Qt::Vertical) {
+            // rotate the painter, and transform the rectangle to match
+            p->rotate(90);
+            copy.rect = QRect(copy.rect.y(), copy.rect.x() - copy.rect.width(), copy.rect.height(), copy.rect.width());
+        }
+
+        copy.rect.setHeight(m_progressDrawable->size().height());
+        copy.rect.setWidth(copy.rect.width() - drawable->size().width());
+        const int yTranslate = abs(drawable->size().height() - copy.rect.height()) / 2;
+        copy.rect.translate(drawable->size().width() / 2, yTranslate);
         m_progressDrawable->draw(p, &copy);
-        if (styleOption->orientation == Qt::Vertical)
-            qCritical() << "Vertical slider are not supported";
-        int pos = (double(copy.rect.width()*factor - drawable->size().width()) / 2);
-        copy.rect.translate(pos, 0);
+        int pos = copy.rect.width() * factor - drawable->size().width() / 2;
+        copy.rect.translate(pos, -yTranslate);
         copy.rect.setSize(drawable->size());
         m_seekBarThumb->draw(p, &copy);
+
+        p->restore();
     }
 }
 
@@ -1554,7 +1766,7 @@ QSize QAndroidStyle::AndroidSeekBarControl::sizeFromContents(const QStyleOption 
     QSize sz = AndroidProgressBarControl::sizeFromContents(opt, contentsSize, w);
     if (!m_seekBarThumb)
         return sz;
-    const AndroidDrawable *drawable=m_seekBarThumb;
+    const AndroidDrawable *drawable = m_seekBarThumb;
     if (drawable->type() == State)
         drawable = static_cast<const QAndroidStyle::AndroidStateDrawable *>(m_seekBarThumb)->bestAndroidStateMatch(opt);
     return sz.expandedTo(drawable->size());
@@ -1573,9 +1785,15 @@ QRect QAndroidStyle::AndroidSeekBarControl::subControlRect(const QStyleOptionCom
             drawable = static_cast<const QAndroidStyle::AndroidStateDrawable *>(m_seekBarThumb)->bestAndroidStateMatch(option);
 
         QRect r(option->rect);
-        double factor = double(styleOption->sliderPosition/(styleOption->maximum-styleOption->minimum));
-        int pos=(double(option->rect.width()*factor - drawable->size().width()) / 2);
-        r.setX(r.x()+pos);
+        double factor = double(styleOption->sliderPosition - styleOption->minimum)
+                / (styleOption->maximum - styleOption->minimum);
+        if (styleOption->orientation == Qt::Vertical) {
+            int pos = option->rect.height() * (1 - factor) - double(drawable->size().height() / 2);
+            r.setY(r.y() + pos);
+        } else {
+            int pos = option->rect.width() * factor - double(drawable->size().width() / 2);
+            r.setX(r.x() + pos);
+        }
         r.setSize(drawable->size());
         return r;
     }
@@ -1593,6 +1811,10 @@ QRect QAndroidStyle::AndroidSpinnerControl::subControlRect(const QStyleOptionCom
 {
     if (sc == QStyle::SC_ComboBoxListBoxPopup)
         return option->rect;
+    if (sc == QStyle::SC_ComboBoxArrow) {
+        const QRect editField = subControlRect(option, QStyle::SC_ComboBoxEditField, widget);
+        return QRect(editField.topRight(), QSize(option->rect.width() - editField.width(), option->rect.height()));
+    }
     return AndroidControl::subControlRect(option, sc, widget);
 }
 

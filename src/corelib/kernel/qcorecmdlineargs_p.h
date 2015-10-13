@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -56,14 +48,34 @@
 #include "QtCore/qstring.h"
 #include "QtCore/qstringlist.h"
 
+#if defined(Q_OS_WIN)
+#  ifdef Q_OS_WIN32
+#    include <qt_windows.h> // first to suppress min, max macros.
+#    include <shlobj.h>
+#  else
+#    include "QtCore/qvector.h"
+#    include <qt_windows.h>
+#  endif
+
 QT_BEGIN_NAMESPACE
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN32)
 
-QT_BEGIN_INCLUDE_NAMESPACE
-#  include "QtCore/qvector.h"
-#  include <qt_windows.h>
-QT_END_INCLUDE_NAMESPACE
+static inline QStringList qWinCmdArgs(const QString &cmdLine)
+{
+    QStringList result;
+    int size;
+    if (wchar_t **argv = CommandLineToArgvW((const wchar_t *)cmdLine.utf16(), &size)) {
+        result.reserve(size);
+        wchar_t **argvEnd = argv + size;
+        for (wchar_t **a = argv; a < argvEnd; ++a)
+            result.append(QString::fromWCharArray(*a));
+        LocalFree(argv);
+    }
+    return result;
+}
+
+#elif defined(Q_OS_WINCE) // Q_OS_WIN32
 
 // template implementation of the parsing algorithm
 // this is used from qcoreapplication_win.cpp and the tools (rcc, uic...)
@@ -83,7 +95,7 @@ static QVector<Char*> qWinCmdLine(Char *cmdParam, int length, int &argc)
         if (*p && p < p_end) {                                // arg starts
             int quote;
             Char *start, *r;
-            if (*p == Char('\"') || *p == Char('\'')) {        // " or ' quote
+            if (*p == Char('\"')) {
                 quote = *p;
                 start = ++p;
             } else {
@@ -101,10 +113,11 @@ static QVector<Char*> qWinCmdLine(Char *cmdParam, int length, int &argc)
                     }
                 }
                 if (*p == '\\') {                // escape char?
-                    if (*(p+1) == quote)
+                    // testing by looking at argc, argv shows that it only escapes quotes
+                    if (p < p_end && (*(p+1) == Char('\"')))
                         p++;
                 } else {
-                    if (!quote && (*p == Char('\"') || *p == Char('\''))) {        // " or ' quote
+                    if (!quote && (*p == Char('\"'))) {
                         quote = *p++;
                         continue;
                     } else if (QChar((short)(*p)).isSpace() && !quote)
@@ -148,18 +161,20 @@ static inline QStringList qCmdLineArgs(int argc, char *argv[])
     return qWinCmdArgs(cmdLine);
 }
 
-#else  // !Q_OS_WIN
+#elif defined(Q_OS_WINRT) // Q_OS_WINCE
 
 static inline QStringList qCmdLineArgs(int argc, char *argv[])
 {
     QStringList args;
-	for (int i = 0; i != argc; ++i)
+    for (int i = 0; i != argc; ++i)
         args += QString::fromLocal8Bit(argv[i]);
     return args;
 }
 
-#endif // Q_OS_WIN
+#endif // Q_OS_WINRT
 
 QT_END_NAMESPACE
+
+#endif // Q_OS_WIN
 
 #endif // QCORECMDLINEARGS_WIN_P_H

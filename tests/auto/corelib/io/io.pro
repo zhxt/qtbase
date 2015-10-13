@@ -10,11 +10,14 @@ SUBDIRS=\
     qfile \
     largefile \
     qfileinfo \
+    qfileselector \
     qfilesystementry \
     qfilesystemwatcher \
     qiodevice \
     qipaddress \
     qlockfile \
+    qloggingcategory \
+    qloggingregistry \
     qnodebug \
     qprocess \
     qprocess-noapplication \
@@ -23,6 +26,7 @@ SUBDIRS=\
     qsettings \
     qsavefile \
     qstandardpaths \
+    qstorageinfo \
     qtemporarydir \
     qtemporaryfile \
     qtextstream \
@@ -36,8 +40,11 @@ SUBDIRS=\
         qwinoverlappedionotifier
 }
 
+!qtHaveModule(gui): SUBDIRS -= \
+    qdatastream \
+    qsettings
+
 !qtHaveModule(network): SUBDIRS -= \
-    qfile \
     qiodevice \
     qprocess \
     qtextstream
@@ -46,7 +53,14 @@ SUBDIRS=\
     qabstractfileengine \
     qfileinfo \
     qipaddress \
-    qurlinternal
+    qurlinternal \
+    qloggingregistry
 
 win32:!contains(QT_CONFIG, private_tests): SUBDIRS -= \
     qfilesystementry
+
+winrt: SUBDIRS -= \
+    qprocess \
+    qprocess-noapplication \
+    qprocessenvironment \
+    qwinoverlappedionotifier

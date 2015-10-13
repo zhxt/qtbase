@@ -1,39 +1,31 @@
 /***************************************************************************
 **
-** Copyright (C) 2011 - 2012 Research In Motion
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2013 BlackBerry Limited. All rights reserved.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,6 +41,7 @@ QQnxAbstractVirtualKeyboard::QQnxAbstractVirtualKeyboard(QObject *parent)
     , m_visible(false)
     , m_locale(QLocale::system())
     , m_keyboardMode(Default)
+    , m_enterKeyType(DefaultReturn)
 {
 }
 
@@ -59,26 +52,35 @@ void QQnxAbstractVirtualKeyboard::setKeyboardMode(KeyboardMode mode)
 
     m_keyboardMode = mode;
 
-    applyKeyboardMode(mode);
+    if (m_visible)
+        applyKeyboardOptions();
 }
 
-void QQnxAbstractVirtualKeyboard::setInputHintsFromObject(QObject *focusObject)
+void QQnxAbstractVirtualKeyboard::setEnterKeyType(EnterKeyType type)
 {
-    if (focusObject) {
-        const Qt::InputMethodHints hints = static_cast<Qt::InputMethodHints>(
-                    focusObject->property("inputMethodHints").toInt());
-        if (hints & Qt::ImhEmailCharactersOnly) {
-            setKeyboardMode(QQnxAbstractVirtualKeyboard::Email);
-        } else if (hints & Qt::ImhDialableCharactersOnly) {
-            setKeyboardMode(QQnxAbstractVirtualKeyboard::Phone);
-        } else if (hints & Qt::ImhUrlCharactersOnly) {
-            setKeyboardMode(QQnxAbstractVirtualKeyboard::Web);
-        } else if (hints & Qt::ImhFormattedNumbersOnly || hints & Qt::ImhDigitsOnly ||
-                   hints & Qt::ImhDate || hints & Qt::ImhTime) {
-            setKeyboardMode(QQnxAbstractVirtualKeyboard::NumPunc);
-        } else {
-            setKeyboardMode(QQnxAbstractVirtualKeyboard::Default);
-        }
+    if (type == m_enterKeyType)
+        return;
+
+    m_enterKeyType = type;
+
+    if (m_visible)
+        applyKeyboardOptions();
+}
+
+void QQnxAbstractVirtualKeyboard::setInputHints(int inputHints)
+{
+    if (inputHints & Qt::ImhEmailCharactersOnly) {
+        setKeyboardMode(QQnxAbstractVirtualKeyboard::Email);
+    } else if (inputHints & Qt::ImhDialableCharactersOnly) {
+        setKeyboardMode(QQnxAbstractVirtualKeyboard::Phone);
+    } else if (inputHints & Qt::ImhUrlCharactersOnly) {
+        setKeyboardMode(QQnxAbstractVirtualKeyboard::Url);
+    } else if (inputHints & Qt::ImhFormattedNumbersOnly || inputHints & Qt::ImhDigitsOnly) {
+        setKeyboardMode(QQnxAbstractVirtualKeyboard::Number);
+    } else if (inputHints & Qt::ImhDate || inputHints & Qt::ImhTime) {
+        setKeyboardMode(QQnxAbstractVirtualKeyboard::NumPunc); // Use NumPunc so that : is available.
+    } else if (inputHints & Qt::ImhHiddenText) {
+        setKeyboardMode(QQnxAbstractVirtualKeyboard::Password);
     } else {
         setKeyboardMode(QQnxAbstractVirtualKeyboard::Default);
     }

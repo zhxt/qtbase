@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -307,7 +299,7 @@ QAbstractFileEngine *QAbstractFileEngine::create(const QString &fileName)
     the file system (i.e. not a file or directory).
     \value FileType The file is a regular file to the file system
     (i.e. not a link or directory)
-    \value BundleType The file is a Mac OS X bundle implies DirectoryType
+    \value BundleType OS X and iOS: the file is a bundle; implies DirectoryType
     \value DirectoryType The file is a directory in the file system
     (i.e. not a link or file).
 
@@ -377,8 +369,8 @@ QAbstractFileEngine::~QAbstractFileEngine()
 /*!
     \fn bool QAbstractFileEngine::open(QIODevice::OpenMode mode)
 
-    Opens the file in the specified \a mode. Returns true if the file
-    was successfully opened; otherwise returns false.
+    Opens the file in the specified \a mode. Returns \c true if the file
+    was successfully opened; otherwise returns \c false.
 
     The \a mode is an OR combination of QIODevice::OpenMode and
     QIODevice::HandlingMode values.
@@ -390,9 +382,9 @@ bool QAbstractFileEngine::open(QIODevice::OpenMode openMode)
 }
 
 /*!
-    Closes the file, returning true if successful; otherwise returns false.
+    Closes the file, returning true if successful; otherwise returns \c false.
 
-    The default implementation always returns false.
+    The default implementation always returns \c false.
 */
 bool QAbstractFileEngine::close()
 {
@@ -404,8 +396,8 @@ bool QAbstractFileEngine::close()
 
     Flushes and syncs the file to disk.
 
-    Returns true if successful; otherwise returns false.
-    The default implementation always returns false.
+    Returns \c true if successful; otherwise returns \c false.
+    The default implementation always returns \c false.
 */
 bool QAbstractFileEngine::syncToDisk()
 {
@@ -416,7 +408,7 @@ bool QAbstractFileEngine::syncToDisk()
     Flushes the open file, returning true if successful; otherwise returns
     false.
 
-    The default implementation always returns false.
+    The default implementation always returns \c false.
 */
 bool QAbstractFileEngine::flush()
 {
@@ -444,8 +436,8 @@ qint64 QAbstractFileEngine::pos() const
 /*!
     \fn bool QAbstractFileEngine::seek(qint64 offset)
 
-    Sets the file position to the given \a offset. Returns true if
-    the position was successfully set; otherwise returns false.
+    Sets the file position to the given \a offset. Returns \c true if
+    the position was successfully set; otherwise returns \c false.
 
     The offset is from the beginning of the file, unless the
     file is sequential.
@@ -459,7 +451,7 @@ bool QAbstractFileEngine::seek(qint64 pos)
 }
 
 /*!
-    Returns true if the file is a sequential access device; returns
+    Returns \c true if the file is a sequential access device; returns
     false if the file is a direct access device.
 
     Operations involving size() and seek(int) are not valid on
@@ -485,7 +477,7 @@ bool QAbstractFileEngine::remove()
 
 /*!
     Copies the contents of this file to a file with the name \a newName.
-    Returns true on success; otherwise, false is returned.
+    Returns \c true on success; otherwise, false is returned.
 */
 bool QAbstractFileEngine::copy(const QString &newName)
 {
@@ -513,7 +505,7 @@ bool QAbstractFileEngine::rename(const QString &newName)
 
     Requests that the file be renamed to \a newName in the file
     system. If the new name already exists, it must be overwritten.
-    If the operation succeeds, returns true; otherwise returns
+    If the operation succeeds, returns \c true; otherwise returns
     false.
 
     This virtual function must be reimplemented by all subclasses.
@@ -530,7 +522,7 @@ bool QAbstractFileEngine::renameOverwrite(const QString &newName)
     Creates a link from the file currently specified by fileName() to
     \a newName. What a link is depends on the underlying filesystem
     (be it a shortcut on Windows or a symbolic link on Unix). Returns
-    true if successful; otherwise returns false.
+    true if successful; otherwise returns \c false.
 */
 bool QAbstractFileEngine::link(const QString &newName)
 {
@@ -772,8 +764,8 @@ int QAbstractFileEngine::handle() const
 /*!
     \since 4.3
 
-    Returns true if the current position is at the end of the file; otherwise,
-    returns false.
+    Returns \c true if the current position is at the end of the file; otherwise,
+    returns \c false.
 
     This function bases its behavior on calling extension() with
     AtEndExtension. If the engine does not support this extension, false is
@@ -790,7 +782,7 @@ bool QAbstractFileEngine::atEnd() const
     \since 4.4
 
     Maps \a size bytes of the file into memory starting at \a offset.
-    Returns a pointer to the memory if successful; otherwise returns false
+    Returns a pointer to the memory if successful; otherwise returns \c false
     if, for example, an error occurs.
 
     This function bases its behavior on calling extension() with
@@ -817,8 +809,8 @@ uchar *QAbstractFileEngine::map(qint64 offset, qint64 size, QFile::MemoryMapFlag
 /*!
     \since 4.4
 
-    Unmaps the memory \a address.  Returns true if the unmap succeeds; otherwise
-    returns false.
+    Unmaps the memory \a address.  Returns \c true if the unmap succeeds; otherwise
+    returns \c false.
 
     This function bases its behavior on calling extension() with
     UnMapExtensionOption. If the engine does not support this extension, false is
@@ -867,7 +859,7 @@ bool QAbstractFileEngine::unmap(uchar *address)
     You can call dirName() to get the directory name, nameFilters() to get a
     stringlist of name filters, and filters() to get the entry filters.
 
-    The pure virtual function hasNext() returns true if the current directory
+    The pure virtual function hasNext() returns \c true if the current directory
     has at least one more entry (i.e., the directory name is valid and
     accessible, and we have not reached the end of the entry list), and false
     otherwise. Reimplement next() to seek to the next entry.
@@ -1056,7 +1048,7 @@ QVariant QAbstractFileEngineIterator::entryInfo(EntryInfoType type) const
 /*!
     \fn virtual bool QAbstractFileEngineIterator::hasNext() const = 0
 
-    This pure virtual function returns true if there is at least one more
+    This pure virtual function returns \c true if there is at least one more
     entry in the current directory (i.e., the iterator path is valid and
     accessible, and the iterator has not reached the end of the entry list).
 
@@ -1147,14 +1139,14 @@ qint64 QAbstractFileEngine::readLine(char *data, qint64 maxlen)
    buffering to report end-of-file status without having to check the size of
    the file. It is also useful for sequential files, where the size of the
    file cannot be used to determine whether or not you have reached the end.
-   This extension returns true if the file is at the end; otherwise it returns
+   This extension returns \c true if the file is at the end; otherwise it returns
    false. The input and output arguments to extension() are ignored.
 
    \value FastReadLineExtension Whether the file engine provides a
    fast implementation for readLine() or not. If readLine() remains
    unimplemented in the file engine, QAbstractFileEngine will provide
    an implementation based on calling read() repeatedly. If
-   supportsExtension() returns false for this extension, however,
+   supportsExtension() returns \c false for this extension, however,
    QIODevice can provide a faster implementation by making use of its
    internal buffer. For engines that already provide a fast readLine()
    implementation, returning false for this extension can avoid
@@ -1201,7 +1193,7 @@ qint64 QAbstractFileEngine::readLine(char *data, qint64 maxlen)
     You can call supportsExtension() to check if an extension is supported by
     the file engine.
 
-    By default, no extensions are supported, and this function returns false.
+    By default, no extensions are supported, and this function returns \c false.
 
     \sa supportsExtension(), Extension
 */
@@ -1216,7 +1208,7 @@ bool QAbstractFileEngine::extension(Extension extension, const ExtensionOption *
 /*!
     \since 4.3
 
-    This virtual function returns true if the file engine supports \a
+    This virtual function returns \c true if the file engine supports \a
     extension; otherwise, false is returned. By default, no extensions are
     supported.
 

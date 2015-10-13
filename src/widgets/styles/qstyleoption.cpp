@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -201,7 +193,7 @@ void QStyleOption::init(const QWidget *widget)
         state |= QStyle::State_Active;
     if (widget->isWindow())
         state |= QStyle::State_Window;
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     extern bool qt_mac_can_clickThrough(const QWidget *w); //qwidget_mac.cpp
     if (!(state & QStyle::State_Active) && !qt_mac_can_clickThrough(widget))
         state &= ~QStyle::State_Enabled;
@@ -1116,7 +1108,7 @@ QStyleOptionToolBar::QStyleOptionToolBar(int version)
 
     The order of the positions within a line starts at the top of a
     vertical line, and from the left within a horizontal line. The
-    order of the positions for the lines is always from the the
+    order of the positions for the lines is always from the
     parent widget's boundary edges.
 
     \value Beginning The toolbar is located at the beginning of the line,
@@ -1634,6 +1626,9 @@ QStyleOptionProgressBar::QStyleOptionProgressBar(int version)
     \brief the progress bar's orientation (horizontal or vertical);
     the default orentation is Qt::Horizontal
 
+    \deprecated
+    Use the QStyle::State_Horizontal flag instead (in the the QStyleOption::state member).
+
     \sa QProgressBar::orientation
 */
 
@@ -1744,7 +1739,7 @@ QStyleOptionMenuItem::QStyleOptionMenuItem(int version)
     \value DefaultItem A menu item that is the default action as specified with \l QMenu::defaultAction().
     \value Separator A menu separator.
     \value SubMenu Indicates the menu item points to a sub-menu.
-    \value Scroller A popup menu scroller (currently only used on Mac OS X).
+    \value Scroller A popup menu scroller (currently only used on OS X).
     \value TearOff A tear-off handle for the menu.
     \value Margin The margin of the menu.
     \value EmptyArea The empty area of the menu.
@@ -3702,6 +3697,8 @@ QStyleOptionGraphicsItem::QStyleOptionGraphicsItem(int version)
     of the painter used to draw the item. By default, if no
     transformations are applied, its value is 1. If zoomed out 1:2, the level
     of detail will be 0.5, and if zoomed in 2:1, its value is 2.
+
+    \sa QGraphicsScene::minimumRenderSize()
 */
 qreal QStyleOptionGraphicsItem::levelOfDetailFromTransform(const QTransform &worldTransform)
 {

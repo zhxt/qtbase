@@ -1,45 +1,40 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qcocoasystemsettings.h"
+
+#include "qcocoaautoreleasepool.h"
+#include "qcocoahelpers.h"
 
 #include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/qfont.h>
@@ -48,30 +43,13 @@
 
 QT_BEGIN_NAMESPACE
 
-QColor qt_mac_colorFromCGColor(CGColorRef cgcolor)
-{
-    QColor pc;
-    CGColorSpaceModel model = CGColorSpaceGetModel(CGColorGetColorSpace(cgcolor));
-    const CGFloat *components = CGColorGetComponents(cgcolor);
-    if (model == kCGColorSpaceModelRGB) {
-        pc.setRgbF(components[0], components[1], components[2], components[3]);
-    } else if (model == kCGColorSpaceModelCMYK) {
-        pc.setCmykF(components[0], components[1], components[2], components[3]);
-    } else if (model == kCGColorSpaceModelMonochrome) {
-        pc.setRgbF(components[0], components[0], components[0], components[1]);
-    } else {
-        // Colorspace we can't deal with.
-        qWarning("Qt: qcolorFromCGColor: cannot convert from colorspace model: %d", model);
-        Q_ASSERT(false);
-    }
-    return pc;
-}
-
 QColor qt_mac_colorForTheme(ThemeBrush brush)
 {
+    QCocoaAutoReleasePool pool;
+
     QCFType<CGColorRef> cgClr = 0;
     HIThemeBrushCreateCGColor(brush, &cgClr);
-    return qt_mac_colorFromCGColor(cgClr);
+    return qt_mac_toQColor(cgClr);
 }
 
 QColor qt_mac_colorForThemeTextColor(ThemeTextColor themeColor)
@@ -161,7 +139,7 @@ static QMacPaletteMap mac_widget_colors[] = {
     QMacPaletteMap(QPlatformTheme::HeaderPalette, kThemeTextColorPushButtonActive, kThemeTextColorPushButtonInactive),
     QMacPaletteMap(QPlatformTheme::ComboBoxPalette, kThemeTextColorPopupButtonActive, kThemeTextColorPopupButtonInactive),
     QMacPaletteMap(QPlatformTheme::ItemViewPalette, kThemeTextColorListView, kThemeTextColorDialogInactive),
-    QMacPaletteMap(QPlatformTheme::MessageBoxLabelPelette, kThemeTextColorAlertActive, kThemeTextColorAlertInactive),
+    QMacPaletteMap(QPlatformTheme::MessageBoxLabelPalette, kThemeTextColorAlertActive, kThemeTextColorAlertInactive),
     QMacPaletteMap(QPlatformTheme::TabBarPalette, kThemeTextColorTabFrontActive, kThemeTextColorTabFrontInactive),
     QMacPaletteMap(QPlatformTheme::LabelPalette, kThemeTextColorPlacardActive, kThemeTextColorPlacardInactive),
     QMacPaletteMap(QPlatformTheme::GroupBoxPalette, kThemeTextColorPlacardActive, kThemeTextColorPlacardInactive),
@@ -191,6 +169,8 @@ QHash<QPlatformTheme::Palette, QPalette*> qt_mac_createRolePalettes()
             pal.setColor(QPalette::Disabled, QPalette::HighlightedText, qc);
         }
         if (mac_widget_colors[i].paletteRole == QPlatformTheme::MenuPalette) {
+            qc = qt_mac_colorForTheme(kThemeBrushMenuBackground);
+            pal.setBrush(QPalette::Background, qc);
             qc = qt_mac_colorForThemeTextColor(kThemeTextColorMenuItemActive);
             pal.setBrush(QPalette::ButtonText, qc);
             qc = qt_mac_colorForThemeTextColor(kThemeTextColorMenuItemSelected);
@@ -226,45 +206,6 @@ QHash<QPlatformTheme::Palette, QPalette*> qt_mac_createRolePalettes()
         palettes.insert(mac_widget_colors[i].paletteRole, &pal);
     }
     return palettes;
-}
-
-QFont *qt_mac_qfontForThemeFont(ThemeFontID themeID)
-{
-    CTFontUIFontType ctID = HIThemeGetUIFontType(themeID);
-    QCFType<CTFontRef> ctfont = CTFontCreateUIFontForLanguage(ctID, 0, 0);
-    QString familyName = QCFString(CTFontCopyFamilyName(ctfont));
-    QCFType<CFDictionaryRef> dict = CTFontCopyTraits(ctfont);
-    CFNumberRef num = static_cast<CFNumberRef>(CFDictionaryGetValue(dict, kCTFontWeightTrait));
-    float fW;
-    CFNumberGetValue(num, kCFNumberFloat32Type, &fW);
-    QFont::Weight wght = fW > 0. ? QFont::Bold : QFont::Normal;
-    num = static_cast<CFNumberRef>(CFDictionaryGetValue(dict, kCTFontSlantTrait));
-    CFNumberGetValue(num, kCFNumberFloatType, &fW);
-    bool italic = (fW != 0.0);
-    return new QFont(familyName, CTFontGetSize(ctfont), wght, italic);
-}
-
-QHash<QPlatformTheme::Font, QFont *> qt_mac_createRoleFonts()
-{
-    QHash<QPlatformTheme::Font, QFont *> fonts;
-
-    fonts.insert(QPlatformTheme::SystemFont, qt_mac_qfontForThemeFont(kThemeApplicationFont));
-    fonts.insert(QPlatformTheme::PushButtonFont, qt_mac_qfontForThemeFont(kThemePushButtonFont));
-    fonts.insert(QPlatformTheme::ListViewFont, qt_mac_qfontForThemeFont(kThemeViewsFont));
-    fonts.insert(QPlatformTheme::ListBoxFont, qt_mac_qfontForThemeFont(kThemeViewsFont));
-    fonts.insert(QPlatformTheme::TitleBarFont, qt_mac_qfontForThemeFont(kThemeWindowTitleFont));
-    fonts.insert(QPlatformTheme::MenuFont, qt_mac_qfontForThemeFont(kThemeMenuItemFont));
-    fonts.insert(QPlatformTheme::ComboMenuItemFont, qt_mac_qfontForThemeFont(kThemeSystemFont));
-    fonts.insert(QPlatformTheme::HeaderViewFont, qt_mac_qfontForThemeFont(kThemeSmallSystemFont));
-    fonts.insert(QPlatformTheme::TipLabelFont, qt_mac_qfontForThemeFont(kThemeSmallSystemFont));
-    fonts.insert(QPlatformTheme::LabelFont, qt_mac_qfontForThemeFont(kThemeSystemFont));
-    fonts.insert(QPlatformTheme::ToolButtonFont, qt_mac_qfontForThemeFont(kThemeSmallSystemFont));
-    fonts.insert(QPlatformTheme::MenuItemFont, qt_mac_qfontForThemeFont(kThemeMenuItemFont));
-    fonts.insert(QPlatformTheme::ComboLineEditFont, qt_mac_qfontForThemeFont(kThemeViewsFont));
-    fonts.insert(QPlatformTheme::SmallFont, qt_mac_qfontForThemeFont(kThemeSmallSystemFont));
-    fonts.insert(QPlatformTheme::MiniFont, qt_mac_qfontForThemeFont(kThemeMiniSystemFont));
-
-    return fonts;
 }
 
 QT_END_NAMESPACE

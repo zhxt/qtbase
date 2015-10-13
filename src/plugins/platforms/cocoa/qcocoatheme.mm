@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,6 +34,7 @@
 #import <Cocoa/Cocoa.h>
 
 #include "qcocoatheme.h"
+#include "messages.h"
 
 #include <QtCore/QVariant>
 
@@ -59,6 +52,7 @@
 #include <QtCore/qfileinfo.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/qpainter.h>
+#include <QtPlatformSupport/private/qcoretextfontdatabase_p.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformnativeinterface.h>
 
@@ -131,6 +125,12 @@ const QPalette *QCocoaTheme::palette(Palette type) const
         return m_palettes.value(type, 0);
     }
     return 0;
+}
+
+QHash<QPlatformTheme::Font, QFont *> qt_mac_createRoleFonts()
+{
+    QCoreTextFontDatabase *ctfd = static_cast<QCoreTextFontDatabase *>(QGuiApplicationPrivate::platformIntegration()->fontDatabase());
+    return ctfd->themeFonts();
 }
 
 const QFont *QCocoaTheme::font(Font type) const
@@ -249,19 +249,26 @@ QPixmap QCocoaTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
     return QPlatformTheme::standardPixmap(sp, size);
 }
 
-QPixmap QCocoaTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &size) const
+QPixmap QCocoaTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &size,
+                                    QPlatformTheme::IconOptions iconOptions) const
 {
+    Q_UNUSED(iconOptions);
     QCocoaAutoReleasePool pool;
 
     NSImage *iconImage = [[NSWorkspace sharedWorkspace] iconForFile:QCFString::toNSString(fileInfo.canonicalFilePath())];
     if (!iconImage)
         return QPixmap();
-
-    NSRect iconRect = NSMakeRect(0, 0, size.width(), size.height());
-    CGImageRef cgImage = [iconImage CGImageForProposedRect:&iconRect
-                                                   context:[NSGraphicsContext currentContext]
-                                                     hints:nil];
-    QPixmap pixmap = QPixmap::fromImage(qt_mac_toQImage(cgImage));
+    NSSize pixmapSize = NSMakeSize(size.width(), size.height());
+    QPixmap pixmap(pixmapSize.width, pixmapSize.height);
+    pixmap.fill(Qt::transparent);
+    [iconImage setSize:pixmapSize];
+    NSRect iconRect = NSMakeRect(0, 0, pixmapSize.width, pixmapSize.height);
+    CGContextRef ctx = qt_mac_cg_context(&pixmap);
+    NSGraphicsContext *gc = [NSGraphicsContext graphicsContextWithGraphicsPort:ctx flipped:YES];
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext:gc];
+    [iconImage drawInRect:iconRect fromRect:iconRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:nil];
+    [NSGraphicsContext restoreGraphicsState];
     return pixmap;
 }
 
@@ -271,22 +278,32 @@ QVariant QCocoaTheme::themeHint(ThemeHint hint) const
     case QPlatformTheme::StyleNames:
         return QStringList(QStringLiteral("macintosh"));
     case QPlatformTheme::DialogButtonBoxLayout:
-        return QVariant(1); // QDialogButtonBox::MacLayout
+        return QVariant(QPlatformDialogHelper::MacLayout);
     case KeyboardScheme:
         return QVariant(int(MacKeyboardScheme));
-    case TabAllWidgets:
-        return QVariant(bool([[NSApplication sharedApplication] isFullKeyboardAccessEnabled]));
+    case TabFocusBehavior:
+        return QVariant([[NSApplication sharedApplication] isFullKeyboardAccessEnabled] ?
+                    int(Qt::TabFocusAllControls) : int(Qt::TabFocusTextControls | Qt::TabFocusListControls));
     case IconPixmapSizes: {
+        qreal devicePixelRatio = qGuiApp->devicePixelRatio();
         QList<int> sizes;
-        sizes << 16 << 32 << 64 << 128;
+        sizes << 16 * devicePixelRatio
+              << 32 * devicePixelRatio
+              << 64 * devicePixelRatio
+              << 128 * devicePixelRatio;
         return QVariant::fromValue(sizes);
     }
-    case QPlatformTheme::PasswordMaskDelay:
+    case QPlatformTheme::PasswordMaskCharacter:
         return QVariant(QChar(kBulletUnicode));
     default:
         break;
     }
     return QPlatformTheme::themeHint(hint);
+}
+
+QString QCocoaTheme::standardButtonText(int button) const
+{
+    return button == QPlatformDialogHelper::Discard ? msgDialogButtonDiscard() : QPlatformTheme::standardButtonText(button);
 }
 
 QPlatformMenuItem *QCocoaTheme::createPlatformMenuItem() const

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -82,6 +74,12 @@ public:
     {
         return QSpinBox::valueFromText(text);
     }
+#ifndef QT_NO_WHEELEVENT
+    void wheelEvent(QWheelEvent *event)
+    {
+        QSpinBox::wheelEvent(event);
+    }
+#endif
 
     QLineEdit *lineEdit() const { return QSpinBox::lineEdit(); }
 };
@@ -97,6 +95,9 @@ private slots:
     void getSetCheck();
     void setValue_data();
     void setValue();
+
+    void setDisplayIntegerBase_data();
+    void setDisplayIntegerBase();
 
     void setPrefixSuffix_data();
     void setPrefixSuffix();
@@ -139,6 +140,14 @@ private slots:
 
     void taskQTBUG_5008_textFromValueAndValidate();
     void lineEditReturnPressed();
+
+    void positiveSign();
+
+    void setGroupSeparatorShown_data();
+    void setGroupSeparatorShown();
+
+    void wheelEvents();
+
 public slots:
     void valueChangedHelper(const QString &);
     void valueChangedHelper(int);
@@ -148,6 +157,9 @@ private:
 };
 
 typedef QList<int> IntList;
+
+Q_DECLARE_METATYPE(QLocale::Language)
+Q_DECLARE_METATYPE(QLocale::Country)
 
 // Testing get/set functions
 void tst_QSpinBox::getSetCheck()
@@ -274,6 +286,61 @@ void tst_QSpinBox::setValue()
     QCOMPARE(spin.value(), expected);
 }
 
+void tst_QSpinBox::setDisplayIntegerBase_data()
+{
+    QTest::addColumn<int>("value");
+    QTest::addColumn<int>("base");
+    QTest::addColumn<QString>("string");
+
+    QTest::newRow("base 10") << 42 << 10 << "42";
+    QTest::newRow("base 2") << 42 << 2 << "101010";
+    QTest::newRow("base 8") << 42 << 8 << "52";
+    QTest::newRow("base 16") << 42 << 16 << "2a";
+    QTest::newRow("base 0") << 42 << 0 << "42";
+    QTest::newRow("base -4") << 42 << -4 << "42";
+    QTest::newRow("base 40") << 42 << 40 << "42";
+
+    QTest::newRow("negative base 10") << -42 << 10 << "-42";
+    QTest::newRow("negative base 2") << -42 << 2 << "-101010";
+    QTest::newRow("negative base 8") << -42 << 8 << "-52";
+    QTest::newRow("negative base 16") << -42 << 16 << "-2a";
+    QTest::newRow("negative base 0") << -42 << 0 << "-42";
+    QTest::newRow("negative base -4") << -42 << -4 << "-42";
+    QTest::newRow("negative base 40") << -42 << 40 << "-42";
+
+    QTest::newRow("0 base 10") << 0 << 10 << "0";
+    QTest::newRow("0 base 2") << 0 << 2 << "0";
+    QTest::newRow("0 base 8") << 0 << 8 << "0";
+    QTest::newRow("0 base 16") << 0 << 16 << "0";
+    QTest::newRow("0 base 0") << 0 << 0 << "0";
+    QTest::newRow("0 base -4") << 0 << -4 << "0";
+    QTest::newRow("0 base 40") << 0 << 40 << "0";
+}
+
+void tst_QSpinBox::setDisplayIntegerBase()
+{
+    QFETCH(int, value);
+    QFETCH(int, base);
+    QFETCH(QString, string);
+
+    SpinBox spin;
+    spin.setRange(INT_MIN, INT_MAX);
+
+    spin.setValue(value);
+    QCOMPARE(spin.lineEdit()->text(), QString::number(value));
+
+    spin.setDisplayIntegerBase(base);
+    QCOMPARE(spin.lineEdit()->text(), string);
+
+    spin.setValue(0);
+    QCOMPARE(spin.value(), 0);
+    QCOMPARE(spin.lineEdit()->text(), QString::number(0, base));
+
+    spin.lineEdit()->clear();
+    QTest::keyClicks(spin.lineEdit(), string);
+    QCOMPARE(spin.value(), value);
+}
+
 void tst_QSpinBox::setPrefixSuffix_data()
 {
     QTest::addColumn<QString>("prefix");
@@ -326,18 +393,31 @@ void tst_QSpinBox::valueChangedHelper(int value)
     actualValues << value;
 }
 
+class MySpinBox: public QSpinBox
+{
+public:
+    MySpinBox(QWidget *parent = 0) : QSpinBox(parent) {}
+
+    void changeEvent(QEvent *ev) {
+        eventsReceived.append(ev->type());
+    }
+    QList<QEvent::Type> eventsReceived;
+};
+
 void tst_QSpinBox::setReadOnly()
 {
-    QSpinBox spin(0);
+    MySpinBox spin(0);
     spin.show();
     QTest::keyClick(&spin, Qt::Key_Up);
     QCOMPARE(spin.value(), 1);
     spin.setReadOnly(true);
+    QCOMPARE(spin.eventsReceived, QList<QEvent::Type>() << QEvent::ReadOnlyChange);
     QTest::keyClick(&spin, Qt::Key_Up);
     QCOMPARE(spin.value(), 1);
     spin.stepBy(1);
     QCOMPARE(spin.value(), 2);
     spin.setReadOnly(false);
+    QCOMPARE(spin.eventsReceived, QList<QEvent::Type>() << QEvent::ReadOnlyChange << QEvent::ReadOnlyChange);
     QTest::keyClick(&spin, Qt::Key_Up);
     QCOMPARE(spin.value(), 3);
 }
@@ -1051,6 +1131,87 @@ void tst_QSpinBox::lineEditReturnPressed()
     spinBox.show();
     QTest::keyClick(&spinBox, Qt::Key_Return);
     QCOMPARE(spyCurrentChanged.count(), 1);
+}
+
+void tst_QSpinBox::positiveSign()
+{
+    QSpinBox spinBox;
+    spinBox.setRange(-20, 20);
+    spinBox.setValue(-20);
+    spinBox.show();
+    QVERIFY(QTest::qWaitForWindowActive(&spinBox));
+
+    QTest::keyClick(&spinBox, Qt::Key_End, Qt::ShiftModifier);
+    QTest::keyClick(&spinBox, Qt::Key_Plus, Qt::ShiftModifier);
+    QTest::keyClick(&spinBox, Qt::Key_2);
+    QTest::keyClick(&spinBox, Qt::Key_0);
+    QCOMPARE(spinBox.text(), QLatin1String("+20"));
+}
+
+void tst_QSpinBox::setGroupSeparatorShown_data()
+{
+    QTest::addColumn<QLocale::Language>("lang");
+    QTest::addColumn<QLocale::Country>("country");
+
+    QTest::newRow("data0") << QLocale::English << QLocale::UnitedStates;
+    QTest::newRow("data1") << QLocale::Swedish << QLocale::Sweden;
+    QTest::newRow("data2") << QLocale::German << QLocale::Germany;
+    QTest::newRow("data3") << QLocale::Georgian << QLocale::Georgia;
+    QTest::newRow("data3") << QLocale::Macedonian << QLocale::Macedonia;
+}
+
+void tst_QSpinBox::setGroupSeparatorShown()
+{
+    QFETCH(QLocale::Language, lang);
+    QFETCH(QLocale::Country, country);
+
+    QLocale loc(lang, country);
+    QLocale::setDefault(loc);
+    SpinBox spinBox;
+    spinBox.setMaximum(99999);
+    spinBox.setValue(13000);
+    spinBox.setGroupSeparatorShown(true);
+    QCOMPARE(spinBox.lineEdit()->text(), spinBox.locale().toString(13000));
+    QCOMPARE(spinBox.isGroupSeparatorShown(), true);
+    QCOMPARE(spinBox.textFromValue(23421),spinBox.locale().toString(23421));
+
+    spinBox.setGroupSeparatorShown(false);
+    QCOMPARE(spinBox.lineEdit()->text(), QStringLiteral("13000"));
+    QCOMPARE(spinBox.isGroupSeparatorShown(), false);
+
+    spinBox.setMaximum(72000);
+    spinBox.lineEdit()->setText(spinBox.locale().toString(32000));
+    QCOMPARE(spinBox.value()+1000, 33000);
+
+    spinBox.lineEdit()->setText(QStringLiteral("32000"));
+    QCOMPARE(spinBox.value()+1000, 33000);
+
+    spinBox.lineEdit()->setText(QStringLiteral("32,000"));
+    QCOMPARE(spinBox.value()+1000, 33000);
+}
+
+void tst_QSpinBox::wheelEvents()
+{
+#ifndef QT_NO_WHEELEVENT
+    SpinBox spinBox;
+    spinBox.setRange(-20, 20);
+    spinBox.setValue(0);
+
+    QWheelEvent wheelUp(QPointF(), QPointF(), QPoint(), QPoint(0, 120), 120, Qt::Vertical, Qt::NoButton, Qt::NoModifier);
+    spinBox.wheelEvent(&wheelUp);
+    QCOMPARE(spinBox.value(), 1);
+
+    QWheelEvent wheelDown(QPointF(), QPointF(), QPoint(), QPoint(0, -120), -120, Qt::Vertical, Qt::NoButton, Qt::NoModifier);
+    spinBox.wheelEvent(&wheelDown);
+    spinBox.wheelEvent(&wheelDown);
+    QCOMPARE(spinBox.value(), -1);
+
+    QWheelEvent wheelHalfUp(QPointF(), QPointF(), QPoint(), QPoint(0, 60), 60,  Qt::Vertical, Qt::NoButton, Qt::NoModifier);
+    spinBox.wheelEvent(&wheelHalfUp);
+    QCOMPARE(spinBox.value(), -1);
+    spinBox.wheelEvent(&wheelHalfUp);
+    QCOMPARE(spinBox.value(), 0);
+#endif
 }
 
 QTEST_MAIN(tst_QSpinBox)

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -369,14 +361,14 @@ QTextFrameLayoutData::~QTextFrameLayoutData()
     \fn bool QTextFrame::iterator::operator==(const iterator &other) const
 
     Retuns true if the iterator is the same as the \a other iterator;
-    otherwise returns false.
+    otherwise returns \c false.
 */
 
 /*!
     \fn bool QTextFrame::iterator::operator!=(const iterator &other) const
 
     Retuns true if the iterator is different from the \a other iterator;
-    otherwise returns false.
+    otherwise returns \c false.
 */
 
 /*!
@@ -617,7 +609,7 @@ void QTextFramePrivate::remove_me()
 /*!
     \fn bool QTextFrame::iterator::atEnd() const
 
-    Returns true if the current item is the last item in the text frame.
+    Returns \c true if the current item is the last item in the text frame.
 */
 
 /*!
@@ -896,7 +888,7 @@ QTextBlockUserData::~QTextBlockUserData()
 /*!
     \fn bool QTextBlock::isValid() const
 
-    Returns true if this text block is valid; otherwise returns false.
+    Returns \c true if this text block is valid; otherwise returns \c false.
 */
 
 bool QTextBlock::isValid() const
@@ -913,21 +905,21 @@ bool QTextBlock::isValid() const
 /*!
     \fn bool QTextBlock::operator==(const QTextBlock &other) const
 
-    Returns true if this text block is the same as the \a other text
+    Returns \c true if this text block is the same as the \a other text
     block.
 */
 
 /*!
     \fn bool QTextBlock::operator!=(const QTextBlock &other) const
 
-    Returns true if this text block is different from the \a other
+    Returns \c true if this text block is different from the \a other
     text block.
 */
 
 /*!
     \fn bool QTextBlock::operator<(const QTextBlock &other) const
 
-    Returns true if this text block occurs before the \a other text
+    Returns \c true if this text block occurs before the \a other text
     block in the document.
 */
 
@@ -975,21 +967,21 @@ bool QTextBlock::isValid() const
 /*!
     \fn bool QTextBlock::iterator::atEnd() const
 
-    Returns true if the current item is the last item in the text block.
+    Returns \c true if the current item is the last item in the text block.
 */
 
 /*!
     \fn bool QTextBlock::iterator::operator==(const iterator &other) const
 
     Retuns true if this iterator is the same as the \a other iterator;
-    otherwise returns false.
+    otherwise returns \c false.
 */
 
 /*!
     \fn bool QTextBlock::iterator::operator!=(const iterator &other) const
 
     Retuns true if this iterator is different from the \a other iterator;
-    otherwise returns false.
+    otherwise returns \c false.
 */
 
 /*!
@@ -1047,8 +1039,8 @@ int QTextBlock::length() const
 }
 
 /*!
-    Returns true if the given \a position is located within the text
-    block; otherwise returns false.
+    Returns \c true if the given \a position is located within the text
+    block; otherwise returns \c false.
  */
 bool QTextBlock::contains(int position) const
 {
@@ -1233,6 +1225,56 @@ QString QTextBlock::text() const
     return text;
 }
 
+/*!
+    \since 5.3
+
+    Returns the block's text format options as a list of continuous ranges
+    of QTextCharFormat. The range's character format is used when inserting text
+    within the range boundaries.
+
+    \sa charFormat(), blockFormat()
+*/
+QVector<QTextLayout::FormatRange> QTextBlock::textFormats() const
+{
+    QVector<QTextLayout::FormatRange> formats;
+    if (!p || !n)
+        return formats;
+
+    const QTextFormatCollection *formatCollection = p->formatCollection();
+
+    int start = 0;
+    int cur = start;
+    int format = -1;
+
+    const int pos = position();
+    QTextDocumentPrivate::FragmentIterator it = p->find(pos);
+    QTextDocumentPrivate::FragmentIterator end = p->find(pos + length() - 1); // -1 to omit the block separator char
+    for (; it != end; ++it) {
+        const QTextFragmentData * const frag = it.value();
+        if (format != it.value()->format) {
+            if (cur - start > 0) {
+                QTextLayout::FormatRange range;
+                range.start = start;
+                range.length = cur - start;
+                range.format = formatCollection->charFormat(format);
+                formats.append(range);
+            }
+
+            format = frag->format;
+            start = cur;
+        }
+        cur += frag->size_array[0];
+    }
+    if (cur - start > 0) {
+        QTextLayout::FormatRange range;
+        range.start = start;
+        range.length = cur - start;
+        range.format = formatCollection->charFormat(format);
+        formats.append(range);
+    }
+
+    return formats;
+}
 
 /*!
     Returns the text document this text block belongs to, or 0 if the
@@ -1372,7 +1414,7 @@ void QTextBlock::setRevision(int rev)
 /*!
     \since 4.4
 
-    Returns true if the block is visible; otherwise returns false.
+    Returns \c true if the block is visible; otherwise returns \c false.
 
     \sa setVisible()
 */
@@ -1519,7 +1561,7 @@ QTextBlock QTextBlock::next() const
     Returns the text block in the document before this block, or an empty text
     block if this is the first one.
 
-    Note that the next block may be in a different frame or table to this block.
+    Note that the previous block may be in a different frame or table to this block.
 
     \sa next(), begin(), end()
 */
@@ -1651,21 +1693,21 @@ QTextBlock::iterator &QTextBlock::iterator::operator--()
 /*!
     \fn bool QTextFragment::isValid() const
 
-    Returns true if this is a valid text fragment (i.e. has a valid
-    position in a document); otherwise returns false.
+    Returns \c true if this is a valid text fragment (i.e. has a valid
+    position in a document); otherwise returns \c false.
 */
 
 /*!
     \fn bool QTextFragment::operator==(const QTextFragment &other) const
 
-    Returns true if this text fragment is the same (at the same
-    position) as the \a other text fragment; otherwise returns false.
+    Returns \c true if this text fragment is the same (at the same
+    position) as the \a other text fragment; otherwise returns \c false.
 */
 
 /*!
     \fn bool QTextFragment::operator!=(const QTextFragment &other) const
 
-    Returns true if this text fragment is different (at a different
+    Returns \c true if this text fragment is different (at a different
     position) from the \a other text fragment; otherwise returns
     false.
 */
@@ -1673,8 +1715,8 @@ QTextBlock::iterator &QTextBlock::iterator::operator--()
 /*!
     \fn bool QTextFragment::operator<(const QTextFragment &other) const
 
-    Returns true if this text fragment appears earlier in the document
-    than the \a other text fragment; otherwise returns false.
+    Returns \c true if this text fragment appears earlier in the document
+    than the \a other text fragment; otherwise returns \c false.
 */
 
 /*!
@@ -1747,8 +1789,8 @@ int QTextFragment::length() const
 }
 
 /*!
-    Returns true if the text fragment contains the text at the given
-    \a position in the document; otherwise returns false.
+    Returns \c true if the text fragment contains the text at the given
+    \a position in the document; otherwise returns \c false.
 */
 bool QTextFragment::contains(int position) const
 {

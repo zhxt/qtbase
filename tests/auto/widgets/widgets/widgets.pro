@@ -16,7 +16,9 @@ SUBDIRS=\
    qdoublespinbox \
    qfocusframe \
    qfontcombobox \
+   qframe \
    qgroupbox \
+   qkeysequenceedit \
    qlabel \
    qlcdnumber \
    qlineedit \
@@ -51,3 +53,5 @@ SUBDIRS=\
            qmainwindow \
            qtextedit \
            qtoolbar \
+
+contains(QT_CONFIG, opengl): SUBDIRS += qopenglwidget

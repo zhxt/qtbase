@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -103,7 +95,7 @@ public:
     \fn bool QTreeWidgetItem::isDisabled() const
     \since 4.3
 
-    Returns true if the item is disabled; otherwise returns false.
+    Returns \c true if the item is disabled; otherwise returns \c false.
 
     \sa setFlags()
 */
@@ -380,7 +372,7 @@ QVariant QTreeModel::data(const QModelIndex &index, int role) const
   Sets the data for the item specified by the \a index and \a role
   to that referred to by the \a value.
 
-  Returns true if successful; otherwise returns false.
+  Returns \c true if successful; otherwise returns \c false.
 */
 
 bool QTreeModel::setData(const QModelIndex &index, const QVariant &value, int role)
@@ -493,8 +485,7 @@ bool QTreeModel::removeRows(int row, int count, const QModelIndex &parent) {
 
     beginRemoveRows(parent, row, row + count - 1);
 
-    bool blockSignal = signalsBlocked();
-    blockSignals(true);
+    QSignalBlocker blocker(this);
 
     QTreeWidgetItem *itm = item(parent);
     for (int i = row + count - 1; i >= row; --i) {
@@ -504,7 +495,7 @@ bool QTreeModel::removeRows(int row, int count, const QModelIndex &parent) {
         delete child;
         child = 0;
     }
-    blockSignals(blockSignal);
+    blocker.unblock();
 
     endRemoveRows();
     return true;
@@ -537,7 +528,7 @@ QVariant QTreeModel::headerData(int section, Qt::Orientation orientation, int ro
   Sets the header data for the item specified by the header \a section,
   \a orientation and data \a role to the given \a value.
 
-  Returns true if successful; otherwise returns false.
+  Returns \c true if successful; otherwise returns \c false.
 */
 
 bool QTreeModel::setHeaderData(int section, Qt::Orientation orientation,
@@ -614,7 +605,7 @@ void QTreeModel::ensureSorted(int column, Qt::SortOrder order,
     }
 
     LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    qStableSort(sorting.begin(), sorting.end(), compare);
+    std::stable_sort(sorting.begin(), sorting.end(), compare);
 
     QModelIndexList oldPersistentIndexes;
     QModelIndexList newPersistentIndexes;
@@ -623,7 +614,13 @@ void QTreeModel::ensureSorted(int column, Qt::SortOrder order,
 
     for (int i = 0; i < count; ++i) {
         int oldRow = sorting.at(i).second;
+
+        int tmpitepos = lit - lst.begin();
         QTreeWidgetItem *item = lst.takeAt(oldRow);
+        if (tmpitepos > lst.size())
+            --tmpitepos;
+        lit = lst.begin() + tmpitepos;
+
         lit = sortedInsertionIterator(lit, lst.end(), order, item);
         int newRow = qMax(lit - lst.begin(), 0);
 
@@ -675,7 +672,7 @@ void QTreeModel::ensureSorted(int column, Qt::SortOrder order,
 /*!
   \internal
 
-  Returns true if the value of the \a left item is
+  Returns \c true if the value of the \a left item is
   less than the value of the \a right item.
 
   Used by the sorting functions.
@@ -690,7 +687,7 @@ bool QTreeModel::itemLessThan(const QPair<QTreeWidgetItem*,int> &left,
 /*!
   \internal
 
-  Returns true if the value of the \a left item is
+  Returns \c true if the value of the \a left item is
   greater than the value of the \a right item.
 
   Used by the sorting functions.
@@ -848,7 +845,7 @@ void QTreeModel::sortItems(QList<QTreeWidgetItem*> *items, int column, Qt::SortO
 
     // do the sorting
     LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    qStableSort(sorting.begin(), sorting.end(), compare);
+    std::stable_sort(sorting.begin(), sorting.end(), compare);
 
     QModelIndexList fromList;
     QModelIndexList toList;
@@ -995,7 +992,7 @@ void QTreeModel::timerEvent(QTimerEvent *ev)
   \fn bool QTreeWidgetItem::isSelected() const
   \since 4.2
 
-  Returns true if the item is selected, otherwise returns false.
+  Returns \c true if the item is selected, otherwise returns \c false.
 
   \sa setSelected()
 */
@@ -1005,6 +1002,9 @@ void QTreeModel::timerEvent(QTimerEvent *ev)
   \since 4.2
 
   Hides the item if \a hide is true, otherwise shows the item.
+  \note A call to this function has no effect if the item is not currently in a view. In particular,
+        calling \c setHidden(true) on an item and only then adding it to a view will result in
+        a visible item.
 
   \sa isHidden()
 */
@@ -1013,7 +1013,7 @@ void QTreeModel::timerEvent(QTimerEvent *ev)
   \fn bool QTreeWidgetItem::isHidden() const
   \since 4.2
 
-  Returns true if the item is hidden, otherwise returns false.
+  Returns \c true if the item is hidden, otherwise returns \c false.
 
   \sa setHidden()
 */
@@ -1032,7 +1032,7 @@ void QTreeModel::timerEvent(QTimerEvent *ev)
   \fn bool QTreeWidgetItem::isExpanded() const
   \since 4.2
 
-  Returns true if the item is expanded, otherwise returns false.
+  Returns \c true if the item is expanded, otherwise returns \c false.
 
   \sa setExpanded()
 */
@@ -1051,7 +1051,7 @@ void QTreeModel::timerEvent(QTimerEvent *ev)
   \fn bool QTreeWidgetItem::isFirstColumnSpanned() const
   \since 4.3
 
-  Returns true if the item is spanning all the columns in a row; otherwise returns false.
+  Returns \c true if the item is spanning all the columns in a row; otherwise returns \c false.
 
   \sa setFirstColumnSpanned()
 */
@@ -1677,8 +1677,8 @@ void QTreeWidgetItemPrivate::propagateDisabled(QTreeWidgetItem *item)
     the item can be checked, edited, and selected.
 
     The default value for flags is
-    Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled.
-    If the item was constructed with a parent, flags will in addition contain Qt::ItemIsDropEnabled.
+    Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled |
+    Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled.
 
     \sa setFlags()
 */
@@ -1720,7 +1720,7 @@ void QTreeWidgetItem::setData(int column, int role, const QVariant &value)
         }
     } break;
     case Qt::CheckStateRole:
-        if (itemFlags & Qt::ItemIsTristate) {
+        if ((itemFlags & Qt::ItemIsTristate) && value != Qt::PartiallyChecked) {
             for (int i = 0; i < children.count(); ++i) {
                 QTreeWidgetItem *child = children.at(i);
                 if (child->data(column, role).isValid()) {// has a CheckState
@@ -1794,8 +1794,8 @@ QVariant QTreeWidgetItem::data(int column, int role) const
 }
 
 /*!
-  Returns true if the text in the item is less than the text in the
-  \a other item, otherwise returns false.
+  Returns \c true if the text in the item is less than the text in the
+  \a other item, otherwise returns \c false.
 */
 
 bool QTreeWidgetItem::operator<(const QTreeWidgetItem &other) const
@@ -2153,10 +2153,11 @@ QVariant QTreeWidgetItem::childrenCheckState(int column) const
         default:
             return Qt::PartiallyChecked;
         }
+
+        if (uncheckedChildren && checkedChildren)
+            return Qt::PartiallyChecked;
     }
 
-    if (uncheckedChildren && checkedChildren)
-        return Qt::PartiallyChecked;
     if (uncheckedChildren)
         return Qt::Unchecked;
     else if (checkedChildren)
@@ -2818,7 +2819,7 @@ void QTreeWidget::setCurrentItem(QTreeWidgetItem *item, int column)
   \sa currentItem()
 */
 void QTreeWidget::setCurrentItem(QTreeWidgetItem *item, int column,
-				 QItemSelectionModel::SelectionFlags command)
+                                 QItemSelectionModel::SelectionFlags command)
 {
     Q_D(QTreeWidget);
     d->selectionModel->setCurrentIndex(d->index(item, column), command);
@@ -2854,7 +2855,7 @@ QRect QTreeWidget::visualItemRect(const QTreeWidgetItem *item) const
 {
     Q_D(const QTreeWidget);
     //the visual rect for an item is across all columns. So we need to determine
-	//what is the first and last column and get their visual index rects
+    //what is the first and last column and get their visual index rects
     QModelIndex base = d->index(item);
     const int firstVisiblesection = header()->logicalIndexAt(- header()->offset());
     const int lastVisibleSection = header()->logicalIndexAt(header()->length() - header()->offset() - 1);
@@ -2934,8 +2935,6 @@ void QTreeWidget::closePersistentEditor(QTreeWidgetItem *item, int column)
 
     Returns the widget displayed in the cell specified by \a item and the given \a column.
 
-    \note The tree takes ownership of the widget.
-
 */
 QWidget *QTreeWidget::itemWidget(QTreeWidgetItem *item, int column) const
 {
@@ -2973,7 +2972,7 @@ void QTreeWidget::setItemWidget(QTreeWidgetItem *item, int column, QWidget *widg
 }
 
 /*!
-  Returns true if the \a item is selected; otherwise returns false.
+  Returns \c true if the \a item is selected; otherwise returns \c false.
 
   \sa itemSelectionChanged()
 
@@ -3049,7 +3048,7 @@ QList<QTreeWidgetItem*> QTreeWidget::findItems(const QString &text, Qt::MatchFla
 }
 
 /*!
-  Returns true if the \a item is explicitly hidden, otherwise returns false.
+  Returns \c true if the \a item is explicitly hidden, otherwise returns \c false.
 
   \obsolete
 
@@ -3087,7 +3086,7 @@ void QTreeWidget::setItemHidden(const QTreeWidgetItem *item, bool hide)
 }
 
 /*!
-  Returns true if the given \a item is open; otherwise returns false.
+  Returns \c true if the given \a item is open; otherwise returns \c false.
 
   \sa itemExpanded()
 
@@ -3122,8 +3121,8 @@ void QTreeWidget::setItemExpanded(const QTreeWidgetItem *item, bool expand)
 /*!
   \since 4.3
 
-  Returns true if the given \a item is set to show only one section over all columns;
-  otherwise returns false.
+  Returns \c true if the given \a item is set to show only one section over all columns;
+  otherwise returns \c false.
 
   \sa setFirstItemColumnSpanned()
 */
@@ -3268,15 +3267,29 @@ QStringList QTreeWidget::mimeTypes() const
     If the list of items is empty, 0 is returned rather than a serialized
     empty list.
 */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+QMimeData *QTreeWidget::mimeData(const QList<QTreeWidgetItem *> &items) const
+#else
 QMimeData *QTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
+#endif
 {
     Q_D(const QTreeWidget);
     if (d->treeModel()->cachedIndexes.isEmpty()) {
         QList<QModelIndex> indexes;
         for (int i = 0; i < items.count(); ++i) {
             QTreeWidgetItem *item = items.at(i);
+            if (!item) {
+                qWarning() << "QTreeWidget::mimeData: Null-item passed";
+                return 0;
+            }
+
             for (int c = 0; c < item->values.count(); ++c) {
-                indexes << indexFromItem(item, c);
+                const QModelIndex index = indexFromItem(item, c);
+                if (!index.isValid()) {
+                    qWarning() << "QTreeWidget::mimeData: No index associated with item :" << item;
+                    return 0;
+                }
+                indexes << index;
             }
         }
         return d->model->QAbstractItemModel::mimeData(indexes);
@@ -3288,9 +3301,9 @@ QMimeData *QTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
     Handles the \a data supplied by a drag and drop operation that ended with
     the given \a action in the \a index in the given \a parent item.
 
-    The default implementation returns true if the drop was
+    The default implementation returns \c true if the drop was
     successfully handled by decoding the mime data and inserting it
-    into the model; otherwise it returns false.
+    into the model; otherwise it returns \c false.
 
     \sa supportedDropActions()
 */

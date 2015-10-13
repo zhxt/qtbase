@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +35,7 @@
 #include "qpixmap.h"
 #include "qbitmap.h"
 #include "qpixmapcache.h"
+#include <qpa/qplatformpixmap.h>
 #include "qdatastream.h"
 #include "qvariant.h"
 #include "qline.h"
@@ -56,44 +49,49 @@ QT_BEGIN_NAMESPACE
 const uchar *qt_patternForBrush(int brushStyle, bool invert)
 {
     Q_ASSERT(brushStyle > Qt::SolidPattern && brushStyle < Qt::LinearGradientPattern);
-    if(invert) {
-        static const uchar dense1_pat[] = { 0xff, 0xbb, 0xff, 0xff, 0xff, 0xbb, 0xff, 0xff };
-        static const uchar dense2_pat[] = { 0x77, 0xff, 0xdd, 0xff, 0x77, 0xff, 0xdd, 0xff };
-        static const uchar dense3_pat[] = { 0x55, 0xbb, 0x55, 0xee, 0x55, 0xbb, 0x55, 0xee };
-        static const uchar dense4_pat[] = { 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55 };
-        static const uchar dense5_pat[] = { 0xaa, 0x44, 0xaa, 0x11, 0xaa, 0x44, 0xaa, 0x11 };
-        static const uchar dense6_pat[] = { 0x88, 0x00, 0x22, 0x00, 0x88, 0x00, 0x22, 0x00 };
-        static const uchar dense7_pat[] = { 0x00, 0x44, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00 };
-        static const uchar hor_pat[]    = { 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00 };
-        static const uchar ver_pat[]    = { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10 };
-        static const uchar cross_pat[]  = { 0x10, 0x10, 0x10, 0xff, 0x10, 0x10, 0x10, 0x10 };
-        static const uchar bdiag_pat[]  = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
-        static const uchar fdiag_pat[]  = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
-        static const uchar dcross_pat[] = { 0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81 };
-        static const uchar *const pat_tbl[] = {
-            dense1_pat, dense2_pat, dense3_pat, dense4_pat, dense5_pat,
-            dense6_pat, dense7_pat,
-            hor_pat, ver_pat, cross_pat, bdiag_pat, fdiag_pat, dcross_pat };
-        return pat_tbl[brushStyle - Qt::Dense1Pattern];
-    }
-    static const uchar dense1_pat[] = { 0x00, 0x44, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00 };
-    static const uchar dense2_pat[] = { 0x88, 0x00, 0x22, 0x00, 0x88, 0x00, 0x22, 0x00 };
-    static const uchar dense3_pat[] = { 0xaa, 0x44, 0xaa, 0x11, 0xaa, 0x44, 0xaa, 0x11 };
-    static const uchar dense4_pat[] = { 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa };
-    static const uchar dense5_pat[] = { 0x55, 0xbb, 0x55, 0xee, 0x55, 0xbb, 0x55, 0xee };
-    static const uchar dense6_pat[] = { 0x77, 0xff, 0xdd, 0xff, 0x77, 0xff, 0xdd, 0xff };
-    static const uchar dense7_pat[] = { 0xff, 0xbb, 0xff, 0xff, 0xff, 0xbb, 0xff, 0xff };
-    static const uchar hor_pat[]    = { 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff };
-    static const uchar ver_pat[]    = { 0xef, 0xef, 0xef, 0xef, 0xef, 0xef, 0xef, 0xef };
-    static const uchar cross_pat[]  = { 0xef, 0xef, 0xef, 0x00, 0xef, 0xef, 0xef, 0xef };
-    static const uchar bdiag_pat[]  = { 0x7f, 0xbf, 0xdf, 0xef, 0xf7, 0xfb, 0xfd, 0xfe };
-    static const uchar fdiag_pat[]  = { 0xfe, 0xfd, 0xfb, 0xf7, 0xef, 0xdf, 0xbf, 0x7f };
-    static const uchar dcross_pat[] = { 0x7e, 0xbd, 0xdb, 0xe7, 0xe7, 0xdb, 0xbd, 0x7e };
-    static const uchar *const pat_tbl[] = {
-        dense1_pat, dense2_pat, dense3_pat, dense4_pat, dense5_pat,
-        dense6_pat, dense7_pat,
-        hor_pat, ver_pat, cross_pat, bdiag_pat, fdiag_pat, dcross_pat };
-    return pat_tbl[brushStyle - Qt::Dense1Pattern];
+    static const uchar pat_tbl[][2][8] = {
+        {
+            /* dense1 */ { 0x00, 0x44, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00 },
+            /*~dense1 */ { 0xff, 0xbb, 0xff, 0xff, 0xff, 0xbb, 0xff, 0xff },
+        }, {
+            /* dense2 */ { 0x88, 0x00, 0x22, 0x00, 0x88, 0x00, 0x22, 0x00 },
+            /*~dense2 */ { 0x77, 0xff, 0xdd, 0xff, 0x77, 0xff, 0xdd, 0xff },
+        }, {
+            /* dense3 */ { 0xaa, 0x44, 0xaa, 0x11, 0xaa, 0x44, 0xaa, 0x11 },
+            /*~dense3 */ { 0x55, 0xbb, 0x55, 0xee, 0x55, 0xbb, 0x55, 0xee },
+        }, {
+            /* dense4 */ { 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa },
+            /*~dense4 */ { 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55 },
+        }, {
+            /* dense5 */ { 0x55, 0xbb, 0x55, 0xee, 0x55, 0xbb, 0x55, 0xee },
+            /*~dense5 */ { 0xaa, 0x44, 0xaa, 0x11, 0xaa, 0x44, 0xaa, 0x11 },
+        }, {
+            /* dense6 */ { 0x77, 0xff, 0xdd, 0xff, 0x77, 0xff, 0xdd, 0xff },
+            /*~dense6 */ { 0x88, 0x00, 0x22, 0x00, 0x88, 0x00, 0x22, 0x00 },
+        }, {
+            /* dense7 */ { 0xff, 0xbb, 0xff, 0xff, 0xff, 0xbb, 0xff, 0xff },
+            /*~dense7 */ { 0x00, 0x44, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00 },
+        }, {
+            /* hor */    { 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff },
+            /*~hor */    { 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00 },
+        }, {
+            /* ver */    { 0xef, 0xef, 0xef, 0xef, 0xef, 0xef, 0xef, 0xef },
+            /*~ver */    { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10 },
+        }, {
+            /* cross */  { 0xef, 0xef, 0xef, 0x00, 0xef, 0xef, 0xef, 0xef },
+            /*~cross */  { 0x10, 0x10, 0x10, 0xff, 0x10, 0x10, 0x10, 0x10 },
+        }, {
+            /* bdiag */  { 0x7f, 0xbf, 0xdf, 0xef, 0xf7, 0xfb, 0xfd, 0xfe },
+            /*~bdiag */  { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 },
+        }, {
+            /* fdiag */  { 0xfe, 0xfd, 0xfb, 0xf7, 0xef, 0xdf, 0xbf, 0x7f },
+            /*~fdiag */  { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 },
+        }, {
+            /* dcross */ { 0x7e, 0xbd, 0xdb, 0xe7, 0xe7, 0xdb, 0xbd, 0x7e },
+            /*~dcross */ { 0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81 },
+        },
+    };
+    return pat_tbl[brushStyle - Qt::Dense1Pattern][invert];
 }
 
 QPixmap qt_pixmapForBrush(int brushStyle, bool invert)
@@ -306,7 +304,7 @@ struct QBrushDataPointerDeleter
     the style is a gradient. The same is the case if the style is
     Qt::TexturePattern style unless the current texture is a QBitmap.
 
-    The isOpaque() function returns true if the brush is fully opaque
+    The isOpaque() function returns \c true if the brush is fully opaque
     otherwise false. A brush is considered opaque if:
 
     \list
@@ -503,7 +501,7 @@ QBrush::QBrush(Qt::GlobalColor color, Qt::BrushStyle style)
     The style is set to Qt::TexturePattern. The color will only have
     an effect for QBitmaps.
 
-    \sa setColor(), setPixmap()
+    \sa setColor(), setTexture()
 */
 
 QBrush::QBrush(const QColor &color, const QPixmap &pixmap)
@@ -520,7 +518,7 @@ QBrush::QBrush(const QColor &color, const QPixmap &pixmap)
     The style is set to Qt::TexturePattern. The color will only have
     an effect for QBitmaps.
 
-    \sa setColor(), setPixmap()
+    \sa setColor(), setTexture()
 */
 QBrush::QBrush(Qt::GlobalColor color, const QPixmap &pixmap)
 {
@@ -599,8 +597,16 @@ void QBrush::detach(Qt::BrushStyle newStyle)
     case Qt::RadialGradientPattern:
     case Qt::ConicalGradientPattern:
         x.reset(new QGradientBrushData);
-        static_cast<QGradientBrushData *>(x.data())->gradient =
-            static_cast<QGradientBrushData *>(d.data())->gradient;
+        switch (d->style) {
+        case Qt::LinearGradientPattern:
+        case Qt::RadialGradientPattern:
+        case Qt::ConicalGradientPattern:
+            static_cast<QGradientBrushData *>(x.data())->gradient =
+                    static_cast<QGradientBrushData *>(d.data())->gradient;
+            break;
+        default:
+            break;
+        }
         break;
     default:
         x.reset(new QBrushData);
@@ -631,6 +637,13 @@ QBrush &QBrush::operator=(const QBrush &b)
     return *this;
 }
 
+/*!
+    \fn QBrush &QBrush::operator=(QBrush &&other)
+
+    Move-assigns \a other to this QBrush instance.
+
+    \since 5.2
+*/
 
 /*!
     \fn void QBrush::swap(QBrush &other)
@@ -696,6 +709,9 @@ void QBrush::setStyle(Qt::BrushStyle style)
 
 void QBrush::setColor(const QColor &c)
 {
+    if (d->color == c)
+        return;
+
     detach(d->style);
     d->color = c;
 }
@@ -823,7 +839,7 @@ Q_GUI_EXPORT bool qt_isExtendedRadialGradient(const QBrush &brush)
 }
 
 /*!
-    Returns true if the brush is fully opaque otherwise false. A brush
+    Returns \c true if the brush is fully opaque otherwise false. A brush
     is considered opaque if:
 
     \list
@@ -905,8 +921,8 @@ void QBrush::setTransform(const QTransform &matrix)
 /*!
     \fn bool QBrush::operator!=(const QBrush &brush) const
 
-    Returns true if the brush is different from the given \a brush;
-    otherwise returns false.
+    Returns \c true if the brush is different from the given \a brush;
+    otherwise returns \c false.
 
     Two brushes are different if they have different styles, colors or
     transforms or different pixmaps or gradients depending on the style.
@@ -917,8 +933,8 @@ void QBrush::setTransform(const QTransform &matrix)
 /*!
     \fn bool QBrush::operator==(const QBrush &brush) const
 
-    Returns true if the brush is equal to the given \a brush;
-    otherwise returns false.
+    Returns \c true if the brush is equal to the given \a brush;
+    otherwise returns \c false.
 
     Two brushes are equal if they have equal styles, colors and
     transforms and equal pixmaps or gradients depending on the style.
@@ -935,9 +951,34 @@ bool QBrush::operator==(const QBrush &b) const
     switch (d->style) {
     case Qt::TexturePattern:
         {
-            const QPixmap &us = (static_cast<QTexturedBrushData *>(d.data()))->pixmap();
-            const QPixmap &them = (static_cast<QTexturedBrushData *>(b.d.data()))->pixmap();
-            return ((us.isNull() && them.isNull()) || us.cacheKey() == them.cacheKey());
+            // Note this produces false negatives if the textures have identical data,
+            // but does not share the same data in memory. Since equality is likely to
+            // be used to avoid iterating over the data for a texture update, this should
+            // still be better than doing an accurate comparison.
+            const QPixmap *us = 0, *them = 0;
+            qint64 cacheKey1, cacheKey2;
+            if (qHasPixmapTexture(*this)) {
+                us = (static_cast<QTexturedBrushData *>(d.data()))->m_pixmap;
+                cacheKey1 = us->cacheKey();
+            } else
+                cacheKey1 = (static_cast<QTexturedBrushData *>(d.data()))->image().cacheKey();
+
+            if (qHasPixmapTexture(b)) {
+                them = (static_cast<QTexturedBrushData *>(b.d.data()))->m_pixmap;
+                cacheKey2 = them->cacheKey();
+            } else
+                cacheKey2 = (static_cast<QTexturedBrushData *>(b.d.data()))->image().cacheKey();
+
+            if (cacheKey1 != cacheKey2)
+                return false;
+            if (!us == !them) // both images or both pixmaps
+                return true;
+            // Only raster QPixmaps use the same cachekeys as QImages.
+            if (us && us->handle()->classId() == QPlatformPixmap::RasterClass)
+                return true;
+            if (them && them->handle()->classId() == QPlatformPixmap::RasterClass)
+                return true;
+            return false;
         }
     case Qt::LinearGradientPattern:
     case Qt::RadialGradientPattern:
@@ -958,7 +999,7 @@ bool QBrush::operator==(const QBrush &b) const
 */
 QDebug operator<<(QDebug dbg, const QBrush &b)
 {
-    static const char *BRUSH_STYLES[] = {
+    static const char *const BRUSH_STYLES[] = {
      "NoBrush",
      "SolidPattern",
      "Dense1Pattern",
@@ -981,8 +1022,9 @@ QDebug operator<<(QDebug dbg, const QBrush &b)
      "TexturePattern" // 24
     };
 
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QBrush(" << b.color() << ',' << BRUSH_STYLES[b.style()] << ')';
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -1014,7 +1056,10 @@ QDataStream &operator<<(QDataStream &s, const QBrush &b)
 
     s << style << b.color();
     if (b.style() == Qt::TexturePattern) {
-        s << b.texture();
+        if (s.version() >= QDataStream::Qt_5_5)
+            s << b.textureImage();
+        else
+            s << b.texture();
     } else if (s.version() >= QDataStream::Qt_4_0 && gradient_style) {
         const QGradient *gradient = b.gradient();
         int type_as_int = int(gradient->type());
@@ -1074,10 +1119,17 @@ QDataStream &operator>>(QDataStream &s, QBrush &b)
     QColor color;
     s >> style;
     s >> color;
+    b = QBrush(color);
     if (style == Qt::TexturePattern) {
-        QPixmap pm;
-        s >> pm;
-        b = QBrush(color, pm);
+        if (s.version() >= QDataStream::Qt_5_5) {
+            QImage img;
+            s >> img;
+            b.setTextureImage(qMove(img));
+        } else {
+            QPixmap pm;
+            s >> pm;
+            b.setTexture(qMove(pm));
+        }
     } else if (style == Qt::LinearGradientPattern
                || style == Qt::RadialGradientPattern
                || style == Qt::ConicalGradientPattern) {
@@ -1484,15 +1536,15 @@ void QGradient::setInterpolationMode(InterpolationMode mode)
     \fn bool QGradient::operator!=(const QGradient &gradient) const
     \since 4.2
 
-    Returns true if the gradient is the same as the other \a gradient
-    specified; otherwise returns false.
+    Returns \c true if the gradient is the same as the other \a gradient
+    specified; otherwise returns \c false.
 
     \sa operator==()
 */
 
 /*!
-    Returns true if the gradient is the same as the other \a gradient
-    specified; otherwise returns false.
+    Returns \c true if the gradient is the same as the other \a gradient
+    specified; otherwise returns \c false.
 
     \sa operator!=()
 */

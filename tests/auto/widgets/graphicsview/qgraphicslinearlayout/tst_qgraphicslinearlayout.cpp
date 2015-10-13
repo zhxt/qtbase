@@ -1,39 +1,32 @@
+
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +40,8 @@
 #include <qgraphicsscene.h>
 #include <qgraphicsview.h>
 #include <qapplication.h>
+#include <QtWidgets/qstyle.h>
+#include <QtWidgets/qproxystyle.h>
 
 class tst_QGraphicsLinearLayout : public QObject {
 Q_OBJECT
@@ -86,6 +81,7 @@ private slots:
     void removeItem();
     void setGeometry_data();
     void setGeometry();
+    void defaultSpacing();
     void setSpacing_data();
     void setSpacing();
     void setItemSpacing_data();
@@ -107,6 +103,7 @@ private slots:
     void testOffByOneInLargerLayout();
     void testDefaultAlignment();
     void combineSizePolicies();
+    void hiddenItems();
 
     // Task specific tests
     void task218400_insertStretchCrash();
@@ -770,7 +767,7 @@ void tst_QGraphicsLinearLayout::orientation()
 
     layout.setOrientation(orientation);
     QCOMPARE(layout.orientation(), orientation);
-	// important to resize to preferredsize when orientation is switched
+    // important to resize to preferredsize when orientation is switched
     widget->resize(widget->effectiveSizeHint(Qt::PreferredSize));
     qApp->processEvents();
     for (i = 0; i < positions.count(); ++i) {
@@ -906,6 +903,94 @@ void tst_QGraphicsLinearLayout::setGeometry()
     widget->setGeometry(rect);
     QCOMPARE(layout.geometry(), rect);
     // see also geometry()
+    delete widget;
+}
+
+class LayoutStyle : public QProxyStyle
+{
+public:
+    LayoutStyle(const QString &key)
+        : QProxyStyle(key),
+            horizontalSpacing(-1), verticalSpacing(-1) {}
+
+    virtual int pixelMetric(QStyle::PixelMetric pm, const QStyleOption *option = 0, const QWidget *widget = 0) const Q_DECL_OVERRIDE
+    {
+        if (pm == QStyle::PM_LayoutHorizontalSpacing && horizontalSpacing >= 0) {
+            return horizontalSpacing;
+        } else if (pm == QStyle::PM_LayoutVerticalSpacing && verticalSpacing >= 0) {
+            return verticalSpacing;
+        }
+        return QProxyStyle::pixelMetric(pm, option, widget);
+    }
+
+    int horizontalSpacing;
+    int verticalSpacing;
+};
+
+void tst_QGraphicsLinearLayout::defaultSpacing()
+{
+    QGraphicsScene scene;
+    QGraphicsView view(&scene);
+    LayoutStyle *style = new LayoutStyle(QLatin1String("windows"));
+    style->horizontalSpacing = 5;
+    style->verticalSpacing = 3;
+    LayoutStyle *style2 = new LayoutStyle(QLatin1String("windows"));
+    style2->horizontalSpacing = 25;
+    style2->verticalSpacing = 23;
+
+    QGraphicsWidget *widget = new QGraphicsWidget(0, Qt::Window);
+    widget->setStyle(style);
+
+    // Horizontal layout
+    SubQGraphicsLinearLayout *layout = new SubQGraphicsLinearLayout(Qt::Horizontal);
+    widget->setLayout(layout);
+    Q_ASSERT(widget->style());
+    scene.addItem(widget);
+    layout->setContentsMargins(0, 0, 0, 0);
+    view.show();
+
+    for (int i = 0; i < 2; ++i) {
+        QGraphicsWidget *w = new QGraphicsWidget;
+        layout->addItem(w);
+    }
+
+    // Horizontal layout
+    qreal styleSpacing = (qreal)style->pixelMetric(QStyle::PM_LayoutHorizontalSpacing);
+    QCOMPARE(styleSpacing, qreal(5));
+    QCOMPARE(styleSpacing, layout->spacing());
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize).width(), qreal(105));
+    style->horizontalSpacing = 15;
+    // If the style method changes return value, the layout must be invalidated by the application
+    layout->invalidate();
+    styleSpacing = (qreal)style->pixelMetric(QStyle::PM_LayoutHorizontalSpacing);
+    QCOMPARE(styleSpacing, qreal(15));
+    QCOMPARE(styleSpacing, layout->spacing());
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize).width(), qreal(115));
+    widget->setStyle(style2);
+    // If the style itself changes, the layout will pick that up
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize).width(), qreal(125));
+    QCOMPARE(layout->spacing(), qreal(25));
+
+    // Vertical layout
+    widget->setStyle(style);
+    layout->setOrientation(Qt::Vertical);
+    styleSpacing = (qreal)style->pixelMetric(QStyle::PM_LayoutVerticalSpacing);
+    QCOMPARE(styleSpacing, qreal(3));
+    QCOMPARE(styleSpacing, layout->spacing());
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize).height(), qreal(103));
+    style->verticalSpacing = 13;
+    // If the style method changes return value, the layout must be invalidated by the application
+    layout->invalidate();
+    styleSpacing = (qreal)style->pixelMetric(QStyle::PM_LayoutVerticalSpacing);
+    QCOMPARE(styleSpacing, qreal(13));
+    QCOMPARE(styleSpacing, layout->spacing());
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize).height(), qreal(113));
+    widget->setStyle(style2);
+    // If the style itself changes, the layout will pick that up
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize).height(), qreal(123));
+    QCOMPARE(layout->spacing(), qreal(23));
+
+
     delete widget;
 }
 
@@ -1469,7 +1554,7 @@ void tst_QGraphicsLinearLayout::removeLayout()
 void tst_QGraphicsLinearLayout::avoidRecursionInInsertItem()
 {
     QGraphicsWidget window(0, Qt::Window);
-	QGraphicsLinearLayout *layout = new QGraphicsLinearLayout(&window);
+    QGraphicsLinearLayout *layout = new QGraphicsLinearLayout(&window);
     QCOMPARE(layout->count(), 0);
     QTest::ignoreMessage(QtWarningMsg, "QGraphicsLinearLayout::insertItem: cannot insert itself");
     layout->insertItem(0, layout);
@@ -1635,6 +1720,41 @@ void tst_QGraphicsLinearLayout::combineSizePolicies()
     w2->setMaximumHeight(50);
     w2->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     QCOMPARE(layout->maximumHeight(), qreal(200));
+}
+
+void tst_QGraphicsLinearLayout::hiddenItems()
+{
+    QGraphicsWidget *widget = new QGraphicsWidget;
+    QGraphicsLinearLayout *layout = new QGraphicsLinearLayout(Qt::Horizontal, widget);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+
+    RectWidget *w1 = new RectWidget;
+    w1->setPreferredSize(QSizeF(20, 20));
+    layout->addItem(w1);
+
+    RectWidget *w2 = new RectWidget;
+    w2->setPreferredSize(QSizeF(20, 20));
+    layout->addItem(w2);
+
+    RectWidget *w3 = new RectWidget;
+    w3->setPreferredSize(QSizeF(20, 20));
+    layout->addItem(w3);
+
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    w2->hide();
+    QCOMPARE(layout->preferredWidth(), qreal(42));
+    w2->show();
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    QSizePolicy sp = w2->sizePolicy();
+    sp.setRetainSizeWhenHidden(true);
+    w2->setSizePolicy(sp);
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    w2->hide();
+    QCOMPARE(layout->preferredWidth(), qreal(64));
+    sp.setRetainSizeWhenHidden(false);
+    w2->setSizePolicy(sp);
+    QCOMPARE(layout->preferredWidth(), qreal(42));
 }
 
 QTEST_MAIN(tst_QGraphicsLinearLayout)

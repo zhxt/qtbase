@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,7 +38,6 @@
 #include <qdebug.h>
 #include "codemarker.h"
 #include "config.h"
-#include "ditaxmlgenerator.h"
 #include "doc.h"
 #include "editdistance.h"
 #include "generator.h"
@@ -69,9 +60,10 @@ QStringList Generator::imageFiles;
 QMap<QString, QStringList> Generator::imgFileExts;
 QString Generator::outDir_;
 QString Generator::outSubdir_;
+QStringList Generator::outFileNames_;
 QSet<QString> Generator::outputFormats;
 QHash<QString, QString> Generator::outputPrefixes;
-QString Generator::project;
+QString Generator::project_;
 QStringList Generator::scriptDirs;
 QStringList Generator::scriptFiles;
 QString Generator::sinceTitles[] =
@@ -97,24 +89,33 @@ QStringList Generator::styleDirs;
 QStringList Generator::styleFiles;
 bool Generator::debugging_ = false;
 bool Generator::noLinkErrors_ = false;
-Generator::Passes Generator::qdocPass_ = Both;
+bool Generator::autolinkErrors_ = false;
+bool Generator::redirectDocumentationToDevNull_ = false;
+Generator::QDocPass Generator::qdocPass_ = Generator::Neither;
+bool Generator::qdocSingleExec_ = false;
+bool Generator::qdocWriteQaPages_ = false;
+bool Generator::useOutputSubdirs_ = true;
+QmlTypeNode* Generator::qmlTypeContext_ = 0;
 
-void Generator::setDebugSegfaultFlag(bool b)
+void Generator::startDebugging(const QString& message)
 {
-    if (b)
-        qDebug() << "DEBUG: Setting debug flag.";
-    else
-        qDebug() << "DEBUG: Clearing debug flag.";
-    debugging_ = b;
+    debugging_ = true;
+    qDebug() << "START DEBUGGING:" << message;
+}
+
+void Generator::stopDebugging(const QString& message)
+{
+    debugging_ = false;
+    qDebug() << "STOP DEBUGGING:" << message;
 }
 
 /*!
   Prints \a message as an aid to debugging the release version.
  */
-void Generator::debugSegfault(const QString& message)
+void Generator::debug(const QString& message)
 {
     if (debugging())
-        qDebug() << "DEBUG:" << message;
+        qDebug() << "  DEBUG:" << message;
 }
 
 /*!
@@ -134,6 +135,8 @@ Generator::Generator()
       inSectionHeading_(false),
       inTableHeader_(false),
       threeColumnEnumValueTable_(true),
+      showInternal_(false),
+      singleExec_(false),
       numTableRows_(0)
 {
     qdb_ = QDocDatabase::qdocDB();
@@ -186,19 +189,20 @@ void Generator::appendFullNames(Text& text, const NodeList& nodes, const Node* r
     }
 }
 
-void Generator::appendSortedNames(Text& text, const ClassNode *classe, const QList<RelatedClass> &classes)
+void Generator::appendSortedNames(Text& text, const ClassNode* cn, const QList<RelatedClass>& rc)
 {
     QList<RelatedClass>::ConstIterator r;
     QMap<QString,Text> classMap;
     int index = 0;
 
-    r = classes.constBegin();
-    while (r != classes.constEnd()) {
-        if ((*r).node->access() == Node::Public &&
-                (*r).node->status() != Node::Internal
-                && !(*r).node->doc().isEmpty()) {
+    r = rc.constBegin();
+    while (r != rc.constEnd()) {
+        ClassNode* rcn = (*r).node_;
+        if (rcn && rcn->access() == Node::Public &&
+              rcn->status() != Node::Internal &&
+              !rcn->doc().isEmpty()) {
             Text className;
-            appendFullName(className, (*r).node, classe);
+            appendFullName(className, rcn, cn);
             classMap[className.toString().toLower()] = className;
         }
         ++r;
@@ -209,7 +213,7 @@ void Generator::appendSortedNames(Text& text, const ClassNode *classe, const QLi
 
     foreach (const QString &className, classNames) {
         text << classMap[className];
-        text << separator(index++, classNames.count());
+        text << comma(index++, classNames.count());
     }
 }
 
@@ -221,7 +225,7 @@ void Generator::appendSortedQmlNames(Text& text, const Node* base, const NodeLis
     for (int i = 0; i < subs.size(); ++i) {
         Text t;
         if (!base->isQtQuickNode() || !subs[i]->isQtQuickNode() ||
-                (base->qmlModuleIdentifier() == subs[i]->qmlModuleIdentifier())) {
+                (base->logicalModuleName() == subs[i]->logicalModuleName())) {
             appendFullName(t, subs[i], base);
             classMap[t.toString().toLower()] = t;
         }
@@ -232,27 +236,22 @@ void Generator::appendSortedQmlNames(Text& text, const Node* base, const NodeLis
 
     foreach (const QString &name, names) {
         text << classMap[name];
-        text << separator(index++, names.count());
+        text << comma(index++, names.count());
     }
 }
-
-QMultiMap<QString,QString> outFileNames;
 
 /*!
   For debugging qdoc.
  */
 void Generator::writeOutFileNames()
 {
-    QFile* files = new QFile("/Users/msmith/depot/qt5/qtdoc/outputlist.txt");
-    files->open(QFile::WriteOnly);
-    QTextStream* filesout = new QTextStream(files);
-    QMultiMap<QString,QString>::ConstIterator i = outFileNames.begin();
-    while (i != outFileNames.end()) {
-        (*filesout) << i.key() << "\n";
-        ++i;
+    QFile files("outputlist.txt");
+    if (!files.open(QFile::WriteOnly))
+        return;
+    QTextStream filesout(&files);
+    foreach (const QString &file, outFileNames_) {
+        filesout << file << "\n";
     }
-    filesout->flush();
-    files->close();
 }
 
 /*!
@@ -263,18 +262,24 @@ void Generator::writeOutFileNames()
 void Generator::beginSubPage(const InnerNode* node, const QString& fileName)
 {
     QString path = outputDir() + QLatin1Char('/');
-    if (!node->outputSubdirectory().isEmpty())
+    if (Generator::useOutputSubdirs() && !node->outputSubdirectory().isEmpty() &&
+        !outputDir().endsWith(node->outputSubdirectory()))
         path += node->outputSubdirectory() + QLatin1Char('/');
     path += fileName;
-    Generator::debugSegfault("Writing: " + path);
-    outFileNames.insert(fileName,fileName);
-    QFile* outFile = new QFile(path);
+
+    QFile* outFile = new QFile(redirectDocumentationToDevNull_ ? QStringLiteral("/dev/null") : path);
+    if (!redirectDocumentationToDevNull_ && outFile->exists())
+        node->location().error(tr("HTML file already exists; overwriting %1").arg(outFile->fileName()));
     if (!outFile->open(QFile::WriteOnly))
         node->location().fatal(tr("Cannot open output file '%1'").arg(outFile->fileName()));
+    Generator::debug("Writing: " + path);
+    outFileNames_ << fileName;
     QTextStream* out = new QTextStream(outFile);
 
+#ifndef QT_NO_TEXTCODEC
     if (outputCodec)
         out->setCodec(outputCodec);
+#endif
     outStreamStack.push(out);
     const_cast<InnerNode*>(node)->setOutputFileName(fileName);
 }
@@ -297,51 +302,71 @@ QString Generator::fileBase(const Node *node) const
         node = node->relates();
     else if (!node->isInnerNode())
         node = node->parent();
-    if (node->subType() == Node::QmlPropertyGroup) {
+    if (node->type() == Node::QmlPropertyGroup) {
         node = node->parent();
     }
 
-    QString base = node->doc().baseName();
-    if (!base.isEmpty())
-        return base;
+    if (node->hasFileNameBase())
+        return node->fileNameBase();
 
-    const Node *p = node;
+    QString base;
+    if (node->isDocumentNode()) {
+        base = node->name();
+        if (base.endsWith(".html") && !node->isExampleFile())
+            base.truncate(base.length() - 5);
 
-    forever {
-        const Node *pp = p->parent();
-        base.prepend(p->name());
-        if (!p->qmlModuleIdentifier().isEmpty())
-            base.prepend(p->qmlModuleIdentifier()+QChar('-'));
+        if (node->isExample() || node->isExampleFile()) {
+            QString modPrefix(node->physicalModuleName());
+            if (modPrefix.isEmpty()) {
+                modPrefix = project_;
+            }
+            base.prepend(modPrefix.toLower() + QLatin1Char('-'));
+        }
+        if (node->isExample()) {
+            base.append(QLatin1String("-example"));
+        }
+    }
+    else if (node->isQmlType() || node->isQmlBasicType() ||
+             node->isJsType() || node->isJsBasicType()) {
+        base = node->name();
+        if (!node->logicalModuleName().isEmpty()) {
+            base.prepend(node->logicalModuleName() + QLatin1Char('-'));
+        }
         /*
           To avoid file name conflicts in the html directory,
           we prepend a prefix (by default, "qml-") to the file name of QML
           element doc files.
-         */
-        if ((p->subType() == Node::QmlClass) ||
-                (p->subType() == Node::QmlBasicType)) {
+        */
+        if (node->isQmlType() || node->isQmlBasicType())
             base.prepend(outputPrefix(QLatin1String("QML")));
-        }
-        if (!pp || pp->name().isEmpty() || pp->type() == Node::Document)
-            break;
-        base.prepend(QLatin1Char('-'));
-        p = pp;
+        else
+            base.prepend(outputPrefix(QLatin1String("JS")));
     }
-    if (node->type() == Node::Document) {
-        if (node->subType() == Node::Collision) {
-            const NameCollisionNode* ncn = static_cast<const NameCollisionNode*>(node);
-            if (ncn->currentChild())
-                return fileBase(ncn->currentChild());
-            base.prepend("collision-");
-        }
-        //Was QDOC2_COMPAT, required for index.html
+    else if (node->isCollectionNode()) {
+        base = node->name();
         if (base.endsWith(".html"))
             base.truncate(base.length() - 5);
 
-        if (node->subType() == Node::QmlModule) {
-            base.prepend("qmlmodule-");
+        if (node->isQmlModule()) {
+            base.append("-qmlmodule");
         }
-        if (node->subType() == Node::Module) {
+        else if (node->isJsModule()) {
+            base.append("-jsmodule");
+        }
+        else if (node->isModule()) {
             base.append("-module");
+        }
+        // Why not add "-group" for gropup pages?
+    }
+    else {
+        const Node *p = node;
+        forever {
+            const Node *pp = p->parent();
+            base.prepend(p->name());
+            if (!pp || pp->name().isEmpty() || pp->isDocumentNode())
+                break;
+            base.prepend(QLatin1Char('-'));
+            p = pp;
         }
     }
 
@@ -373,6 +398,8 @@ QString Generator::fileBase(const Node *node) const
     }
     while (res.endsWith(QLatin1Char('-')))
         res.chop(1);
+    Node* n = const_cast<Node*>(node);
+    n->setFileNameBase(res);
     return res;
 }
 
@@ -392,6 +419,59 @@ QString Generator::fileName(const Node* node) const
     return name;
 }
 
+QString Generator::cleanRef(const QString& ref)
+{
+    QString clean;
+
+    if (ref.isEmpty())
+        return clean;
+
+    clean.reserve(ref.size() + 20);
+    const QChar c = ref[0];
+    const uint u = c.unicode();
+
+    if ((u >= 'a' && u <= 'z') ||
+            (u >= 'A' && u <= 'Z') ||
+            (u >= '0' && u <= '9')) {
+        clean += c;
+    } else if (u == '~') {
+        clean += "dtor.";
+    } else if (u == '_') {
+        clean += "underscore.";
+    } else {
+        clean += QLatin1Char('A');
+    }
+
+    for (int i = 1; i < (int) ref.length(); i++) {
+        const QChar c = ref[i];
+        const uint u = c.unicode();
+        if ((u >= 'a' && u <= 'z') ||
+                (u >= 'A' && u <= 'Z') ||
+                (u >= '0' && u <= '9') || u == '-' ||
+                u == '_' || u == ':' || u == '.') {
+            clean += c;
+        } else if (c.isSpace()) {
+            clean += QLatin1Char('-');
+        } else if (u == '!') {
+            clean += "-not";
+        } else if (u == '&') {
+            clean += "-and";
+        } else if (u == '<') {
+            clean += "-lt";
+        } else if (u == '=') {
+            clean += "-eq";
+        } else if (u == '>') {
+            clean += "-gt";
+        } else if (u == '#') {
+            clean += QLatin1Char('#');
+        } else {
+            clean += QLatin1Char('-');
+            clean += QString::number((int)u, 16);
+        }
+    }
+    return clean;
+}
+
 QMap<QString, QString>& Generator::formattingLeftMap()
 {
     return fmtLeftMaps[format()];
@@ -405,7 +485,7 @@ QMap<QString, QString>& Generator::formattingRightMap()
 /*!
   Returns the full document location.
  */
-QString Generator::fullDocumentLocation(const Node *node, bool subdir)
+QString Generator::fullDocumentLocation(const Node *node, bool useSubdir)
 {
     if (!node)
         return QString();
@@ -417,16 +497,16 @@ QString Generator::fullDocumentLocation(const Node *node, bool subdir)
     QString fdl;
 
     /*
-      If the output is being sent to subdirectories of the
-      output directory, and if the subdir parameter is set,
-      prepend the subdirectory name + '/' to the result.
+      If the useSubdir parameter is set, then the output is
+      being sent to subdirectories of the output directory.
+      Prepend the subdirectory name + '/' to the result.
      */
-    if (subdir) {
+    if (useSubdir) {
         fdl = node->outputSubdirectory();
         if (!fdl.isEmpty())
             fdl.append(QLatin1Char('/'));
     }
-    if (node->type() == Node::Namespace) {
+    if (node->isNamespace()) {
 
         // The root namespace has no name - check for this before creating
         // an attribute containing the location of any documentation.
@@ -436,25 +516,28 @@ QString Generator::fullDocumentLocation(const Node *node, bool subdir)
         else
             return QString();
     }
-    else if (node->type() == Node::Document) {
-        if ((node->subType() == Node::QmlClass) ||
-                (node->subType() == Node::QmlBasicType)) {
-            QString fb = fileBase(node);
-            if (fb.startsWith(Generator::outputPrefix(QLatin1String("QML"))))
-                return fb + QLatin1Char('.') + currentGenerator()->fileExtension();
-            else {
-                QString mq;
-                if (!node->qmlModuleName().isEmpty()) {
-                    mq = node->qmlModuleIdentifier().replace(QChar('.'),QChar('-'));
-                    mq = mq.toLower() + QLatin1Char('-');
-                }
-                return fdl+ Generator::outputPrefix(QLatin1String("QML")) + mq +
-                        fileBase(node) + QLatin1Char('.') + currentGenerator()->fileExtension();
-            }
-        }
+    else if (node->isQmlType() || node->isQmlBasicType() ||
+             node->isJsType() || node->isJsBasicType()) {
+        QString fb = fileBase(node);
+        if (fb.startsWith(Generator::outputPrefix(QLatin1String("QML"))))
+            return fb + QLatin1Char('.') + currentGenerator()->fileExtension();
+        else if (fb.startsWith(Generator::outputPrefix(QLatin1String("JS"))))
+            return fb + QLatin1Char('.') + currentGenerator()->fileExtension();
         else {
-            parentName = fileBase(node) + QLatin1Char('.') + currentGenerator()->fileExtension();
+            QString mq;
+            if (!node->logicalModuleName().isEmpty()) {
+                mq = node->logicalModuleName().replace(QChar('.'),QChar('-'));
+                mq = mq.toLower() + QLatin1Char('-');
+            }
+            QLatin1String prefix = QLatin1String("QML");
+            if (node->isJsType() || node->isJsBasicType())
+                prefix = QLatin1String("JS");
+            return fdl+ Generator::outputPrefix(prefix) + mq + fileBase(node) +
+                QLatin1Char('.') + currentGenerator()->fileExtension();
         }
+    }
+    else if (node->isDocumentNode() || node->isCollectionNode()) {
+        parentName = fileBase(node) + QLatin1Char('.') + currentGenerator()->fileExtension();
     }
     else if (fileBase(node).isEmpty())
         return QString();
@@ -465,7 +548,7 @@ QString Generator::fullDocumentLocation(const Node *node, bool subdir)
         parentName = fullDocumentLocation(node->relates());
     }
     else if ((parentNode = node->parent())) {
-        if (parentNode->subType() == Node::QmlPropertyGroup) {
+        if (parentNode->isQmlPropertyGroup() || parentNode->isJsPropertyGroup()) {
             parentNode = parentNode->parent();
             parentName = fullDocumentLocation(parentNode);
         }
@@ -491,10 +574,10 @@ QString Generator::fullDocumentLocation(const Node *node, bool subdir)
             return fullDocumentLocation(functionNode->associatedProperty());
 
         else if (functionNode->overloadNumber() > 1)
-            anchorRef = QLatin1Char('#') + functionNode->name()
+            anchorRef = QLatin1Char('#') + cleanRef(functionNode->name())
                     + QLatin1Char('-') + QString::number(functionNode->overloadNumber());
         else
-            anchorRef = QLatin1Char('#') + functionNode->name();
+            anchorRef = QLatin1Char('#') + cleanRef(functionNode->name());
         break;
     }
     /*
@@ -506,13 +589,22 @@ QString Generator::fullDocumentLocation(const Node *node, bool subdir)
         anchorRef = QLatin1Char('#') + node->name() + "-enum";
         break;
     case Node::Typedef:
+    {
+        const TypedefNode *tdef = static_cast<const TypedefNode *>(node);
+        if (tdef->associatedEnum()) {
+            return fullDocumentLocation(tdef->associatedEnum());
+        }
         anchorRef = QLatin1Char('#') + node->name() + "-typedef";
         break;
+    }
     case Node::Property:
         anchorRef = QLatin1Char('#') + node->name() + "-prop";
         break;
     case Node::QmlProperty:
-        anchorRef = QLatin1Char('#') + node->name() + "-prop";
+        if (node->isAttached())
+            anchorRef = QLatin1Char('#') + node->name() + "-attached-prop";
+        else
+            anchorRef = QLatin1Char('#') + node->name() + "-prop";
         break;
     case Node::QmlSignal:
         anchorRef = QLatin1Char('#') + node->name() + "-signal";
@@ -526,7 +618,11 @@ QString Generator::fullDocumentLocation(const Node *node, bool subdir)
     case Node::Variable:
         anchorRef = QLatin1Char('#') + node->name() + "-var";
         break;
+    case Node::QmlType:
     case Node::Document:
+    case Node::Group:
+    case Node::Module:
+    case Node::QmlModule:
     {
         parentName = fileBase(node);
         parentName.replace(QLatin1Char('/'), QLatin1Char('-')).replace(QLatin1Char('.'), QLatin1Char('-'));
@@ -538,7 +634,8 @@ QString Generator::fullDocumentLocation(const Node *node, bool subdir)
     }
 
     // Various objects can be compat (deprecated) or obsolete.
-    if (node->type() != Node::Class && node->type() != Node::Namespace) {
+    // Is this even correct?
+    if (!node->isClass() && !node->isNamespace()) {
         switch (node->status()) {
         case Node::Compat:
             parentName.replace(QLatin1Char('.') + currentGenerator()->fileExtension(),
@@ -643,12 +740,16 @@ const Atom *Generator::generateAtomList(const Atom *atom,
     return 0;
 }
 
+/*!
+  Generate the body of the documentation from the qdoc comment
+  found with the entity represented by the \a node.
+ */
 void Generator::generateBody(const Node *node, CodeMarker *marker)
 {
     bool quiet = false;
 
     if (node->type() == Node::Document) {
-        const DocNode *dn = static_cast<const DocNode *>(node);
+        const DocumentNode *dn = static_cast<const DocumentNode *>(node);
         if ((dn->subType() == Node::File) || (dn->subType() == Node::Image)) {
             quiet = true;
         }
@@ -773,9 +874,9 @@ void Generator::generateBody(const Node *node, CodeMarker *marker)
         }
     }
 
-    if (node->type() == Node::Document) {
-        const DocNode *dn = static_cast<const DocNode *>(node);
-        if (dn->subType() == Node::Example) {
+    if (node->isDocumentNode()) {
+        const DocumentNode *dn = static_cast<const DocumentNode *>(node);
+        if (dn->isExample()) {
             generateExampleFiles(dn, marker);
         }
         else if (dn->subType() == Node::File) {
@@ -794,7 +895,7 @@ void Generator::generateClassLikeNode(InnerNode* /* classe */, CodeMarker* /* ma
 {
 }
 
-void Generator::generateExampleFiles(const DocNode *dn, CodeMarker *marker)
+void Generator::generateExampleFiles(const DocumentNode *dn, CodeMarker *marker)
 {
     if (dn->childNodes().isEmpty())
         return;
@@ -802,7 +903,11 @@ void Generator::generateExampleFiles(const DocNode *dn, CodeMarker *marker)
     generateFileList(dn, marker, Node::Image, QString("Images:"));
 }
 
-void Generator::generateDocNode(DocNode* /* dn */, CodeMarker* /* marker */)
+void Generator::generateDocumentNode(DocumentNode* /* dn */, CodeMarker* /* marker */)
+{
+}
+
+void Generator::generateCollectionNode(CollectionNode* , CodeMarker* )
 {
 }
 
@@ -813,7 +918,7 @@ void Generator::generateDocNode(DocNode* /* dn */, CodeMarker* /* marker */)
   by the example. The images are copied into a subtree of
   \c{...doc/html/images/used-in-examples/...}
  */
-void Generator::generateFileList(const DocNode* dn,
+void Generator::generateFileList(const DocumentNode* dn,
                                  CodeMarker* marker,
                                  Node::SubType subtype,
                                  const QString& tag)
@@ -833,15 +938,17 @@ void Generator::generateFileList(const DocNode* dn,
                 if (!file.isEmpty()) {
                     QDir dirInfo;
                     QString userFriendlyFilePath;
+                    const QString prefix("/images/used-in-examples/");
                     QString srcPath = Config::findFile(dn->location(),
                                                        QStringList(),
                                                        exampleDirs,
                                                        file,
                                                        exampleImgExts,
                                                        userFriendlyFilePath);
+                    outFileNames_ << prefix.mid(1) + userFriendlyFilePath;
                     userFriendlyFilePath.truncate(userFriendlyFilePath.lastIndexOf('/'));
 
-                    QString imgOutDir = outDir_ + "/images/used-in-examples/" + userFriendlyFilePath;
+                    QString imgOutDir = outDir_ + prefix + userFriendlyFilePath;
                     if (!dirInfo.mkpath(imgOutDir))
                         dn->location().fatal(tr("Cannot create output directory '%1'")
                                                .arg(imgOutDir));
@@ -901,18 +1008,20 @@ void Generator::generateInherits(const ClassNode *classe, CodeMarker *marker)
         r = classe->baseClasses().constBegin();
         index = 0;
         while (r != classe->baseClasses().constEnd()) {
-            text << Atom(Atom::LinkNode, CodeMarker::stringForNode((*r).node))
-                 << Atom(Atom::FormattingLeft, ATOM_FORMATTING_LINK)
-                 << Atom(Atom::String, (*r).dataTypeWithTemplateArgs)
-                 << Atom(Atom::FormattingRight, ATOM_FORMATTING_LINK);
+            if ((*r).node_) {
+                text << Atom(Atom::LinkNode, CodeMarker::stringForNode((*r).node_))
+                     << Atom(Atom::FormattingLeft, ATOM_FORMATTING_LINK)
+                     << Atom(Atom::String, (*r).signature_)
+                     << Atom(Atom::FormattingRight, ATOM_FORMATTING_LINK);
 
-            if ((*r).access == Node::Protected) {
-                text << " (protected)";
+                if ((*r).access_ == Node::Protected) {
+                    text << " (protected)";
+                }
+                else if ((*r).access_ == Node::Private) {
+                    text << " (private)";
+                }
+                text << separator(index++, classe->baseClasses().count());
             }
-            else if ((*r).access == Node::Private) {
-                text << " (private)";
-            }
-            text << separator(index++, classe->baseClasses().count());
             ++r;
         }
         text << Atom::ParaRight;
@@ -922,29 +1031,29 @@ void Generator::generateInherits(const ClassNode *classe, CodeMarker *marker)
 
 /*!
   Recursive writing of HTML files from the root \a node.
-
-  \note NameCollisionNodes are skipped here and processed
-  later. See HtmlGenerator::generateCollisionPages() for
-  more on this.
  */
 void Generator::generateInnerNode(InnerNode* node)
 {
     if (!node->url().isNull())
         return;
+    if (node->isIndexNode())
+        return;
+    if (node->isInternal() && !showInternal_)
+        return;
 
-    if (node->type() == Node::Document) {
-        DocNode* docNode = static_cast<DocNode*>(node);
+    if (node->isDocumentNode()) {
+        DocumentNode* docNode = static_cast<DocumentNode*>(node);
         if (docNode->subType() == Node::ExternalPage)
             return;
         if (docNode->subType() == Node::Image)
-            return;
-        if (docNode->subType() == Node::QmlPropertyGroup)
             return;
         if (docNode->subType() == Node::Page) {
             if (node->count() > 0)
                 qDebug("PAGE %s HAS CHILDREN", qPrintable(docNode->title()));
         }
     }
+    else if (node->isQmlPropertyGroup() || node->isJsPropertyGroup())
+        return;
 
     /*
       Obtain a code marker for the source file.
@@ -952,33 +1061,66 @@ void Generator::generateInnerNode(InnerNode* node)
     CodeMarker *marker = CodeMarker::markerForFileName(node->location().filePath());
 
     if (node->parent() != 0) {
-        /*
-          Skip name collision nodes here and process them
-          later in generateCollisionPages(). Each one is
-          appended to a list for later.
-         */
-        if ((node->type() == Node::Document) && (node->subType() == Node::Collision)) {
-            NameCollisionNode* ncn = static_cast<NameCollisionNode*>(node);
-            collisionNodes.append(const_cast<NameCollisionNode*>(ncn));
-        }
-        else {
+        if ((node->isNamespace() && node->status() != Node::Intermediate)
+            || node->isClass()) {
             beginSubPage(node, fileName(node));
-            if (node->type() == Node::Namespace || node->type() == Node::Class) {
-                generateClassLikeNode(node, marker);
-            }
-            else if (node->type() == Node::Document) {
-                generateDocNode(static_cast<DocNode*>(node), marker);
-            }
+            generateClassLikeNode(node, marker);
             endSubPage();
+        }
+        if (node->isQmlType() || node->isJsType()) {
+            beginSubPage(node, fileName(node));
+            QmlTypeNode* qcn = static_cast<QmlTypeNode*>(node);
+            generateQmlTypePage(qcn, marker);
+            endSubPage();
+        }
+        else if (node->isDocumentNode()) {
+            beginSubPage(node, fileName(node));
+            generateDocumentNode(static_cast<DocumentNode*>(node), marker);
+            endSubPage();
+        }
+        else if (node->isQmlBasicType() || node->isJsBasicType()) {
+            beginSubPage(node, fileName(node));
+            QmlBasicTypeNode* qbtn = static_cast<QmlBasicTypeNode*>(node);
+            generateQmlBasicTypePage(qbtn, marker);
+            endSubPage();
+        }
+        else if (node->isCollectionNode()) {
+            /*
+              A collection node collects: groups, C++ modules,
+              QML modules or JavaScript modules.
+
+              Don't output an HTML page for the collection
+              node unless the \group, \module, \qmlmodule or
+              \jsmodule command was actually seen by qdoc in
+              the qdoc comment for the node.
+
+              A key prerequisite in this case is the call to
+              mergeCollections(cn). We must determine whether
+              this group, module, QML module, or JavaScript
+              module has members in other modules. We know at
+              this point that cn's members list contains only
+              members in the current module. Therefore, before
+              outputting the page for cn, we must search for
+              members of cn in the other modules and add them
+              to the members list.
+            */
+            CollectionNode* cn = static_cast<CollectionNode*>(node);
+            if (cn->wasSeen()) {
+                qdb_->mergeCollections(cn);
+                beginSubPage(node, fileName(node));
+                generateCollectionNode(cn, marker);
+                endSubPage();
+            }
         }
     }
 
-    NodeList::ConstIterator c = node->childNodes().constBegin();
-    while (c != node->childNodes().constEnd()) {
-        if ((*c)->isInnerNode() && (*c)->access() != Node::Private) {
-            generateInnerNode((InnerNode*)*c);
+    int i = 0;
+    while (i < node->childNodes().count()) {
+        Node *c = node->childNodes().at(i);
+        if (c->isInnerNode() && c->access() != Node::Private) {
+            generateInnerNode((InnerNode*)c);
         }
-        ++c;
+        ++i;
     }
 }
 
@@ -1008,12 +1150,12 @@ void Generator::generateMaintainerList(const InnerNode* node, CodeMarker* marker
   Output the "Inherit by" list for the QML element,
   if it is inherited by any other elements.
  */
-void Generator::generateQmlInheritedBy(const QmlClassNode* qcn,
+void Generator::generateQmlInheritedBy(const QmlTypeNode* qcn,
                                               CodeMarker* marker)
 {
     if (qcn) {
         NodeList subs;
-        QmlClassNode::subclasses(qcn->name(),subs);
+        QmlTypeNode::subclasses(qcn->name(),subs);
         if (!subs.isEmpty()) {
             Text text;
             text << Atom::ParaLeft << "Inherited by ";
@@ -1026,7 +1168,7 @@ void Generator::generateQmlInheritedBy(const QmlClassNode* qcn,
 
 /*!
  */
-void Generator::generateQmlInherits(const QmlClassNode* , CodeMarker* )
+void Generator::generateQmlInherits(QmlTypeNode* , CodeMarker* )
 {
     // stub.
 }
@@ -1093,14 +1235,10 @@ void Generator::generateSince(const Node *node, CodeMarker *marker)
 
         QStringList since = node->since().split(QLatin1Char(' '));
         if (since.count() == 1) {
-            // Handle legacy use of \since <version>.
-            if (project.isEmpty())
-                text << "version";
-            else
-                text << project;
-            text << " " << since[0];
+            // If there is only one argument, assume it is the Qt version number.
+            text << " Qt " << since[0];
         } else {
-            // Reconstruct the <project> <version> string.
+            // Otherwise, reconstruct the <project> <version> string.
             text << " " << since.join(' ');
         }
 
@@ -1115,7 +1253,6 @@ void Generator::generateStatus(const Node *node, CodeMarker *marker)
 
     switch (node->status()) {
     case Node::Commendable:
-    case Node::Main:
         break;
     case Node::Preliminary:
         text << Atom::ParaLeft
@@ -1167,6 +1304,28 @@ void Generator::generateStatus(const Node *node, CodeMarker *marker)
     generateText(text, node, marker);
 }
 
+/*!
+  Generates a bold line that says:
+  "The signal is private, not emitted by the user.
+  The function is public so the user can pass it to connect()."
+ */
+void Generator::generatePrivateSignalNote(const Node* node, CodeMarker* marker)
+{
+    Text text;
+    text << Atom::ParaLeft
+         << Atom(Atom::FormattingLeft, ATOM_FORMATTING_BOLD)
+         << "Note: "
+         << Atom(Atom::FormattingRight, ATOM_FORMATTING_BOLD)
+         << "This is a private signal. It can be used in signal connections but cannot be emitted by the user."
+         << Atom::ParaRight;
+    generateText(text, node, marker);
+}
+
+/*!
+  Generate the documentation for \a relative. i.e. \a relative
+  is the node that reporesentas the entity where a qdoc comment
+  was found, and \a text represents the qdoc comment.
+ */
 bool Generator::generateText(const Text& text,
                              const Node *relative,
                              CodeMarker *marker)
@@ -1326,11 +1485,11 @@ void Generator::generateThreadSafeness(const Node *node, CodeMarker *marker)
 }
 
 /*!
-  Traverses the database recursivly to generate all the documentation.
+  Traverses the current tree to generate all the documentation.
  */
-void Generator::generateTree()
+void Generator::generateDocs()
 {
-    generateInnerNode(qdb_->treeRoot());
+    generateInnerNode(qdb_->primaryTreeRoot());
 }
 
 Generator *Generator::generatorForFormat(const QString& format)
@@ -1343,40 +1502,6 @@ Generator *Generator::generatorForFormat(const QString& format)
     }
     return 0;
 }
-
-/*!
-  This function can be called if getLink() returns an empty
-  string. It tests the \a atom string to see if it is a link
-  of the form <element> :: <name>, where <element> is a QML
-  element or component without a module qualifier. If so, it
-  constructs a link to the <name> clause on the disambiguation
-  page for <element> and returns that link string. It also
-  adds the <name> as a target in the NameCollisionNode for
-  <element>. These clauses are then constructed when the
-  disambiguation page is actually generated.
- */
-QString Generator::getCollisionLink(const Atom* atom)
-{
-    QString link;
-    if (!atom->string().contains("::"))
-        return link;
-    QStringList path = atom->string().split("::");
-    NameCollisionNode* ncn = qdb_->findCollisionNode(path[0]);
-    if (ncn) {
-        QString label;
-        if (atom->next() && atom->next()->next()) {
-            if (atom->next()->type() == Atom::FormattingLeft &&
-                    atom->next()->next()->type() == Atom::String)
-                label = atom->next()->next()->string();
-        }
-        ncn->addLinkTarget(path[1],label);
-        link = fileName(ncn);
-        link += QLatin1Char('#');
-        link += Doc::canonicalTitle(path[1]);
-    }
-    return link;
-}
-
 
 /*!
   Looks up the tag \a t in the map of metadata values for the
@@ -1472,7 +1597,13 @@ QString Generator::indent(int level, const QString& markedCode)
 
 void Generator::initialize(const Config &config)
 {
+
+    if (config.getBool(QString("HTML.nosubdirs")))
+        resetUseOutputSubdirs();
+
+    outFileNames_.clear();
     outputFormats = config.getOutputFormats();
+    redirectDocumentationToDevNull_ = config.getBool(CONFIG_REDIRECTDOCUMENTATIONTODEVNULL);
     if (!outputFormats.isEmpty()) {
         outDir_ = config.getOutputDir();
         if (outDir_.isEmpty()) {
@@ -1485,7 +1616,7 @@ void Generator::initialize(const Config &config)
 
         QDir dirInfo;
         if (dirInfo.exists(outDir_)) {
-            if (!runGenerateOnly()) {
+            if (!generating() && Generator::useOutputSubdirs()) {
                 if (!Config::removeDirContents(outDir_))
                     config.lastLocation().error(tr("Cannot empty output directory '%1'").arg(outDir_));
             }
@@ -1505,13 +1636,13 @@ void Generator::initialize(const Config &config)
             config.lastLocation().fatal(tr("Cannot create style directory '%1'").arg(outDir_ + "/style"));
     }
 
-    imageFiles = config.getCleanPathList(CONFIG_IMAGES);
-    imageDirs = config.getCleanPathList(CONFIG_IMAGEDIRS);
-    scriptFiles = config.getCleanPathList(CONFIG_SCRIPTS);
-    scriptDirs = config.getCleanPathList(CONFIG_SCRIPTDIRS);
-    styleFiles = config.getCleanPathList(CONFIG_STYLES);
-    styleDirs = config.getCleanPathList(CONFIG_STYLEDIRS);
-    exampleDirs = config.getCleanPathList(CONFIG_EXAMPLEDIRS);
+    imageFiles = config.getCanonicalPathList(CONFIG_IMAGES);
+    imageDirs = config.getCanonicalPathList(CONFIG_IMAGEDIRS);
+    scriptFiles = config.getCanonicalPathList(CONFIG_SCRIPTS);
+    scriptDirs = config.getCanonicalPathList(CONFIG_SCRIPTDIRS);
+    styleFiles = config.getCanonicalPathList(CONFIG_STYLES);
+    styleDirs = config.getCanonicalPathList(CONFIG_STYLEDIRS);
+    exampleDirs = config.getCanonicalPathList(CONFIG_EXAMPLEDIRS);
     exampleImgExts = config.getStringList(CONFIG_EXAMPLES + Config::dot + CONFIG_IMAGEEXTENSIONS);
 
     QString imagesDotFileExtensions = CONFIG_IMAGES + Config::dot + CONFIG_FILEEXTENSIONS;
@@ -1527,9 +1658,9 @@ void Generator::initialize(const Config &config)
         if (outputFormats.contains((*g)->format())) {
             currentGenerator_ = (*g);
             (*g)->initializeGenerator(config);
-            QStringList extraImages = config.getPathList((*g)->format() +
+            QStringList extraImages = config.getCanonicalPathList((*g)->format() +
                                                          Config::dot +
-                                                         CONFIG_EXTRAIMAGES);
+                                                         CONFIG_EXTRAIMAGES, true);
             QStringList::ConstIterator e = extraImages.constBegin();
             while (e != extraImages.constEnd()) {
                 QString filePath = *e;
@@ -1540,7 +1671,7 @@ void Generator::initialize(const Config &config)
             }
 
             // Documentation template handling
-            QStringList scripts = config.getPathList((*g)->format()+Config::dot+CONFIG_SCRIPTS);
+            QStringList scripts = config.getCanonicalPathList((*g)->format()+Config::dot+CONFIG_SCRIPTS, true);
             e = scripts.constBegin();
             while (e != scripts.constEnd()) {
                 QString filePath = *e;
@@ -1550,7 +1681,7 @@ void Generator::initialize(const Config &config)
                 ++e;
             }
 
-            QStringList styles = config.getPathList((*g)->format()+Config::dot+CONFIG_STYLESHEETS);
+            QStringList styles = config.getCanonicalPathList((*g)->format()+Config::dot+CONFIG_STYLESHEETS, true);
             e = styles.constBegin();
             while (e != styles.constEnd()) {
                 QString filePath = *e;
@@ -1599,16 +1730,19 @@ void Generator::initialize(const Config &config)
         ++n;
     }
 
-    project = config.getString(CONFIG_PROJECT);
+    project_ = config.getString(CONFIG_PROJECT);
 
     QStringList prefixes = config.getStringList(CONFIG_OUTPUTPREFIXES);
     if (!prefixes.isEmpty()) {
         foreach (const QString &prefix, prefixes)
             outputPrefixes[prefix] = config.getString(CONFIG_OUTPUTPREFIXES + Config::dot + prefix);
     }
-    else
+    else {
         outputPrefixes[QLatin1String("QML")] = QLatin1String("qml-");
-    noLinkErrors_ = config.getBool(QLatin1String(CONFIG_NOLINKERRORS));
+        outputPrefixes[QLatin1String("JS")] = QLatin1String("js-");
+    }
+    noLinkErrors_ = config.getBool(CONFIG_NOLINKERRORS);
+    autolinkErrors_ = config.getBool(CONFIG_AUTOLINKERRORS);
 }
 
 /*!
@@ -1632,6 +1766,8 @@ void Generator::augmentImageDirs(QSet<QString>& moreImageDirs)
 void Generator::initializeGenerator(const Config& config)
 {
     config_ = &config;
+    showInternal_ = config.getBool(CONFIG_SHOWINTERNAL);
+    singleExec_ = config.getBool(CONFIG_SINGLEEXEC);
 }
 
 bool Generator::matchAhead(const Atom *atom, Atom::Type expectedAtomType)
@@ -1873,8 +2009,6 @@ void Generator::terminate()
     imageFiles.clear();
     imageDirs.clear();
     outDir_.clear();
-    QmlClassNode::terminate();
-    ExampleNode::terminate();
 }
 
 void Generator::terminateGenerator()
@@ -1900,19 +2034,12 @@ QString Generator::typeString(const Node *node)
         return "namespace";
     case Node::Class:
         return "class";
+    case Node::QmlType:
+        return "type";
+    case Node::QmlBasicType:
+        return "type";
     case Node::Document:
-    {
-        switch (node->subType()) {
-        case Node::QmlClass:
-            return "type";
-        case Node::QmlPropertyGroup:
-            return "property group";
-        case Node::QmlBasicType:
-            return "type";
-        default:
-            return "documentation";
-        }
-    }
+        return "documentation";
     case Node::Enum:
         return "enum";
     case Node::Typedef:
@@ -1921,6 +2048,16 @@ QString Generator::typeString(const Node *node)
         return "function";
     case Node::Property:
         return "property";
+    case Node::QmlPropertyGroup:
+        return "property group";
+    case Node::QmlProperty:
+        return "QML property";
+    case Node::QmlSignal:
+        return "QML signal";
+    case Node::QmlSignalHandler:
+        return "QML signal handler";
+    case Node::QmlMethod:
+        return "QML method";
     default:
         return "documentation";
     }

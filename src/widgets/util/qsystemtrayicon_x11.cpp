@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -55,86 +47,24 @@
 #include <qscreen.h>
 #include <qbackingstore.h>
 #include <qpa/qplatformnativeinterface.h>
+#include <qpa/qplatformsystemtrayicon.h>
+#include <qpa/qplatformtheme.h>
+#include <private/qguiapplication_p.h>
 #include <qdebug.h>
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/Xos.h>
-#include <X11/Xatom.h>
 
 #ifndef QT_NO_SYSTEMTRAYICON
 QT_BEGIN_NAMESPACE
 
-enum {
-    SYSTEM_TRAY_REQUEST_DOCK = 0,
-    SYSTEM_TRAY_BEGIN_MESSAGE = 1,
-    SYSTEM_TRAY_CANCEL_MESSAGE =2
-};
-
-// ### fixme (15.3.2012): The following issues need to be resolved:
-// - Tracking of the actual tray window for DestroyNotify and re-creation
-//   of the icons on the new window should it change (see Qt 4.X).
-
-// Global context for the X11 system tray containing a display for the primary
-// screen and a selection atom from which the tray window can be determined.
-class QX11SystemTrayContext
+static inline unsigned long locateSystemTray()
 {
-public:
-    QX11SystemTrayContext();
-    ~QX11SystemTrayContext();
-
-    bool isValid() const { return m_systemTraySelection != 0; }
-
-    inline Display *display() const  { return m_display; }
-    inline int screenNumber() const { return m_screenNumber; }
-    Window locateSystemTray() const;
-
-private:
-    Display *m_display;
-    int m_screenNumber;
-    Atom m_systemTraySelection;
-};
-
-QX11SystemTrayContext::QX11SystemTrayContext() : m_display(0), m_screenNumber(0), m_systemTraySelection(0)
-{
-    QScreen *screen = QGuiApplication::primaryScreen();
-    if (!screen) {
-        qWarning("%s: No screen.", Q_FUNC_INFO);
-        return;
-    }
-    void *displayV = QGuiApplication::platformNativeInterface()->nativeResourceForScreen(QByteArrayLiteral("display"), screen);
-    if (!displayV) {
-        qWarning("%s: Unable to obtain X11 display of primary screen.", Q_FUNC_INFO);
-        return;
-    }
-
-    m_display = static_cast<Display *>(displayV);
-
-    const QByteArray netSysTray = "_NET_SYSTEM_TRAY_S" + QByteArray::number(m_screenNumber);
-    m_systemTraySelection = XInternAtom(m_display, netSysTray.constData(), False);
-    if (!m_systemTraySelection) {
-        qWarning("%s: Unable to retrieve atom '%s'.", Q_FUNC_INFO, netSysTray.constData());
-        return;
-    }
+    return (unsigned long)QGuiApplication::platformNativeInterface()->nativeResourceForScreen(QByteArrayLiteral("traywindow"), QGuiApplication::primaryScreen());
 }
-
-Window QX11SystemTrayContext::locateSystemTray() const
-{
-    if (isValid())
-        return XGetSelectionOwner(m_display, m_systemTraySelection);
-    return 0;
-}
-
-QX11SystemTrayContext::~QX11SystemTrayContext()
-{
-}
-
-Q_GLOBAL_STATIC(QX11SystemTrayContext, qX11SystemTrayContext)
 
 // System tray widget. Could be replaced by a QWindow with
 // a backing store if it did not need tooltip handling.
 class QSystemTrayIconSys : public QWidget
 {
+    Q_OBJECT
 public:
     explicit QSystemTrayIconSys(QSystemTrayIcon *q);
 
@@ -144,62 +74,113 @@ public:
     QRect globalGeometry() const;
 
 protected:
-    virtual void mousePressEvent(QMouseEvent *ev);
-    virtual void mouseDoubleClickEvent(QMouseEvent *ev);
-    virtual bool event(QEvent *);
-    virtual void paintEvent(QPaintEvent *);
+    virtual void mousePressEvent(QMouseEvent *ev) Q_DECL_OVERRIDE;
+    virtual void mouseDoubleClickEvent(QMouseEvent *ev) Q_DECL_OVERRIDE;
+    virtual bool event(QEvent *) Q_DECL_OVERRIDE;
+    virtual void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE;
+    virtual void resizeEvent(QResizeEvent *) Q_DECL_OVERRIDE;
+    virtual void moveEvent(QMoveEvent *) Q_DECL_OVERRIDE;
+
+private slots:
+    void systemTrayWindowChanged(QScreen *screen);
 
 private:
+    bool addToTray();
+
     QSystemTrayIcon *q;
+    QPixmap background;
 };
 
-QSystemTrayIconSys::QSystemTrayIconSys(QSystemTrayIcon *qIn) :
-    q(qIn)
+QSystemTrayIconSys::QSystemTrayIconSys(QSystemTrayIcon *qIn)
+    : QWidget(0, Qt::Window | Qt::FramelessWindowHint | Qt::BypassWindowManagerHint)
+    , q(qIn)
 {
+    setObjectName(QStringLiteral("QSystemTrayIconSys"));
     setToolTip(q->toolTip());
-    QX11SystemTrayContext *context = qX11SystemTrayContext();
-    Q_ASSERT(context->isValid());
     setAttribute(Qt::WA_AlwaysShowToolTips, true);
-    setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_QuitOnClose, false);
-    setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     const QSize size(22, 22); // Gnome, standard size
     setGeometry(QRect(QPoint(0, 0), size));
     setMinimumSize(size);
+
+    // We need two different behaviors depending on whether the X11 visual for the system tray
+    // (a) exists and (b) supports an alpha channel, i.e. is 32 bits.
+    // If we have a visual that has an alpha channel, we can paint this widget with a transparent
+    // background and it will work.
+    // However, if there's no alpha channel visual, in order for transparent tray icons to work,
+    // we do not have a transparent background on the widget, but set the BackPixmap property of our
+    // window to ParentRelative (so that it inherits the background of its X11 parent window), call
+    // xcb_clear_region before painting (so that the inherited background is visible) and then grab
+    // the just-drawn background from the X11 server.
+    bool hasAlphaChannel = false;
+    QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
+                              "systrayVisualHasAlphaChannel", Qt::DirectConnection,
+                              Q_RETURN_ARG(bool, hasAlphaChannel));
+    setAttribute(Qt::WA_TranslucentBackground, hasAlphaChannel);
+    if (!hasAlphaChannel) {
+        createWinId();
+        QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
+                                    "setParentRelativeBackPixmap", Qt::DirectConnection,
+                                    Q_ARG(const QWindow *, windowHandle())
+                                 );
+
+        // XXX: This is actually required, but breaks things ("QWidget::paintEngine: Should no
+        // longer be called"). Why is this needed? When the widget is drawn, we use tricks to grab
+        // the tray icon's background from the server. If the tray icon isn't visible (because
+        // another window is on top of it), the trick fails and instead uses the content of that
+        // other window as the background.
+        // setAttribute(Qt::WA_PaintOnScreen);
+    }
+
+    addToTray();
+}
+
+bool QSystemTrayIconSys::addToTray()
+{
+    if (!locateSystemTray())
+        return false;
+
     createWinId();
     setMouseTracking(true);
 
-    Display *display = context->display();
-
-    // Request to be a tray window according to GNOME, NET WM Specification
-    static Atom netwm_tray_atom = XInternAtom(display, "_NET_SYSTEM_TRAY_OPCODE", False);
-    long l[5] = { CurrentTime, SYSTEM_TRAY_REQUEST_DOCK, static_cast<long>(winId()), 0, 0 };
-    XEvent ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.xclient.type = ClientMessage;
-    ev.xclient.window = context->locateSystemTray();
-    ev.xclient.message_type = netwm_tray_atom;
-    ev.xclient.format = 32;
-    memcpy((char *)&ev.xclient.data, (const char *) l, sizeof(l));
-    XSendEvent(display, ev.xclient.window, False, 0, &ev);
-    XSync(display, False);
+    bool requestResult = false;
+    if (!QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
+                                   "requestSystemTrayWindowDock", Qt::DirectConnection,
+                                   Q_RETURN_ARG(bool, requestResult),
+                                   Q_ARG(const QWindow *, windowHandle()))
+            || !requestResult) {
+        qWarning("requestSystemTrayWindowDock failed.");
+        return false;
+    }
+    if (!background.isNull())
+        background = QPixmap();
     show();
+    return true;
+}
+
+void QSystemTrayIconSys::systemTrayWindowChanged(QScreen *)
+{
+    if (locateSystemTray()) {
+        addToTray();
+    } else {
+        QBalloonTip::hideBalloon();
+        hide(); // still no luck
+        destroy();
+    }
 }
 
 QRect QSystemTrayIconSys::globalGeometry() const
 {
-    QX11SystemTrayContext *context = qX11SystemTrayContext();
-    ::Window dummy;
-    int x, y, rootX, rootY;
-    unsigned int width, height, border, depth;
-    // Use X11 API since we are parented on the tray, about which the QWindow does not know.
-    XGetGeometry(context->display(), winId(), &dummy, &x, &y, &width, &height, &border, &depth);
-    XTranslateCoordinates(context->display(), winId(),
-                          XRootWindow(context->display(), context->screenNumber()),
-                          x, y, &rootX, &rootY, &dummy);
-    return QRect(QPoint(rootX, rootY), QSize(width, height));
+    QRect result;
+    if (!QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
+                                   "systemTrayWindowGlobalGeometry", Qt::DirectConnection,
+                                   Q_RETURN_ARG(QRect, result),
+                                   Q_ARG(const QWindow *, windowHandle()))
+        || !result.isValid()) {
+        qWarning("systemTrayWindowGlobalGeometry failed.");
+    }
+    return result;
 }
-
 
 void QSystemTrayIconSys::mousePressEvent(QMouseEvent *ev)
 {
@@ -243,37 +224,74 @@ bool QSystemTrayIconSys::event(QEvent *e)
 
 void QSystemTrayIconSys::paintEvent(QPaintEvent *)
 {
-    // Note: Transparent pixels require a particular Visual which XCB
-    // currently does not support yet.
     const QRect rect(QPoint(0, 0), geometry().size());
     QPainter painter(this);
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.fillRect(rect, Qt::transparent);
+
+    // If we have Qt::WA_TranslucentBackground set, during widget creation
+    // we detected the systray visual supported an alpha channel
+    if (testAttribute(Qt::WA_TranslucentBackground)) {
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.fillRect(rect, Qt::transparent);
+    } else {
+        // clearRegion() was called on XEMBED_EMBEDDED_NOTIFY, so we hope that got done by now.
+        // Grab the tray background pixmap, before rendering the icon for the first time.
+        if (background.isNull()) {
+            background = QGuiApplication::primaryScreen()->grabWindow(winId(),
+                                0, 0, rect.size().width(), rect.size().height());
+        }
+        // Then paint over the icon area with the background before compositing the icon on top.
+        painter.drawPixmap(QPoint(0, 0), background);
+    }
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     q->icon().paint(&painter, rect);
 }
 
+void QSystemTrayIconSys::moveEvent(QMoveEvent *event)
+{
+    QWidget::moveEvent(event);
+    if (QBalloonTip::isBalloonVisible())
+        QBalloonTip::updateBalloonPosition(globalGeometry().center());
+}
+
+void QSystemTrayIconSys::resizeEvent(QResizeEvent *event)
+{
+    update();
+    QWidget::resizeEvent(event);
+    if (QBalloonTip::isBalloonVisible())
+        QBalloonTip::updateBalloonPosition(globalGeometry().center());
+}
 ////////////////////////////////////////////////////////////////////////////
 
 QSystemTrayIconPrivate::QSystemTrayIconPrivate()
     : sys(0),
+      qpa_sys(QGuiApplicationPrivate::platformTheme()->createPlatformSystemTrayIcon()),
       visible(false)
 {
 }
 
 QSystemTrayIconPrivate::~QSystemTrayIconPrivate()
 {
+    delete qpa_sys;
 }
 
 void QSystemTrayIconPrivate::install_sys()
 {
+    if (qpa_sys) {
+        install_sys_qpa();
+        return;
+    }
     Q_Q(QSystemTrayIcon);
-    if (!sys && qX11SystemTrayContext()->isValid())
+    if (!sys && locateSystemTray()) {
         sys = new QSystemTrayIconSys(q);
+        QObject::connect(QGuiApplication::platformNativeInterface(), SIGNAL(systemTrayWindowChanged(QScreen*)),
+                         sys, SLOT(systemTrayWindowChanged(QScreen*)));
+    }
 }
 
 QRect QSystemTrayIconPrivate::geometry_sys() const
 {
+    if (qpa_sys)
+        return geometry_sys_qpa();
     if (!sys)
         return QRect();
     return sys->globalGeometry();
@@ -281,6 +299,10 @@ QRect QSystemTrayIconPrivate::geometry_sys() const
 
 void QSystemTrayIconPrivate::remove_sys()
 {
+    if (qpa_sys) {
+        remove_sys_qpa();
+        return;
+    }
     if (!sys)
         return;
     QBalloonTip::hideBalloon();
@@ -291,17 +313,26 @@ void QSystemTrayIconPrivate::remove_sys()
 
 void QSystemTrayIconPrivate::updateIcon_sys()
 {
+    if (qpa_sys) {
+        updateIcon_sys_qpa();
+        return;
+    }
     if (sys)
         sys->updateIcon();
 }
 
 void QSystemTrayIconPrivate::updateMenu_sys()
 {
-
+    if (qpa_sys)
+        updateMenu_sys_qpa();
 }
 
 void QSystemTrayIconPrivate::updateToolTip_sys()
 {
+    if (qpa_sys) {
+        updateToolTip_sys_qpa();
+        return;
+    }
     if (!sys)
         return;
 #ifndef QT_NO_TOOLTIP
@@ -311,27 +342,43 @@ void QSystemTrayIconPrivate::updateToolTip_sys()
 
 bool QSystemTrayIconPrivate::isSystemTrayAvailable_sys()
 {
+    QScopedPointer<QPlatformSystemTrayIcon> sys(QGuiApplicationPrivate::platformTheme()->createPlatformSystemTrayIcon());
+    if (sys && sys->isSystemTrayAvailable())
+        return true;
+
+    // no QPlatformSystemTrayIcon so fall back to default xcb platform behavior
     const QString platform = QGuiApplication::platformName();
-    if (platform.compare(QStringLiteral("xcb"), Qt::CaseInsensitive) == 0)
-       return qX11SystemTrayContext()->locateSystemTray() != None;
+    if (platform.compare(QLatin1String("xcb"), Qt::CaseInsensitive) == 0)
+       return locateSystemTray();
     return false;
 }
 
 bool QSystemTrayIconPrivate::supportsMessages_sys()
 {
+    QScopedPointer<QPlatformSystemTrayIcon> sys(QGuiApplicationPrivate::platformTheme()->createPlatformSystemTrayIcon());
+    if (sys)
+        return sys->supportsMessages();
+
+    // no QPlatformSystemTrayIcon so fall back to default xcb platform behavior
     return true;
 }
 
-void QSystemTrayIconPrivate::showMessage_sys(const QString &message, const QString &title,
+void QSystemTrayIconPrivate::showMessage_sys(const QString &title, const QString &message,
                                    QSystemTrayIcon::MessageIcon icon, int msecs)
 {
+    if (qpa_sys) {
+        showMessage_sys_qpa(title, message, icon, msecs);
+        return;
+    }
     if (!sys)
         return;
-    const QPoint g = sys->globalGeometry().topLeft();
-    QBalloonTip::showBalloon(icon, message, title, sys->systemTrayIcon(),
-                             QPoint(g.x() + sys->width()/2, g.y() + sys->height()/2),
+    QBalloonTip::showBalloon(icon, title, message, sys->systemTrayIcon(),
+                             sys->globalGeometry().center(),
                              msecs);
 }
 
 QT_END_NAMESPACE
+
+#include "qsystemtrayicon_x11.moc"
+
 #endif //QT_NO_SYSTEMTRAYICON

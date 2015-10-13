@@ -8,6 +8,7 @@ SUBPROGRAMS = \
      benchliboptions \
      benchlibtickcounter \
      benchlibwalltime \
+     blacklisted \
      cmptest \
      commandlinedata \
      counting \
@@ -41,5 +42,6 @@ SUBPROGRAMS = \
      subtest \
      verbose1 \
      verbose2 \
+     verifyexceptionthrown \
      warnings \
      xunit

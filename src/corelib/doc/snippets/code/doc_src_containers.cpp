@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -273,3 +273,33 @@ QString onlyLetters(const QString &in)
     return out;
 }
 //! [23]
+
+//! [24]
+QVector<int> a, b;
+a.resize(100000); // make a big vector filled with 0.
+
+QVector<int>::iterator i = a.begin();
+// WRONG way of using the iterator i:
+b = a;
+/*
+    Now we should be careful with iterator i since it will point to shared data
+    If we do *i = 4 then we would change the shared instance (both vectors)
+    The behavior differs from STL containers. Avoid doing such things in Qt.
+*/
+
+a[0] = 5;
+/*
+    Container a is now detached from the shared data,
+    and even though i was an iterator from the container a, it now works as an iterator in b.
+    Here the situation is that (*i) == 0.
+*/
+
+b.clear(); // Now the iterator i is completely invalid.
+
+int j = *i; // Undefined behavior!
+/*
+    The data from b (which i pointed to) is gone.
+    This would be well-defined with STL containers (and (*i) == 5),
+    but with QVector this is likely to crash.
+*/
+//! [24]

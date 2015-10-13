@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDBus module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -96,7 +88,7 @@ QDBusAbstractInterfacePrivate::QDBusAbstractInterfacePrivate(const QString &serv
 
     if (!connection.isConnected()) {
         lastError = QDBusError(QDBusError::Disconnected,
-                               QLatin1String("Not connected to D-Bus server"));
+                               QDBusUtil::disconnectedErrorMessage());
     } else if (!service.isEmpty()) {
         currentOwner = connectionPrivate()->getNameOwner(service); // verify the name owner
         if (currentOwner.isEmpty()) {
@@ -116,17 +108,16 @@ bool QDBusAbstractInterfacePrivate::canMakeCalls() const
     return true;
 }
 
-void QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, QVariant &where) const
+bool QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, void *returnValuePtr) const
 {
-    if (!isValid || !canMakeCalls()) {   // can't make calls
-        where.clear();
-        return;
-    }
+    if (!isValid || !canMakeCalls())   // can't make calls
+        return false;
 
+    const int type = mp.userType();
     // is this metatype registered?
     const char *expectedSignature = "";
     if (int(mp.type()) != QMetaType::QVariant) {
-        expectedSignature = QDBusMetaType::typeToSignature(where.userType());
+        expectedSignature = QDBusMetaType::typeToSignature(type);
         if (expectedSignature == 0) {
             qWarning("QDBusAbstractInterface: type %s must be registered with Qt D-Bus before it can be "
                      "used to read property %s.%s",
@@ -134,41 +125,43 @@ void QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, QVariant &
             lastError = QDBusError(QDBusError::Failed,
                                    QString::fromLatin1("Unregistered type %1 cannot be handled")
                                    .arg(QLatin1String(mp.typeName())));
-            where.clear();
-            return;
+            return false;
         }
     }
 
     // try to read this property
     QDBusMessage msg = QDBusMessage::createMethodCall(service, path,
-                                                      QLatin1String(DBUS_INTERFACE_PROPERTIES),
-                                                      QLatin1String("Get"));
+                                                      QDBusUtil::dbusInterfaceProperties(),
+                                                      QStringLiteral("Get"));
     QDBusMessagePrivate::setParametersValidated(msg, true);
     msg << interface << QString::fromUtf8(mp.name());
     QDBusMessage reply = connection.call(msg, QDBus::Block, timeout);
 
     if (reply.type() != QDBusMessage::ReplyMessage) {
         lastError = QDBusError(reply);
-        where.clear();
-        return;
+        return false;
     }
     if (reply.signature() != QLatin1String("v")) {
         QString errmsg = QLatin1String("Invalid signature `%1' in return from call to "
                                        DBUS_INTERFACE_PROPERTIES);
-        lastError = QDBusError(QDBusError::InvalidSignature, errmsg.arg(reply.signature()));
-        where.clear();
-        return;
+        lastError = QDBusError(QDBusError::InvalidSignature, qMove(errmsg).arg(reply.signature()));
+        return false;
     }
 
     QByteArray foundSignature;
     const char *foundType = 0;
     QVariant value = qvariant_cast<QDBusVariant>(reply.arguments().at(0)).variant();
 
-    if (value.userType() == where.userType() || mp.userType() == QMetaType::QVariant
+    if (value.userType() == type || type == QMetaType::QVariant
         || (expectedSignature[0] == 'v' && expectedSignature[1] == '\0')) {
         // simple match
-        where = value;
-        return;
+        if (type == QMetaType::QVariant) {
+            *reinterpret_cast<QVariant*>(returnValuePtr) = value;
+        } else {
+            QMetaType::destruct(type, returnValuePtr);
+            QMetaType::construct(type, returnValuePtr, value.constData());
+        }
+        return true;
     }
 
     if (value.userType() == qMetaTypeId<QDBusArgument>()) {
@@ -178,8 +171,7 @@ void QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, QVariant &
         foundSignature = arg.currentSignature().toLatin1();
         if (foundSignature == expectedSignature) {
             // signatures match, we can demarshall
-            QDBusMetaType::demarshall(arg, where.userType(), where.data());
-            return;
+            return QDBusMetaType::demarshall(arg, type, returnValuePtr);
         }
     } else {
         foundType = value.typeName();
@@ -196,8 +188,7 @@ void QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, QVariant &
                                       QString::fromUtf8(mp.name()),
                                       QString::fromLatin1(mp.typeName()),
                                       QString::fromLatin1(expectedSignature)));
-    where.clear();
-    return;
+    return false;
 }
 
 bool QDBusAbstractInterfacePrivate::setProperty(const QMetaProperty &mp, const QVariant &value)
@@ -207,8 +198,8 @@ bool QDBusAbstractInterfacePrivate::setProperty(const QMetaProperty &mp, const Q
 
     // send the value
     QDBusMessage msg = QDBusMessage::createMethodCall(service, path,
-                                                QLatin1String(DBUS_INTERFACE_PROPERTIES),
-                                                QLatin1String("Set"));
+                                                      QDBusUtil::dbusInterfaceProperties(),
+                                                      QStringLiteral("Set"));
     QDBusMessagePrivate::setParametersValidated(msg, true);
     msg << interface << QString::fromUtf8(mp.name()) << QVariant::fromValue(QDBusVariant(value));
     QDBusMessage reply = connection.call(msg, QDBus::Block, timeout);
@@ -225,6 +216,7 @@ void QDBusAbstractInterfacePrivate::_q_serviceOwnerChanged(const QString &name,
                                                            const QString &newOwner)
 {
     Q_UNUSED(oldOwner);
+    Q_UNUSED(name);
     //qDebug() << "QDBusAbstractInterfacePrivate serviceOwnerChanged" << name << oldOwner << newOwner;
     if (name == service) {
         currentOwner = newOwner;
@@ -246,13 +238,22 @@ int QDBusAbstractInterfaceBase::qt_metacall(QMetaObject::Call _c, int _id, void 
     if (_c == QMetaObject::ReadProperty || _c == QMetaObject::WriteProperty) {
         QMetaProperty mp = metaObject()->property(saved_id);
         int &status = *reinterpret_cast<int *>(_a[2]);
-        QVariant &variant = *reinterpret_cast<QVariant *>(_a[1]);
 
         if (_c == QMetaObject::WriteProperty) {
-            status = d_func()->setProperty(mp, variant) ? 1 : 0;
+            QVariant value;
+            if (mp.userType() == qMetaTypeId<QDBusVariant>())
+                value = reinterpret_cast<const QDBusVariant*>(_a[0])->variant();
+            else
+                value = QVariant(mp.userType(), _a[0]);
+            status = d_func()->setProperty(mp, value) ? 1 : 0;
         } else {
-            d_func()->property(mp, variant);
-            status = variant.isValid() ? 1 : 0;
+            bool readStatus = d_func()->property(mp, _a[0]);
+            // Caller supports QVariant returns? Then we can also report errors
+            // by storing an invalid variant.
+            if (!readStatus && _a[1]) {
+                status = 0;
+                reinterpret_cast<QVariant*>(_a[1])->clear();
+            }
         }
         _id = -1;
     }
@@ -288,11 +289,12 @@ QDBusAbstractInterface::QDBusAbstractInterface(QDBusAbstractInterfacePrivate &d,
     if (d.isValid &&
         d.connection.isConnected()
         && !d.service.isEmpty()
-        && !d.service.startsWith(QLatin1Char(':')))
-        d_func()->connection.connect(QLatin1String(DBUS_SERVICE_DBUS), // service
+        && !d.service.startsWith(QLatin1Char(':'))
+        && d.connectionPrivate()->mode != QDBusConnectionPrivate::PeerMode)
+        d_func()->connection.connect(QDBusUtil::dbusService(), // service
                                      QString(), // path
-                                     QLatin1String(DBUS_INTERFACE_DBUS), // interface
-                                     QLatin1String("NameOwnerChanged"),
+                                     QDBusUtil::dbusInterface(), // interface
+                                     QDBusUtil::nameOwnerChanged(),
                                      QStringList() << d.service,
                                      QString(), // signature
                                      this, SLOT(_q_serviceOwnerChanged(QString,QString,QString)));
@@ -313,11 +315,12 @@ QDBusAbstractInterface::QDBusAbstractInterface(const QString &service, const QSt
     if (d_func()->isValid &&
         d_func()->connection.isConnected()
         && !service.isEmpty()
-        && !service.startsWith(QLatin1Char(':')))
-        d_func()->connection.connect(QLatin1String(DBUS_SERVICE_DBUS), // service
+        && !service.startsWith(QLatin1Char(':'))
+        && d_func()->connectionPrivate()->mode != QDBusConnectionPrivate::PeerMode)
+        d_func()->connection.connect(QDBusUtil::dbusService(), // service
                                      QString(), // path
-                                     QLatin1String(DBUS_INTERFACE_DBUS), // interface
-                                     QLatin1String("NameOwnerChanged"),
+                                     QDBusUtil::dbusInterface(), // interface
+                                     QDBusUtil::nameOwnerChanged(),
                                      QStringList() << service,
                                      QString(), //signature
                                      this, SLOT(_q_serviceOwnerChanged(QString,QString,QString)));
@@ -331,7 +334,7 @@ QDBusAbstractInterface::~QDBusAbstractInterface()
 }
 
 /*!
-    Returns true if this is a valid reference to a remote object. It returns false if
+    Returns \c true if this is a valid reference to a remote object. It returns \c false if
     there was an error during the creation of this interface (for instance, if the remote
     application does not exist).
 
@@ -340,7 +343,13 @@ QDBusAbstractInterface::~QDBusAbstractInterface()
 */
 bool QDBusAbstractInterface::isValid() const
 {
-    return !d_func()->currentOwner.isEmpty();
+    Q_D(const QDBusAbstractInterface);
+    /* We don't retrieve the owner name for peer connections */
+    if (d->connectionPrivate() && d->connectionPrivate()->mode == QDBusConnectionPrivate::PeerMode) {
+        return d->isValid;
+    } else {
+        return !d->currentOwner.isEmpty();
+    }
 }
 
 /*!
@@ -509,10 +518,10 @@ QDBusPendingCall QDBusAbstractInterface::asyncCallWithArgumentList(const QString
     object \a receiver. If an error occurs, the \a errorMethod
     on object \a receiver is called instead.
 
-    This function returns true if the queueing succeeds. It does
+    This function returns \c true if the queueing succeeds. It does
     not indicate that the executed call succeeded. If it fails,
     the \a errorMethod is called. If the queueing failed, this
-    function returns false and no slot will be called.
+    function returns \c false and no slot will be called.
 
     The \a returnMethod must have as its parameters the types returned
     by the function call. Optionally, it may have a QDBusMessage
@@ -559,7 +568,7 @@ bool QDBusAbstractInterface::callWithCallback(const QString &method,
     the remote function or any errors emitted by it are delivered
     to the \a slot slot on object \a receiver.
 
-    This function returns true if the queueing succeeded: it does
+    This function returns \c true if the queueing succeeded: it does
     not indicate that the call succeeded. If it failed, the slot
     will be called with an error message. lastError() will not be
     set under those circumstances.

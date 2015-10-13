@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +33,12 @@
 
 #include "qnetworkconfiguration.h"
 #include "qnetworkconfiguration_p.h"
+#include <QDebug>
+
+#ifdef Q_OS_BLACKBERRY
+#include "private/qcore_unix_p.h" // qt_safe_open
+#include <sys/pps.h>
+#endif // Q_OS_BLACKBERRY
 
 QT_BEGIN_NAMESPACE
 
@@ -85,7 +83,7 @@ QT_BEGIN_NAMESPACE
     \l {QNetworkSession}{session} is \l {QNetworkSession::open()}{opened}. Not all platforms
     support the concept of a user choice configuration.
 
-    \section1 Configuration states
+    \section1 Configuration States
 
     The list of available configurations can be obtained via
     QNetworkConfigurationManager::allConfigurations(). A configuration can have
@@ -193,12 +191,87 @@ QT_BEGIN_NAMESPACE
     \value BearerEthernet   The configuration is for an Ethernet interfaces.
     \value BearerWLAN       The configuration is for a Wireless LAN interface.
     \value Bearer2G         The configuration is for a CSD, GPRS, HSCSD, EDGE or cdmaOne interface.
+    \value Bearer3G         The configuration is for a 3G interface.
+    \value Bearer4G         The configuration is for a 4G interface.
     \value BearerCDMA2000   The configuration is for CDMA interface.
     \value BearerWCDMA      The configuration is for W-CDMA/UMTS interface.
     \value BearerHSPA       The configuration is for High Speed Packet Access (HSPA) interface.
     \value BearerBluetooth  The configuration is for a Bluetooth interface.
     \value BearerWiMAX      The configuration is for a WiMAX interface.
+    \value BearerEVDO       The configuration is for an EVDO (3G) interface.
+    \value BearerLTE        The configuration is for a LTE (4G) interface.
 */
+
+#ifdef Q_OS_BLACKBERRY
+static const char cellularStatusFile[] = "/pps/services/radioctrl/modem0/status_public";
+
+static QNetworkConfiguration::BearerType cellularStatus()
+{
+    QNetworkConfiguration::BearerType ret = QNetworkConfiguration::BearerUnknown;
+
+    int cellularStatusFD;
+    if ((cellularStatusFD = qt_safe_open(cellularStatusFile, O_RDONLY)) == -1) {
+        qWarning() << Q_FUNC_INFO << "failed to open" << cellularStatusFile;
+        return ret;
+    }
+    char buf[2048];
+    if (qt_safe_read(cellularStatusFD, &buf, sizeof(buf)) == -1) {
+        qWarning() << Q_FUNC_INFO << "read from PPS file failed:" << strerror(errno);
+        qt_safe_close(cellularStatusFD);
+        return ret;
+    }
+    pps_decoder_t ppsDecoder;
+    if (pps_decoder_initialize(&ppsDecoder, buf) != PPS_DECODER_OK) {
+        qWarning() << Q_FUNC_INFO << "failed to initialize PPS decoder";
+        qt_safe_close(cellularStatusFD);
+        return ret;
+    }
+    pps_decoder_error_t err;
+    if ((err = pps_decoder_push(&ppsDecoder, 0)) != PPS_DECODER_OK) {
+        qWarning() << Q_FUNC_INFO << "pps_decoder_push failed" << err;
+        pps_decoder_cleanup(&ppsDecoder);
+        qt_safe_close(cellularStatusFD);
+        return ret;
+    }
+    if (!pps_decoder_is_integer(&ppsDecoder, "network_technology")) {
+        qWarning() << Q_FUNC_INFO << "field has not the expected data type";
+        pps_decoder_cleanup(&ppsDecoder);
+        qt_safe_close(cellularStatusFD);
+        return ret;
+    }
+    int type;
+    if (!pps_decoder_get_int(&ppsDecoder, "network_technology", &type)
+            == PPS_DECODER_OK) {
+        qWarning() << Q_FUNC_INFO << "could not read bearer type from PPS";
+        pps_decoder_cleanup(&ppsDecoder);
+        qt_safe_close(cellularStatusFD);
+        return ret;
+    }
+    switch (type) {
+    case 0: // 0 == NONE
+        break; // unhandled
+    case 1: // fallthrough, 1 == GSM
+    case 4: // 4 == CDMA_1X
+        ret = QNetworkConfiguration::Bearer2G;
+        break;
+    case 2: // 2 == UMTS
+        ret = QNetworkConfiguration::BearerWCDMA;
+        break;
+    case 8: // 8 == EVDO
+        ret = QNetworkConfiguration::BearerEVDO;
+        break;
+    case 16: // 16 == LTE
+        ret = QNetworkConfiguration::BearerLTE;
+        break;
+    default:
+        qWarning() << Q_FUNC_INFO << "unhandled bearer type" << type;
+        break;
+    }
+    pps_decoder_cleanup(&ppsDecoder);
+    qt_safe_close(cellularStatusFD);
+    return ret;
+}
+#endif // Q_OS_BLACKBERRY
 
 /*!
     Constructs an invalid configuration object.
@@ -243,8 +316,8 @@ QNetworkConfiguration &QNetworkConfiguration::operator=(const QNetworkConfigurat
 */
 
 /*!
-    Returns true, if this configuration is the same as the \a other
-    configuration given; otherwise returns false.
+    Returns \c true, if this configuration is the same as the \a other
+    configuration given; otherwise returns \c false.
 */
 bool QNetworkConfiguration::operator==(const QNetworkConfiguration &other) const
 {
@@ -254,8 +327,8 @@ bool QNetworkConfiguration::operator==(const QNetworkConfiguration &other) const
 /*!
     \fn bool QNetworkConfiguration::operator!=(const QNetworkConfiguration &other) const
 
-    Returns true if this configuration is not the same as the \a other
-    configuration given; otherwise returns false.
+    Returns \c true if this configuration is not the same as the \a other
+    configuration given; otherwise returns \c false.
 */
 
 /*!
@@ -304,7 +377,7 @@ QNetworkConfiguration::Type QNetworkConfiguration::type() const
 }
 
 /*!
-    Returns true if this QNetworkConfiguration object is valid.
+    Returns \c true if this QNetworkConfiguration object is valid.
     A configuration may become invalid if the user deletes the configuration or
     the configuration was default-constructed.
 
@@ -351,7 +424,7 @@ QNetworkConfiguration::Purpose QNetworkConfiguration::purpose() const
 }
 
 /*!
-    Returns true if this configuration supports roaming; otherwise false.
+    Returns \c true if this configuration supports roaming; otherwise false.
 */
 bool QNetworkConfiguration::isRoamingAvailable() const
 {
@@ -412,6 +485,8 @@ QList<QNetworkConfiguration> QNetworkConfiguration::children() const
     function can be used to retrieve a textural type name for the bearer.
 
     An invalid network configuration always returns the BearerUnknown value.
+
+    \sa bearerTypeName(), bearerTypeFamily()
 */
 QNetworkConfiguration::BearerType QNetworkConfiguration::bearerType() const
 {
@@ -420,9 +495,73 @@ QNetworkConfiguration::BearerType QNetworkConfiguration::bearerType() const
 
     QMutexLocker locker(&d->mutex);
 
+#ifdef Q_OS_BLACKBERRY
+    // for cellular configurations, we need to determine the exact
+    // type right now, because it might have changed after the last scan
+    if (d->bearerType == QNetworkConfiguration::Bearer2G) {
+        QNetworkConfiguration::BearerType type = cellularStatus();
+        // if reading the status failed for some reason, just
+        // fall back to 2G
+        return (type == QNetworkConfiguration::BearerUnknown)
+                ? QNetworkConfiguration::Bearer2G : type;
+    }
+#endif // Q_OS_BLACKBERRY
+
     return d->bearerType;
 }
 
+/*!
+    \since 5.2
+
+    Returns the bearer type family used by this network configuration.
+    The following table lists how bearerType() values map to
+    bearerTypeFamily() values:
+
+    \table
+        \header
+            \li bearer type
+            \li bearer type family
+        \row
+            \li BearerUnknown, Bearer2G, BearerEthernet, BearerWLAN,
+            BearerBluetooth
+            \li (same type)
+        \row
+            \li BearerCDMA2000, BearerEVDO, BearerWCDMA, BearerHSPA, Bearer3G
+            \li Bearer3G
+        \row
+            \li BearerWiMAX, BearerLTE, Bearer4G
+            \li Bearer4G
+    \endtable
+
+    An invalid network configuration always returns the BearerUnknown value.
+
+    \sa bearerType(), bearerTypeName()
+*/
+QNetworkConfiguration::BearerType QNetworkConfiguration::bearerTypeFamily() const
+{
+    QNetworkConfiguration::BearerType type = bearerType();
+    switch (type) {
+    case QNetworkConfiguration::BearerUnknown: // fallthrough
+    case QNetworkConfiguration::Bearer2G: // fallthrough
+    case QNetworkConfiguration::BearerEthernet: // fallthrough
+    case QNetworkConfiguration::BearerWLAN: // fallthrough
+    case QNetworkConfiguration::BearerBluetooth:
+        return type;
+    case QNetworkConfiguration::BearerCDMA2000: // fallthrough
+    case QNetworkConfiguration::BearerEVDO: // fallthrough
+    case QNetworkConfiguration::BearerWCDMA: // fallthrough
+    case QNetworkConfiguration::BearerHSPA: // fallthrough
+    case QNetworkConfiguration::Bearer3G:
+        return QNetworkConfiguration::Bearer3G;
+    case QNetworkConfiguration::BearerWiMAX: // fallthrough
+    case QNetworkConfiguration::BearerLTE: // fallthrough
+    case QNetworkConfiguration::Bearer4G:
+        return QNetworkConfiguration::Bearer4G;
+    default:
+        qWarning() << "unknown bearer type" << type;
+        return QNetworkConfiguration::BearerUnknown;
+    }
+}
 /*!
     Returns the type of bearer used by this network configuration as a string.
 
@@ -437,7 +576,6 @@ QNetworkConfiguration::BearerType QNetworkConfiguration::bearerType() const
             \li Value
         \row
             \li BearerUnknown
-            \li
             \li The session is based on an unknown or unspecified bearer type. The value of the
                string returned describes the bearer type.
         \row
@@ -449,6 +587,12 @@ QNetworkConfiguration::BearerType QNetworkConfiguration::bearerType() const
         \row
             \li Bearer2G
             \li 2G
+        \row
+            \li Bearer3G
+            \li 3G
+        \row
+            \li Bearer4G
+            \li 4G
         \row
             \li BearerCDMA2000
             \li CDMA2000
@@ -464,13 +608,19 @@ QNetworkConfiguration::BearerType QNetworkConfiguration::bearerType() const
         \row
             \li BearerWiMAX
             \li WiMAX
+        \row
+            \li BearerEVDO
+            \li EVDO
+        \row
+            \li BearerLTE
+            \li LTE
     \endtable
 
     This function returns an empty string if this is an invalid configuration, a network
     configuration of type \l QNetworkConfiguration::ServiceNetwork or
     \l QNetworkConfiguration::UserChoice.
 
-    \sa bearerType()
+    \sa bearerType(), bearerTypeFamily()
 */
 QString QNetworkConfiguration::bearerTypeName() const
 {
@@ -489,7 +639,25 @@ QString QNetworkConfiguration::bearerTypeName() const
     case BearerWLAN:
         return QStringLiteral("WLAN");
     case Bearer2G:
+#ifdef Q_OS_BLACKBERRY
+    {
+        // for cellular configurations, we need to determine the exact
+        // type right now, because it might have changed after the last scan
+        QNetworkConfiguration::BearerType type = cellularStatus();
+        if (type == QNetworkConfiguration::BearerWCDMA) {
+            return QStringLiteral("WCDMA");
+        } else if (type == QNetworkConfiguration::BearerEVDO) {
+            return QStringLiteral("EVDO");
+        }else if (type == QNetworkConfiguration::BearerLTE) {
+            return QStringLiteral("LTE");
+        }
+    }
+#endif // Q_OS_BLACKBERRY
         return QStringLiteral("2G");
+    case Bearer3G:
+        return QStringLiteral("3G");
+    case Bearer4G:
+        return QStringLiteral("4G");
     case BearerCDMA2000:
         return QStringLiteral("CDMA2000");
     case BearerWCDMA:
@@ -500,6 +668,10 @@ QString QNetworkConfiguration::bearerTypeName() const
         return QStringLiteral("Bluetooth");
     case BearerWiMAX:
         return QStringLiteral("WiMAX");
+    case BearerEVDO:
+        return QStringLiteral("EVDO");
+    case BearerLTE:
+        return QStringLiteral("LTE");
     case BearerUnknown:
         break;
     }

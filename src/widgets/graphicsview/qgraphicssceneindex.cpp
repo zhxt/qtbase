@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -67,12 +59,13 @@
 
 QT_BEGIN_NAMESPACE
 
-class QGraphicsSceneIndexRectIntersector : public QGraphicsSceneIndexIntersector
-{
-public:
-    bool intersect(const QGraphicsItem *item, const QRectF &exposeRect, Qt::ItemSelectionMode mode,
-                   const QTransform &deviceTransform) const
+namespace QtPrivate { // just to keep indentation of the following functions at the same level
+
+    static bool intersect_rect(const QGraphicsItem *item, const QRectF &exposeRect, Qt::ItemSelectionMode mode,
+                               const QTransform &deviceTransform, const void *intersectData)
     {
+        const QRectF sceneRect = *static_cast<const QRectF *>(intersectData);
+
         QRectF brect = item->boundingRect();
         _q_adjustRect(&brect);
 
@@ -117,15 +110,11 @@ public:
         return keep;
     }
 
-    QRectF sceneRect;
-};
-
-class QGraphicsSceneIndexPointIntersector : public QGraphicsSceneIndexIntersector
-{
-public:
-    bool intersect(const QGraphicsItem *item, const QRectF &exposeRect, Qt::ItemSelectionMode mode,
-                   const QTransform &deviceTransform) const
+    static bool intersect_point(const QGraphicsItem *item, const QRectF &exposeRect, Qt::ItemSelectionMode mode,
+                                const QTransform &deviceTransform, const void *intersectData)
     {
+        const QPointF scenePoint = *static_cast<const QPointF *>(intersectData);
+
         QRectF brect = item->boundingRect();
         _q_adjustRect(&brect);
 
@@ -151,7 +140,7 @@ public:
                                                         itemd->sceneTransform.dy())
                                      : itemd->sceneTransform.mapRect(brect);
             keep = sceneBoundingRect.intersects(QRectF(scenePoint, QSizeF(1, 1)));
-            if (keep) {
+            if (keep && (mode == Qt::ContainsItemShape || mode == Qt::IntersectsItemShape)) {
                 QPointF p = itemd->sceneTransformTranslateOnly
                           ? QPointF(scenePoint.x() - itemd->sceneTransform.dx(),
                                     scenePoint.y() - itemd->sceneTransform.dy())
@@ -163,15 +152,11 @@ public:
         return keep;
     }
 
-    QPointF scenePoint;
-};
-
-class QGraphicsSceneIndexPathIntersector : public QGraphicsSceneIndexIntersector
-{
-public:
-    bool intersect(const QGraphicsItem *item, const QRectF &exposeRect, Qt::ItemSelectionMode mode,
-                   const QTransform &deviceTransform) const
+    static bool intersect_path(const QGraphicsItem *item, const QRectF &exposeRect, Qt::ItemSelectionMode mode,
+                               const QTransform &deviceTransform, const void *intersectData)
     {
+        const QPainterPath scenePath = *static_cast<const QPainterPath *>(intersectData);
+
         QRectF brect = item->boundingRect();
         _q_adjustRect(&brect);
 
@@ -211,17 +196,13 @@ public:
         return keep;
     }
 
-    QPainterPath scenePath;
-};
+} // namespace QtPrivate
 
 /*!
     Constructs a private scene index.
 */
 QGraphicsSceneIndexPrivate::QGraphicsSceneIndexPrivate(QGraphicsScene *scene) : scene(scene)
 {
-    pointIntersector = new QGraphicsSceneIndexPointIntersector;
-    rectIntersector = new QGraphicsSceneIndexRectIntersector;
-    pathIntersector =  new QGraphicsSceneIndexPathIntersector;
 }
 
 /*!
@@ -229,9 +210,6 @@ QGraphicsSceneIndexPrivate::QGraphicsSceneIndexPrivate(QGraphicsScene *scene) : 
 */
 QGraphicsSceneIndexPrivate::~QGraphicsSceneIndexPrivate()
 {
-    delete pointIntersector;
-    delete rectIntersector;
-    delete pathIntersector;
 }
 
 /*!
@@ -268,11 +246,11 @@ bool QGraphicsSceneIndexPrivate::itemCollidesWithPath(const QGraphicsItem *item,
     This function returns the items in ascending order.
 */
 void QGraphicsSceneIndexPrivate::recursive_items_helper(QGraphicsItem *item, QRectF exposeRect,
-                                                        QGraphicsSceneIndexIntersector *intersector,
+                                                        QGraphicsSceneIndexIntersector intersect,
                                                         QList<QGraphicsItem *> *items,
                                                         const QTransform &viewTransform,
                                                         Qt::ItemSelectionMode mode,
-                                                        qreal parentOpacity) const
+                                                        qreal parentOpacity, const void *intersectData) const
 {
     Q_ASSERT(item);
     if (!item->d_ptr->visible)
@@ -292,10 +270,11 @@ void QGraphicsSceneIndexPrivate::recursive_items_helper(QGraphicsItem *item, QRe
         Q_ASSERT(!item->d_ptr->dirtySceneTransform);
     }
 
-    const bool itemClipsChildrenToShape = (item->d_ptr->flags & QGraphicsItem::ItemClipsChildrenToShape);
+    const bool itemClipsChildrenToShape = (item->d_ptr->flags & QGraphicsItem::ItemClipsChildrenToShape
+                                           || item->d_ptr->flags & QGraphicsItem::ItemContainsChildrenInShape);
     bool processItem = !itemIsFullyTransparent;
     if (processItem) {
-        processItem = intersector->intersect(item, exposeRect, mode, viewTransform);
+        processItem = intersect(item, exposeRect, mode, viewTransform, intersectData);
         if (!processItem && (!itemHasChildren || itemClipsChildrenToShape)) {
             if (wasDirtyParentSceneTransform)
                 item->d_ptr->invalidateChildrenSceneTransform();
@@ -326,8 +305,8 @@ void QGraphicsSceneIndexPrivate::recursive_items_helper(QGraphicsItem *item, QRe
                 break;
             if (itemIsFullyTransparent && !(child->d_ptr->flags & QGraphicsItem::ItemIgnoresParentOpacity))
                 continue;
-            recursive_items_helper(child, exposeRect, intersector, items, viewTransform,
-                                   mode, opacity);
+            recursive_items_helper(child, exposeRect, intersect, items, viewTransform,
+                                   mode, opacity, intersectData);
         }
     }
 
@@ -343,8 +322,8 @@ void QGraphicsSceneIndexPrivate::recursive_items_helper(QGraphicsItem *item, QRe
                 child->d_ptr->dirtySceneTransform = 1;
             if (itemIsFullyTransparent && !(child->d_ptr->flags & QGraphicsItem::ItemIgnoresParentOpacity))
                 continue;
-            recursive_items_helper(child, exposeRect, intersector, items, viewTransform,
-                                   mode, opacity);
+            recursive_items_helper(child, exposeRect, intersect, items, viewTransform,
+                                   mode, opacity, intersectData);
         }
     }
 }
@@ -419,8 +398,7 @@ QList<QGraphicsItem *> QGraphicsSceneIndex::items(const QPointF &pos, Qt::ItemSe
 
     Q_D(const QGraphicsSceneIndex);
     QList<QGraphicsItem *> itemList;
-    d->pointIntersector->scenePoint = pos;
-    d->items_helper(QRectF(pos, QSizeF(1, 1)), d->pointIntersector, &itemList, deviceTransform, mode, order);
+    d->items_helper(QRectF(pos, QSizeF(1, 1)), &QtPrivate::intersect_point, &itemList, deviceTransform, mode, order, &pos);
     return itemList;
 }
 
@@ -453,8 +431,7 @@ QList<QGraphicsItem *> QGraphicsSceneIndex::items(const QRectF &rect, Qt::ItemSe
     QRectF exposeRect = rect;
     _q_adjustRect(&exposeRect);
     QList<QGraphicsItem *> itemList;
-    d->rectIntersector->sceneRect = rect;
-    d->items_helper(exposeRect, d->rectIntersector, &itemList, deviceTransform, mode, order);
+    d->items_helper(exposeRect, &QtPrivate::intersect_rect, &itemList, deviceTransform, mode, order, &rect);
     return itemList;
 }
 
@@ -489,8 +466,7 @@ QList<QGraphicsItem *> QGraphicsSceneIndex::items(const QPolygonF &polygon, Qt::
     _q_adjustRect(&exposeRect);
     QPainterPath path;
     path.addPolygon(polygon);
-    d->pathIntersector->scenePath = path;
-    d->items_helper(exposeRect, d->pathIntersector, &itemList, deviceTransform, mode, order);
+    d->items_helper(exposeRect, &QtPrivate::intersect_path, &itemList, deviceTransform, mode, order, &path);
     return itemList;
 }
 
@@ -523,8 +499,7 @@ QList<QGraphicsItem *> QGraphicsSceneIndex::items(const QPainterPath &path, Qt::
     QList<QGraphicsItem *> itemList;
     QRectF exposeRect = path.controlPointRect();
     _q_adjustRect(&exposeRect);
-    d->pathIntersector->scenePath = path;
-    d->items_helper(exposeRect, d->pathIntersector, &itemList, deviceTransform, mode, order);
+    d->items_helper(exposeRect, &QtPrivate::intersect_path, &itemList, deviceTransform, mode, order, &path);
     return itemList;
 }
 

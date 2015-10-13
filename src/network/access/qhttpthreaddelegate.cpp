@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -60,6 +52,10 @@ static QNetworkReply::NetworkError statusCodeFromHttp(int httpStatusCode, const 
     QNetworkReply::NetworkError code;
     // we've got an error
     switch (httpStatusCode) {
+    case 400:               // Bad Request
+        code = QNetworkReply::ProtocolInvalidOperationError;
+        break;
+
     case 401:               // Authorization required
         code = QNetworkReply::AuthenticationRequiredError;
         break;
@@ -80,15 +76,34 @@ static QNetworkReply::NetworkError statusCodeFromHttp(int httpStatusCode, const 
         code = QNetworkReply::ProxyAuthenticationRequiredError;
         break;
 
+    case 409:               // Resource Conflict
+        code = QNetworkReply::ContentConflictError;
+        break;
+
+    case 410:               // Content no longer available
+        code = QNetworkReply::ContentGoneError;
+        break;
+
     case 418:               // I'm a teapot
         code = QNetworkReply::ProtocolInvalidOperationError;
         break;
 
+    case 500:               // Internal Server Error
+        code = QNetworkReply::InternalServerError;
+        break;
+
+    case 501:               // Server does not support this functionality
+        code = QNetworkReply::OperationNotImplementedError;
+        break;
+
+    case 503:               // Service unavailable
+        code = QNetworkReply::ServiceUnavailableError;
+        break;
 
     default:
         if (httpStatusCode > 500) {
             // some kind of server error
-            code = QNetworkReply::ProtocolUnknownError;
+            code = QNetworkReply::UnknownServerError;
         } else if (httpStatusCode >= 400) {
             // content error we did not handle above
             code = QNetworkReply::UnknownContentError;
@@ -107,8 +122,14 @@ static QByteArray makeCacheKey(QUrl &url, QNetworkProxy *proxy)
 {
     QString result;
     QUrl copy = url;
-    bool isEncrypted = copy.scheme().toLower() == QLatin1String("https");
+    QString scheme = copy.scheme().toLower();
+    bool isEncrypted = scheme == QLatin1String("https");
     copy.setPort(copy.port(isEncrypted ? 443 : 80));
+    if (scheme == QLatin1String("preconnect-http")) {
+        copy.setScheme(QLatin1String("http"));
+    } else if (scheme == QLatin1String("preconnect-https")) {
+        copy.setScheme(QLatin1String("https"));
+    }
     result = copy.toString(QUrl::RemoveUserInfo | QUrl::RemovePath |
                            QUrl::RemoveQuery | QUrl::RemoveFragment | QUrl::FullyEncoded);
 
@@ -151,18 +172,22 @@ class QNetworkAccessCachedHttpConnection: public QHttpNetworkConnection,
     // Q_OBJECT
 public:
 #ifdef QT_NO_BEARERMANAGEMENT
-    QNetworkAccessCachedHttpConnection(const QString &hostName, quint16 port, bool encrypt)
-        : QHttpNetworkConnection(hostName, port, encrypt)
+    QNetworkAccessCachedHttpConnection(const QString &hostName, quint16 port, bool encrypt,
+                                       QHttpNetworkConnection::ConnectionType connectionType)
+        : QHttpNetworkConnection(hostName, port, encrypt, connectionType)
 #else
-    QNetworkAccessCachedHttpConnection(const QString &hostName, quint16 port, bool encrypt, QSharedPointer<QNetworkSession> networkSession)
-        : QHttpNetworkConnection(hostName, port, encrypt, /*parent=*/0, networkSession)
+    QNetworkAccessCachedHttpConnection(const QString &hostName, quint16 port, bool encrypt,
+                                       QHttpNetworkConnection::ConnectionType connectionType,
+                                       QSharedPointer<QNetworkSession> networkSession)
+        : QHttpNetworkConnection(hostName, port, encrypt, connectionType, /*parent=*/0,
+                                 qMove(networkSession))
 #endif
     {
         setExpires(true);
         setShareable(true);
     }
 
-    virtual void dispose()
+    virtual void dispose() Q_DECL_OVERRIDE
     {
 #if 0  // sample code; do this right with the API
         Q_ASSERT(!isWorking());
@@ -201,6 +226,7 @@ QHttpThreadDelegate::QHttpThreadDelegate(QObject *parent) :
     , synchronous(false)
     , incomingStatusCode(0)
     , isPipeliningUsed(false)
+    , isSpdyUsed(false)
     , incomingContentLength(-1)
     , incomingErrorCode(QNetworkReply::NoError)
     , downloadBuffer(0)
@@ -252,6 +278,19 @@ void QHttpThreadDelegate::startRequest()
     QUrl urlCopy = httpRequest.url();
     urlCopy.setPort(urlCopy.port(ssl ? 443 : 80));
 
+    QHttpNetworkConnection::ConnectionType connectionType
+            = QHttpNetworkConnection::ConnectionTypeHTTP;
+#ifndef QT_NO_SSL
+    if (httpRequest.isSPDYAllowed() && ssl) {
+        connectionType = QHttpNetworkConnection::ConnectionTypeSPDY;
+        urlCopy.setScheme(QStringLiteral("spdy")); // to differentiate SPDY requests from HTTPS requests
+        QList<QByteArray> nextProtocols;
+        nextProtocols << QSslConfiguration::NextProtocolSpdy3_0
+                      << QSslConfiguration::NextProtocolHttp1_1;
+        incomingSslConfiguration.setAllowedNextProtocols(nextProtocols);
+    }
+#endif // QT_NO_SSL
+
 #ifndef QT_NO_NETWORKPROXY
     if (transparentProxy.type() != QNetworkProxy::NoProxy)
         cacheKey = makeCacheKey(urlCopy, &transparentProxy);
@@ -268,9 +307,12 @@ void QHttpThreadDelegate::startRequest()
         // no entry in cache; create an object
         // the http object is actually a QHttpNetworkConnection
 #ifdef QT_NO_BEARERMANAGEMENT
-        httpConnection = new QNetworkAccessCachedHttpConnection(urlCopy.host(), urlCopy.port(), ssl);
+        httpConnection = new QNetworkAccessCachedHttpConnection(urlCopy.host(), urlCopy.port(), ssl,
+                                                                connectionType);
 #else
-        httpConnection = new QNetworkAccessCachedHttpConnection(urlCopy.host(), urlCopy.port(), ssl, networkSession);
+        httpConnection = new QNetworkAccessCachedHttpConnection(urlCopy.host(), urlCopy.port(), ssl,
+                                                                connectionType,
+                                                                networkSession);
 #endif
 #ifndef QT_NO_SSL
         // Set the QSslConfiguration from this QNetworkRequest.
@@ -286,6 +328,16 @@ void QHttpThreadDelegate::startRequest()
 
         // cache the QHttpNetworkConnection corresponding to this cache key
         connections.localData()->addEntry(cacheKey, httpConnection);
+    } else {
+        if (httpRequest.withCredentials()) {
+            QNetworkAuthenticationCredential credential = authenticationManager->fetchCachedCredentials(httpRequest.url(), 0);
+            if (!credential.user.isEmpty() && !credential.password.isEmpty()) {
+                QAuthenticator auth;
+                auth.setUser(credential.user);
+                auth.setPassword(credential.password);
+                httpConnection->d_func()->copyCredentials(-1, &auth, false);
+            }
+        }
     }
 
 
@@ -302,8 +354,10 @@ void QHttpThreadDelegate::startRequest()
 
         connect(httpReply, SIGNAL(authenticationRequired(QHttpNetworkRequest,QAuthenticator*)),
                 this, SLOT(synchronousAuthenticationRequiredSlot(QHttpNetworkRequest,QAuthenticator*)));
+#ifndef QT_NO_NETWORKPROXY
         connect(httpReply, SIGNAL(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)),
                 this, SLOT(synchronousProxyAuthenticationRequiredSlot(QNetworkProxy,QAuthenticator*)));
+#endif
 
         // Don't care about ignored SSL errors for now in the synchronous HTTP case.
     } else if (!synchronous) {
@@ -317,14 +371,18 @@ void QHttpThreadDelegate::startRequest()
 #ifndef QT_NO_SSL
         connect(httpReply,SIGNAL(encrypted()), this, SLOT(encryptedSlot()));
         connect(httpReply,SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrorsSlot(QList<QSslError>)));
+        connect(httpReply,SIGNAL(preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator*)),
+                this, SLOT(preSharedKeyAuthenticationRequiredSlot(QSslPreSharedKeyAuthenticator*)));
 #endif
 
         // In the asynchronous HTTP case we can just forward those signals
         // Connect the reply signals that we can directly forward
         connect(httpReply, SIGNAL(authenticationRequired(QHttpNetworkRequest,QAuthenticator*)),
                 this, SIGNAL(authenticationRequired(QHttpNetworkRequest,QAuthenticator*)));
+#ifndef QT_NO_NETWORKPROXY
         connect(httpReply, SIGNAL(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)),
                 this, SIGNAL(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)));
+#endif
     }
 
     connect(httpReply, SIGNAL(cacheCredentials(QHttpNetworkRequest,QAuthenticator*)),
@@ -338,6 +396,7 @@ void QHttpThreadDelegate::abortRequest()
     qDebug() << "QHttpThreadDelegate::abortRequest() thread=" << QThread::currentThreadId() << "sync=" << synchronous;
 #endif
     if (httpReply) {
+        httpReply->abort();
         delete httpReply;
         httpReply = 0;
     }
@@ -502,6 +561,8 @@ void QHttpThreadDelegate::synchronousFinishedWithErrorSlot(QNetworkReply::Networ
     incomingErrorCode = errorCode;
     incomingErrorDetail = detail;
 
+    synchronousDownloadData = httpReply->readAll();
+
     QMetaObject::invokeMethod(httpReply, "deleteLater", Qt::QueuedConnection);
     QMetaObject::invokeMethod(synchronousRequestLoop, "quit", Qt::QueuedConnection);
     httpReply = 0;
@@ -546,13 +607,15 @@ void QHttpThreadDelegate::headerChangedSlot()
     incomingReasonPhrase = httpReply->reasonPhrase();
     isPipeliningUsed = httpReply->isPipeliningUsed();
     incomingContentLength = httpReply->contentLength();
+    isSpdyUsed = httpReply->isSpdyUsed();
 
     emit downloadMetaData(incomingHeaders,
                           incomingStatusCode,
                           incomingReasonPhrase,
                           isPipeliningUsed,
                           downloadBuffer,
-                          incomingContentLength);
+                          incomingContentLength,
+                          isSpdyUsed);
 }
 
 void QHttpThreadDelegate::synchronousHeaderChangedSlot()
@@ -568,6 +631,7 @@ void QHttpThreadDelegate::synchronousHeaderChangedSlot()
     incomingStatusCode = httpReply->statusCode();
     incomingReasonPhrase = httpReply->reasonPhrase();
     isPipeliningUsed = httpReply->isPipeliningUsed();
+    isSpdyUsed = httpReply->isSpdyUsed();
     incomingContentLength = httpReply->contentLength();
 }
 
@@ -595,6 +659,7 @@ void QHttpThreadDelegate::encryptedSlot()
     if (!httpReply)
         return;
 
+    emit sslConfigurationChanged(httpReply->sslConfiguration());
     emit encrypted();
 }
 
@@ -612,6 +677,14 @@ void QHttpThreadDelegate::sslErrorsSlot(const QList<QSslError> &errors)
         httpReply->ignoreSslErrors();
     if (!specificErrors.isEmpty())
         httpReply->ignoreSslErrors(specificErrors);
+}
+
+void QHttpThreadDelegate::preSharedKeyAuthenticationRequiredSlot(QSslPreSharedKeyAuthenticator *authenticator)
+{
+    if (!httpReply)
+        return;
+
+    emit preSharedKeyAuthenticationRequired(authenticator);
 }
 #endif
 
@@ -653,9 +726,11 @@ void  QHttpThreadDelegate::synchronousProxyAuthenticationRequiredSlot(const QNet
         a->setPassword(credential.password);
     }
 
+#ifndef QT_NO_NETWORKPROXY
     // Disconnect this connection now since we only want to ask the authentication cache once.
     QObject::disconnect(httpReply, SIGNAL(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)),
         this, SLOT(synchronousProxyAuthenticationRequiredSlot(QNetworkProxy,QAuthenticator*)));
+#endif
 }
 
 #endif

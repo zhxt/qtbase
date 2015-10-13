@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -499,7 +491,7 @@ QNetworkProxy::~QNetworkProxy()
 /*!
     \since 4.4
 
-    Compares the value of this network proxy to \a other and returns true
+    Compares the value of this network proxy to \a other and returns \c true
     if they are equal (same proxy type, server as well as username and password)
 */
 bool QNetworkProxy::operator==(const QNetworkProxy &other) const
@@ -511,7 +503,7 @@ bool QNetworkProxy::operator==(const QNetworkProxy &other) const
     \fn bool QNetworkProxy::operator!=(const QNetworkProxy &other) const
     \since 4.4
 
-    Compares the value of this network proxy to \a other and returns true
+    Compares the value of this network proxy to \a other and returns \c true
     if they differ.
 \*/
 
@@ -588,7 +580,7 @@ QNetworkProxy::Capabilities QNetworkProxy::capabilities() const
 /*!
     \since 4.4
 
-    Returns true if this proxy supports the
+    Returns \c true if this proxy supports the
     QNetworkProxy::CachingCapability capability.
 
     In Qt 4.4, the capability was tied to the proxy type, but since Qt
@@ -605,7 +597,7 @@ bool QNetworkProxy::isCachingProxy() const
 /*!
     \since 4.4
 
-    Returns true if this proxy supports transparent tunneling of TCP
+    Returns \c true if this proxy supports transparent tunneling of TCP
     connections. This matches the QNetworkProxy::TunnelingCapability
     capability.
 
@@ -775,8 +767,8 @@ void QNetworkProxy::setHeader(QNetworkRequest::KnownHeaders header, const QVaria
 
 /*!
     \since 5.0
-    Returns true if the raw header \a headerName is in use for this
-    proxy. Returns false if the proxy is not of type HttpProxy or
+    Returns \c true if the raw header \a headerName is in use for this
+    proxy. Returns \c false if the proxy is not of type HttpProxy or
     HttpCachingProxy.
 
     \sa rawHeader(), setRawHeader()
@@ -841,7 +833,7 @@ QList<QByteArray> QNetworkProxy::rawHeaderList() const
     will also set the known header LastModifiedHeader to be the
     QDateTime object of the parsed date.
 
-    Note: setting the same header twice overrides the previous
+    \note Setting the same header twice overrides the previous
     setting. To accomplish the behaviour of multiple HTTP headers of
     the same name, you should concatenate the two values, separating
     them with a comma (",") and set one single raw header.
@@ -1165,7 +1157,7 @@ QNetworkProxyQuery &QNetworkProxyQuery::operator=(const QNetworkProxyQuery &othe
 */
 
 /*!
-    Returns true if this QNetworkProxyQuery object contains the same
+    Returns \c true if this QNetworkProxyQuery object contains the same
     data as \a other.
 */
 bool QNetworkProxyQuery::operator==(const QNetworkProxyQuery &other) const
@@ -1176,7 +1168,7 @@ bool QNetworkProxyQuery::operator==(const QNetworkProxyQuery &other) const
 /*!
     \fn bool QNetworkProxyQuery::operator!=(const QNetworkProxyQuery &other) const
 
-    Returns true if this QNetworkProxyQuery object does not contain
+    Returns \c true if this QNetworkProxyQuery object does not contain
     the same data as \a other.
 */
 
@@ -1588,6 +1580,8 @@ QList<QNetworkProxy> QNetworkProxyFactory::proxyForQuery(const QNetworkProxyQuer
 */
 QDebug operator<<(QDebug debug, const QNetworkProxy &proxy)
 {
+    QDebugStateSaver saver(debug);
+    debug.resetFormat().nospace();
     QNetworkProxy::ProxyType type = proxy.type();
     switch (type) {
     case QNetworkProxy::NoProxy:

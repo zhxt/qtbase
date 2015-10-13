@@ -1,44 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#define QT_NO_URL_CAST_FROM_STRING
 #include "qwindowsservices.h"
 #include "qtwindows_additional.h"
 
@@ -55,19 +48,20 @@ QT_BEGIN_NAMESPACE
 
 enum { debug = 0 };
 
-static inline bool shellExecute(const QString &file)
+static inline bool shellExecute(const QUrl &url)
 {
 #ifndef Q_OS_WINCE
-    const QString nativeFilePath = QDir::toNativeSeparators(file);
+    const QString nativeFilePath =
+            url.isLocalFile() ? QDir::toNativeSeparators(url.toLocalFile()) : url.toString(QUrl::FullyEncoded);
     const quintptr result = (quintptr)ShellExecute(0, 0, (wchar_t*)nativeFilePath.utf16(), 0, 0, SW_SHOWNORMAL);
     // ShellExecute returns a value greater than 32 if successful
     if (result <= 32) {
-        qWarning("ShellExecute '%s' failed (error %s).", qPrintable(file), qPrintable(QString::number(result)));
+        qWarning("ShellExecute '%s' failed (error %s).", qPrintable(url.toString()), qPrintable(QString::number(result)));
         return false;
     }
     return true;
 #else
-    Q_UNUSED(file)
+    Q_UNUSED(url);
     return false;
 #endif
 }
@@ -131,7 +125,7 @@ static inline bool launchMail(const QUrl &url)
     }
     // Pass the url as the parameter. Should use QProcess::startDetached(),
     // but that cannot handle a Windows command line [yet].
-    command.replace(QStringLiteral("%1"), url.toString());
+    command.replace(QStringLiteral("%1"), url.toString(QUrl::FullyEncoded));
     if (debug)
         qDebug() << __FUNCTION__ << "Launching" << command;
     //start the process
@@ -152,16 +146,14 @@ static inline bool launchMail(const QUrl &url)
 bool QWindowsServices::openUrl(const QUrl &url)
 {
     const QString scheme = url.scheme();
-    if (scheme.isEmpty())
-        return openDocument(url);
-    if (scheme == QStringLiteral("mailto") && launchMail(url))
+    if (scheme == QLatin1String("mailto") && launchMail(url))
         return true;
-    return shellExecute(QLatin1String(url.toEncoded()));
+    return shellExecute(url);
 }
 
 bool QWindowsServices::openDocument(const QUrl &url)
 {
-    return shellExecute(url.isLocalFile() ? url.toLocalFile() : url.toString());
+    return shellExecute(url);
 }
 
 QT_END_NAMESPACE

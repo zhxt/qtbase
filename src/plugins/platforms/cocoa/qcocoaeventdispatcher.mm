@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -75,7 +67,9 @@
 
 #include "qcocoaeventdispatcher.h"
 #include "qcocoaautoreleasepool.h"
+#include "qcocoawindow.h"
 
+#include "qcocoahelpers.h"
 #include "qguiapplication.h"
 #include "qevent.h"
 #include "qhash.h"
@@ -95,11 +89,6 @@ QT_BEGIN_NAMESPACE
 
 QT_USE_NAMESPACE
 
-enum {
-    QtCocoaEventSubTypeWakeup       = SHRT_MAX,
-    QtCocoaEventSubTypePostMessage  = SHRT_MAX-1
-};
-
 static inline CFRunLoopRef mainRunLoop()
 {
     return CFRunLoopGetMain();
@@ -118,7 +107,7 @@ static Boolean runLoopSourceEqualCallback(const void *info1, const void *info2)
 void QCocoaEventDispatcherPrivate::runLoopTimerCallback(CFRunLoopTimerRef, void *info)
 {
     QCocoaEventDispatcherPrivate *d = static_cast<QCocoaEventDispatcherPrivate *>(info);
-    if ((d->processEventsFlags & QEventLoop::EventLoopExec) == 0) {
+    if (d->processEventsCalled && (d->processEventsFlags & QEventLoop::EventLoopExec) == 0) {
         // processEvents() was called "manually," ignore this source for now
         d->maybeCancelWaitForMoreEvents();
         return;
@@ -364,6 +353,12 @@ bool QCocoaEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags flags)
 
     uint oldflags = d->processEventsFlags;
     d->processEventsFlags = flags;
+
+    // Used to determine whether any eventloop has been exec'ed, and allow posted
+    // and timer events to be processed even if this function has never been called
+    // instead of being kept on hold for the next run of processEvents().
+    ++d->processEventsCalled;
+
     bool excludeUserEvents = d->processEventsFlags & QEventLoop::ExcludeUserInputEvents;
     bool retVal = false;
     forever {
@@ -412,6 +407,11 @@ bool QCocoaEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags flags)
                     // 'session' as well. As a result, we need to restart all internal sessions:
                     d->temporarilyStopAllModalSessions();
                 }
+
+                // Clean up the modal session list, call endModalSession.
+                if (d->cleanupModalSessionsNeeded)
+                    d->cleanupModalSessions();
+
             } else {
                 d->nsAppRunCalledByQt = true;
                 QBoolBlocker execGuard(d->currentExecIsNSAppRun, true);
@@ -438,6 +438,11 @@ bool QCocoaEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags flags)
                         // 'session' as well. As a result, we need to restart all internal sessions:
                         d->temporarilyStopAllModalSessions();
                     }
+
+                    // Clean up the modal session list, call endModalSession.
+                    if (d->cleanupModalSessionsNeeded)
+                        d->cleanupModalSessions();
+
                     retVal = true;
                 } else do {
                     // Dispatch all non-user events (but que non-user events up for later). In
@@ -517,6 +522,7 @@ bool QCocoaEventDispatcher::processEvents(QEventLoop::ProcessEventsFlags flags)
     }
 
     d->processEventsFlags = oldflags;
+    --d->processEventsCalled;
 
     // If we're interrupted, we need to interrupt the _current_
     // recursion as well to check if it is  still supposed to be
@@ -594,6 +600,7 @@ void QCocoaEventDispatcherPrivate::temporarilyStopAllModalSessions()
         if (info.session) {
             [NSApp endModalSession:info.session];
             info.session = 0;
+            [(NSWindow*) info.nswindow release];
         }
     }
     currentModalSessionCached = 0;
@@ -617,7 +624,8 @@ NSModalSession QCocoaEventDispatcherPrivate::currentModalSession()
 
         if (!info.session) {
             QCocoaAutoReleasePool pool;
-            NSWindow *nswindow = static_cast<NSWindow *>(QGuiApplication::platformNativeInterface()->nativeResourceForWindow("nswindow", info.window));
+            QCocoaWindow *cocoaWindow = static_cast<QCocoaWindow *>(info.window->handle());
+            NSWindow *nswindow = cocoaWindow->nativeWindow();
             if (!nswindow)
                 continue;
 
@@ -625,7 +633,10 @@ NSModalSession QCocoaEventDispatcherPrivate::currentModalSession()
             QBoolBlocker block1(blockSendPostedEvents, true);
             info.nswindow = nswindow;
             [(NSWindow*) info.nswindow retain];
+            QRect rect = cocoaWindow->geometry();
             info.session = [NSApp beginModalSessionForWindow:nswindow];
+            if (rect != cocoaWindow->geometry())
+                cocoaWindow->setGeometry(rect);
         }
         currentModalSessionCached = info.session;
         cleanupModalSessionsNeeded = false;
@@ -676,7 +687,7 @@ void QCocoaEventDispatcherPrivate::cleanupModalSessions()
 {
     // Go through the list of modal sessions, and end those
     // that no longer has a window assosiated; no window means
-    // the the session has logically ended. The reason we wait like
+    // the session has logically ended. The reason we wait like
     // this to actually end the sessions for real (rather than at the
     // point they were marked as stopped), is that ending a session
     // when no other session runs below it on the stack will make cocoa
@@ -712,9 +723,7 @@ void QCocoaEventDispatcherPrivate::beginModalSession(QWindow *window)
 {
     // We need to start spinning the modal session. Usually this is done with
     // QDialog::exec() for Qt Widgets based applications, but for others that
-    // just call show(), we need to interrupt(). We call this here, before
-    // setting currentModalSessionCached to zero, so that interrupt() calls
-    // [NSApp abortModal] if another modal session is currently running
+    // just call show(), we need to interrupt().
     Q_Q(QCocoaEventDispatcher);
     q->interrupt();
 
@@ -750,10 +759,7 @@ void QCocoaEventDispatcherPrivate::endModalSession(QWindow *window)
             info.window = 0;
             if (i + endedSessions == stackSize-1) {
                 // The top sessions ended. Interrupt the event dispatcher to
-                // start spinning the correct session immediately. Like in
-                // beginModalSession(), we call interrupt() before clearing
-                // currentModalSessionCached to make sure we stop any currently
-                // running modal session with [NSApp abortModal]
+                // start spinning the correct session immediately.
                 q->interrupt();
                 currentModalSessionCached = 0;
                 cleanupModalSessionsNeeded = true;
@@ -769,6 +775,7 @@ QCocoaEventDispatcherPrivate::QCocoaEventDispatcherPrivate()
       currentExecIsNSAppRun(false),
       nsAppRunCalledByQt(false),
       cleanupModalSessionsNeeded(false),
+      processEventsCalled(0),
       currentModalSessionCached(0),
       lastSerial(-1),
       interrupt(false)
@@ -855,10 +862,10 @@ void QCocoaEventDispatcherPrivate::processPostedEvents()
         return;
     }
 
-    if (cleanupModalSessionsNeeded)
+    if (cleanupModalSessionsNeeded && currentExecIsNSAppRun)
         cleanupModalSessions();
 
-    if (interrupt) {
+    if (processEventsCalled > 0 && interrupt) {
         if (currentExecIsNSAppRun) {
             // The event dispatcher has been interrupted. But since
             // [NSApplication run] is running the event loop, we
@@ -875,7 +882,23 @@ void QCocoaEventDispatcherPrivate::processPostedEvents()
     int serial = serialNumber.load();
     if (!threadData->canWait || (serial != lastSerial)) {
         lastSerial = serial;
+        QCoreApplication::sendPostedEvents();
         QWindowSystemInterface::sendWindowSystemEvents(QEventLoop::AllEvents);
+    }
+}
+
+void QCocoaEventDispatcherPrivate::removeQueuedUserInputEvents(int nsWinNumber)
+{
+    if (nsWinNumber) {
+        int eventIndex = queuedUserInputEvents.size();
+
+        while (--eventIndex >= 0) {
+            NSEvent * nsevent = static_cast<NSEvent *>(queuedUserInputEvents.at(eventIndex));
+            if ([nsevent windowNumber] == nsWinNumber) {
+                queuedUserInputEvents.removeAt(eventIndex);
+                [nsevent release];
+            }
+        }
     }
 }
 
@@ -891,7 +914,7 @@ void QCocoaEventDispatcherPrivate::firstLoopEntry(CFRunLoopObserverRef ref,
 void QCocoaEventDispatcherPrivate::postedEventsSourceCallback(void *info)
 {
     QCocoaEventDispatcherPrivate *d = static_cast<QCocoaEventDispatcherPrivate *>(info);
-    if ((d->processEventsFlags & QEventLoop::EventLoopExec) == 0) {
+    if (d->processEventsCalled && (d->processEventsFlags & QEventLoop::EventLoopExec) == 0) {
         // processEvents() was called "manually," ignore this source for now
         d->maybeCancelWaitForMoreEvents();
         return;
@@ -924,23 +947,16 @@ void QCocoaEventDispatcher::interrupt()
 {
     Q_D(QCocoaEventDispatcher);
     d->interrupt = true;
-    if (d->currentModalSessionCached) {
-        // If a modal session is active, abort it so that we can clean it up
-        // later. We can't use [NSApp stopModal] here, because we do not know
-        // where the interrupt() came from.
-        [NSApp abortModal];
-    } else {
-        wakeUp();
+    wakeUp();
 
-        // We do nothing more here than setting d->interrupt = true, and
-        // poke the event loop if it is sleeping. Actually stopping
-        // NSApp, or the current modal session, is done inside the send
-        // posted events callback. We do this to ensure that all current pending
-        // cocoa events gets delivered before we stop. Otherwise, if we now stop
-        // the last event loop recursion, cocoa will just drop pending posted
-        // events on the floor before we get a chance to reestablish a new session.
-        d->cancelWaitForMoreEvents();
-    }
+    // We do nothing more here than setting d->interrupt = true, and
+    // poke the event loop if it is sleeping. Actually stopping
+    // NSApp, or the current modal session, is done inside the send
+    // posted events callback. We do this to ensure that all current pending
+    // cocoa events gets delivered before we stop. Otherwise, if we now stop
+    // the last event loop recursion, cocoa will just drop pending posted
+    // events on the floor before we get a chance to reestablish a new session.
+    d->cancelWaitForMoreEvents();
 }
 
 void QCocoaEventDispatcher::flush()

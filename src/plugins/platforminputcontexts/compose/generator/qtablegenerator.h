@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,18 +34,28 @@
 #ifndef QTABLEGENERATOR_H
 #define QTABLEGENERATOR_H
 
-#include <QtCore/QList>
+#include <QtCore/QVector>
 #include <QtCore/QFile>
 #include <QtCore/QMap>
 #include <QtCore/QString>
 
 #define QT_KEYSEQUENCE_MAX_LEN 6
 
+//#define DEBUG_GENERATOR
+
 struct QComposeTableElement {
     uint keys[QT_KEYSEQUENCE_MAX_LEN];
     uint value;
+#ifdef DEBUG_GENERATOR
     QString comment;
+#endif
 };
+
+#ifndef DEBUG_GENERATOR
+QT_BEGIN_NAMESPACE
+Q_DECLARE_TYPEINFO(QComposeTableElement, Q_PRIMITIVE_TYPE);
+QT_END_NAMESPACE
+#endif
 
 class Compare
 {
@@ -97,29 +99,29 @@ public:
     void printComposeTable() const;
     void orderComposeTable();
 
-    QList<QComposeTableElement> composeTable() const;
+    QVector<QComposeTableElement> composeTable() const;
     TableState tableState() const { return m_state; }
 
 protected:
-    bool processFile(QString composeFileName);
-    void parseKeySequence(QString line);
+    bool processFile(const QString &composeFileName);
+    void parseKeySequence(char *line);
     void parseIncludeInstruction(QString line);
 
     void findComposeFile();
     bool findSystemComposeDir();
     QString systemComposeDir();
+    QString composeTableForLocale();
 
     ushort keysymToUtf8(quint32 sym);
-    quint32 stringToKeysym(QString keysymName);
 
-    void readLocaleMappings();
+    QString readLocaleMappings(const QByteArray &locale);
+    QByteArray readLocaleAliases(const QByteArray &locale);
     void initPossibleLocations();
-    bool cleanState() const { return ((m_state & NoErrors) == NoErrors); }
+    bool cleanState() const { return m_state == NoErrors; }
     QString locale() const;
 
 private:
-      QList<QComposeTableElement> m_composeTable;
-      QMap<QString, QString> m_localeToTable;
+      QVector<QComposeTableElement> m_composeTable;
       TableState m_state;
       QString m_systemComposeDir;
       QList<QString> m_possibleLocations;

@@ -9,10 +9,12 @@ SUBDIRS=\
     qmetamethod \
     qmetaproperty \
     qmetatype \
+    qmetaenum \
     qmimedata \
     qobject \
     qpointer \
     qsharedmemory \
+    qsignalblocker \
     qsignalmapper \
     qsocketnotifier \
     qsystemsemaphore \
@@ -20,6 +22,9 @@ SUBDIRS=\
     qtranslator \
     qvariant \
     qwineventnotifier
+
+!qtHaveModule(gui): SUBDIRS -= \
+    qmimedata
 
 !qtHaveModule(network): SUBDIRS -= \
     qeventloop \
@@ -31,6 +36,6 @@ SUBDIRS=\
     qsharedmemory
 
 # This test is only applicable on Windows
-!win32*:SUBDIRS -= qwineventnotifier
+!win32*|winrt: SUBDIRS -= qwineventnotifier
 
-android|qnx: SUBDIRS -= qsharedmemory qsystemsemaphore
+android|ios: SUBDIRS -= qsharedmemory qsystemsemaphore

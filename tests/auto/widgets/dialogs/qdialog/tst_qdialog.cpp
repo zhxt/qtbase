@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,8 +41,11 @@
 #include <qstyle.h>
 #include <QVBoxLayout>
 #include <QSizeGrip>
-
-
+#include <QDesktopWidget>
+#include <QWindow>
+#include <private/qguiapplication_p.h>
+#include <qpa/qplatformtheme.h>
+#include <qpa/qplatformtheme_p.h>
 
 QT_FORWARD_DECLARE_CLASS(QDialog)
 
@@ -82,6 +77,9 @@ private slots:
 #endif
     void setVisible();
     void reject();
+    void snapToDefaultButton();
+    void transientParent_data();
+    void transientParent();
 
 private:
     QDialog *testWidget;
@@ -197,7 +195,7 @@ void tst_QDialog::showExtension()
     // show
     ((DummyDialog*)testWidget)->showExtension( true );
 //     while ( testWidget->size() == dlgSize )
-// 	qApp->processEvents();
+//         qApp->processEvents();
 
     QTEST( testWidget->size(), "result"  );
 
@@ -273,7 +271,7 @@ void tst_QDialog::showMaximized()
     QVERIFY(dialog.isMaximized());
     QVERIFY(!dialog.isVisible());
 
-    dialog.show();
+    dialog.setVisible(true);
     QVERIFY(dialog.isMaximized());
     QVERIFY(dialog.isVisible());
 
@@ -306,7 +304,7 @@ void tst_QDialog::showMinimized()
     QVERIFY(dialog.isMinimized());
     QVERIFY(!dialog.isVisible());
 
-    dialog.show();
+    dialog.setVisible(true);
     QVERIFY(dialog.isMinimized());
     QVERIFY(dialog.isVisible());
 
@@ -554,6 +552,69 @@ void tst_QDialog::reject()
     QCOMPARE(dialog.called, 4);
 }
 
+void tst_QDialog::snapToDefaultButton()
+{
+#ifdef QT_NO_CURSOR
+    QSKIP("Test relies on there being a cursor");
+#else
+    if (qApp->platformName().toLower() == QLatin1String("wayland"))
+        QSKIP("Wayland: Wayland does not support setting the cursor position.");
+
+    QPoint topLeftPos = QApplication::desktop()->availableGeometry().topLeft();
+    topLeftPos = QPoint(topLeftPos.x() + 100, topLeftPos.y() + 100);
+    QPoint startingPos(topLeftPos.x() + 250, topLeftPos.y() + 250);
+    QCursor::setPos(startingPos);
+#ifdef Q_OS_OSX
+    // On OS X we use CGEventPost to move the cursor, it needs at least
+    // some time before the event handled and the position really set.
+    QTest::qWait(100);
+#endif
+    QCOMPARE(QCursor::pos(), startingPos);
+    QDialog dialog;
+    QPushButton *button = new QPushButton(&dialog);
+    button->setDefault(true);
+    dialog.setGeometry(QRect(topLeftPos, QSize(200, 200)));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
+        if (theme->themeHint(QPlatformTheme::DialogSnapToDefaultButton).toBool()) {
+            QPoint localPos = button->mapFromGlobal(QCursor::pos());
+            QVERIFY(button->rect().contains(localPos));
+        } else {
+            QCOMPARE(startingPos, QCursor::pos());
+        }
+    }
+#endif // !QT_NO_CURSOR
+}
+
+void tst_QDialog::transientParent_data()
+{
+    QTest::addColumn<bool>("nativewidgets");
+    QTest::newRow("Non-native") << false;
+    QTest::newRow("Native") << true;
+}
+
+void tst_QDialog::transientParent()
+{
+    QFETCH(bool, nativewidgets);
+    testWidget->hide();
+    QWidget topLevel;
+    topLevel.resize(200, 200);
+    topLevel.move(QGuiApplication::primaryScreen()->availableGeometry().center() - QPoint(100, 100));
+    QVBoxLayout *layout = new QVBoxLayout(&topLevel);
+    QWidget *innerWidget = new QWidget(&topLevel);
+    layout->addWidget(innerWidget);
+    if (nativewidgets)
+        innerWidget->winId();
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    QDialog dialog(innerWidget);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    // Transient parent should always be the top level, also when using
+    // native child widgets.
+    QCOMPARE(dialog.windowHandle()->transientParent(), topLevel.windowHandle());
+}
 
 QTEST_MAIN(tst_QDialog)
 #include "tst_qdialog.moc"

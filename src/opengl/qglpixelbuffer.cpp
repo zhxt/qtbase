@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -68,7 +60,7 @@
        an OpenGL texture.} The texture is then updated automatically
        when the pbuffer contents change, eliminating the need for
        additional copy operations. This is supported only on Windows
-       and Mac OS X systems that provide the \c render_texture
+       and OS X systems that provide the \c render_texture
        extension. Note that under Windows, a multi-sampled pbuffer
        can't be used in conjunction with the \c render_texture
        extension. If a multi-sampled pbuffer is requested under
@@ -89,8 +81,6 @@
 
     Pbuffers are provided by the OpenGL \c pbuffer extension; call
     hasOpenGLPbuffer() to find out if the system provides pbuffers.
-
-    \sa {opengl/pbuffers}{Pbuffers Example}
 */
 
 #include <private/qopenglextensions_p.h>
@@ -124,7 +114,7 @@ void QGLPBufferGLPaintDevice::beginPaint()
 
 void QGLPBufferGLPaintDevice::endPaint()
 {
-    glFlush();
+    QOpenGLContext::currentContext()->functions()->glFlush();
     QGLPaintDevice::endPaint();
 }
 
@@ -213,7 +203,7 @@ QGLPixelBuffer::~QGLPixelBuffer()
 /*! \fn bool QGLPixelBuffer::makeCurrent()
 
     Makes this pbuffer the current OpenGL rendering context. Returns
-    true on success; otherwise returns false.
+    true on success; otherwise returns \c false.
 
     \sa QGLContext::makeCurrent(), doneCurrent()
 */
@@ -235,15 +225,15 @@ bool QGLPixelBuffer::makeCurrent()
         d->fbo = new QOpenGLFramebufferObject(d->req_size, format);
         d->fbo->bind();
         d->glDevice.setFbo(d->fbo->handle());
-        glViewport(0, 0, d->req_size.width(), d->req_size.height());
+        QOpenGLContext::currentContext()->functions()->glViewport(0, 0, d->req_size.width(), d->req_size.height());
     }
     return true;
 }
 
 /*! \fn bool QGLPixelBuffer::doneCurrent()
 
-    Makes no context the current OpenGL context. Returns true on
-    success; otherwise returns false.
+    Makes no context the current OpenGL context. Returns \c true on
+    success; otherwise returns \c false.
 */
 
 bool QGLPixelBuffer::doneCurrent()
@@ -278,7 +268,7 @@ QGLContext *QGLPixelBuffer::context() const
 /*! \fn bool QGLPixelBuffer::bindToDynamicTexture(GLuint texture_id)
 
     Binds the texture specified by \a texture_id to this pbuffer.
-    Returns true on success; otherwise returns false.
+    Returns \c true on success; otherwise returns \c false.
 
     The texture must be of the same size and format as the pbuffer.
 
@@ -297,7 +287,7 @@ QGLContext *QGLPixelBuffer::context() const
     pbuffer contents to a texture using updateDynamicTexture().
 
     \warning For the bindToDynamicTexture() call to succeed on the
-    Mac OS X, the pbuffer needs a shared context, i.e. the
+    OS X, the pbuffer needs a shared context, i.e. the
     QGLPixelBuffer must be created with a share widget.
 
     \sa generateDynamicTexture(), releaseFromDynamicTexture()
@@ -312,8 +302,8 @@ QGLContext *QGLPixelBuffer::context() const
 
 /*! \fn bool QGLPixelBuffer::hasOpenGLPbuffers()
 
-    Returns true if the OpenGL \c pbuffer extension is present on
-    this system; otherwise returns false.
+    Returns \c true if the OpenGL \c pbuffer extension is present on
+    this system; otherwise returns \c false.
 */
 
 /*!
@@ -326,7 +316,7 @@ QGLContext *QGLPixelBuffer::context() const
 
     \snippet code/src_opengl_qglpixelbuffer.cpp 1
 
-    An alternative on Windows and Mac OS X systems that support the
+    An alternative on Windows and OS X systems that support the
     \c render_texture extension is to use bindToDynamicTexture() to
     get dynamic updates of the texture.
 
@@ -338,7 +328,7 @@ void QGLPixelBuffer::updateDynamicTexture(GLuint texture_id) const
     if (d->invalid || !d->fbo)
         return;
 
-    QOpenGLContext *ctx = QOpenGLContext::currentContext();
+    const QGLContext *ctx = QGLContext::currentContext();
     if (!ctx)
         return;
 
@@ -352,18 +342,21 @@ void QGLPixelBuffer::updateDynamicTexture(GLuint texture_id) const
 #define GL_DRAW_FRAMEBUFFER 0x8CA9
 #endif
 
-    QOpenGLExtensions extensions(ctx);
+    QOpenGLExtensions extensions(ctx->contextHandle());
+
+    ctx->d_ptr->refreshCurrentFbo();
 
     if (d->blit_fbo) {
         QOpenGLFramebufferObject::blitFramebuffer(d->blit_fbo, d->fbo);
         extensions.glBindFramebuffer(GL_READ_FRAMEBUFFER, d->blit_fbo->handle());
     }
 
-    glBindTexture(GL_TEXTURE_2D, texture_id);
+    extensions.glBindTexture(GL_TEXTURE_2D, texture_id);
 #ifndef QT_OPENGL_ES
-    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 0, 0, d->req_size.width(), d->req_size.height(), 0);
+    GLenum format = ctx->contextHandle()->isOpenGLES() ? GL_RGBA : GL_RGBA8;
+    extensions.glCopyTexImage2D(GL_TEXTURE_2D, 0, format, 0, 0, d->req_size.width(), d->req_size.height(), 0);
 #else
-    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, d->req_size.width(), d->req_size.height(), 0);
+    extensions.glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, d->req_size.width(), d->req_size.height(), 0);
 #endif
 
     if (d->blit_fbo)
@@ -406,7 +399,7 @@ Qt::HANDLE QGLPixelBuffer::handle() const
 }
 
 /*!
-    Returns true if this pbuffer is valid; otherwise returns false.
+    Returns \c true if this pbuffer is valid; otherwise returns \c false.
 */
 bool QGLPixelBuffer::isValid() const
 {
@@ -487,7 +480,8 @@ GLuint QGLPixelBuffer::bindTexture(const QImage &image, GLenum target)
 {
     Q_D(QGLPixelBuffer);
 #ifndef QT_OPENGL_ES
-    return d->qctx->bindTexture(image, target, GLint(GL_RGBA8));
+    GLenum format = QOpenGLContext::currentContext()->isOpenGLES() ? GL_RGBA : GL_RGBA8;
+    return d->qctx->bindTexture(image, target, GLint(format));
 #else
     return d->qctx->bindTexture(image, target, GL_RGBA);
 #endif
@@ -505,7 +499,8 @@ GLuint QGLPixelBuffer::bindTexture(const QPixmap &pixmap, GLenum target)
 {
     Q_D(QGLPixelBuffer);
 #ifndef QT_OPENGL_ES
-    return d->qctx->bindTexture(pixmap, target, GLint(GL_RGBA8));
+    GLenum format = QOpenGLContext::currentContext()->isOpenGLES() ? GL_RGBA : GL_RGBA8;
+    return d->qctx->bindTexture(pixmap, target, GLint(format));
 #else
     return d->qctx->bindTexture(pixmap, target, GL_RGBA);
 #endif
@@ -626,17 +621,18 @@ GLuint QGLPixelBuffer::generateDynamicTexture() const
     }
 
     GLuint texture;
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
 
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    funcs->glGenTextures(1, &texture);
+    funcs->glBindTexture(GL_TEXTURE_2D, texture);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    funcs->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    funcs->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    funcs->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    funcs->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, d->req_size.width(), d->req_size.height(), 0,
-            GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    funcs->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, d->req_size.width(), d->req_size.height(), 0,
+                        GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
     return texture;
 }

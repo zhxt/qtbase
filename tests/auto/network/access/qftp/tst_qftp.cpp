@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -56,6 +48,14 @@
 #include <QtNetwork/private/qnetworksession_p.h>
 
 #include "../../../network-settings.h"
+
+template <class T1, class T2>
+static QByteArray msgComparison(T1 lhs, const char *op, T2 rhs)
+{
+    QString result;
+    QTextStream(&result) << lhs << ' ' << op << ' ' << rhs;
+    return result.toLatin1();
+}
 
 class tst_QFtp : public QObject
 {
@@ -174,6 +174,7 @@ private:
     bool inFileDirExistsFunction;
 
     QString uniqueExtension;
+    QString rfc3252File;
 };
 
 //#define DUMP_SIGNALS
@@ -197,13 +198,17 @@ void tst_QFtp::initTestCase_data()
     QTest::addColumn<bool>("setSession");
 
     QTest::newRow("WithoutProxy") << false << 0 << false;
+#ifndef QT_NO_SOCKS5
     QTest::newRow("WithSocks5Proxy") << true << int(QNetworkProxy::Socks5Proxy) << false;
+#endif
     //### doesn't work well yet.
     //QTest::newRow("WithHttpProxy") << true << int(QNetworkProxy::HttpProxy);
 
 #ifndef QT_NO_BEARERMANAGEMENT
     QTest::newRow("WithoutProxyWithSession") << false << 0 << true;
+#ifndef QT_NO_SOCKS5
     QTest::newRow("WithSocks5ProxyAndSession") << true << int(QNetworkProxy::Socks5Proxy) << true;
+#endif
 #endif
 }
 
@@ -216,6 +221,8 @@ void tst_QFtp::initTestCase()
     networkSessionImplicit->open();
     QVERIFY(networkSessionImplicit->waitForOpened(60000)); //there may be user prompt on 1st connect
 #endif
+    rfc3252File = QFINDTESTDATA("rfc3252.txt");
+    QVERIFY(!rfc3252File.isEmpty());
 }
 
 void tst_QFtp::cleanupTestCase()
@@ -232,11 +239,16 @@ void tst_QFtp::init()
     QFETCH_GLOBAL(int, proxyType);
     QFETCH_GLOBAL(bool, setSession);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         if (proxyType == QNetworkProxy::Socks5Proxy) {
             QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080));
         } else if (proxyType == QNetworkProxy::HttpProxy) {
             QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::HttpProxy, QtNetworkSettings::serverName(), 3128));
         }
+#else // !QT_NO_NETWORKPROXY
+        Q_UNUSED(proxyType);
+        QSKIP("No proxy support");
+#endif // QT_NO_NETWORKPROXY
     }
 #ifndef QT_NO_BEARERMANAGEMENT
     if (setSession) {
@@ -293,7 +305,11 @@ void tst_QFtp::cleanup()
     }
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         QNetworkProxy::setApplicationProxy(QNetworkProxy::DefaultProxy);
+#else
+        QSKIP("No proxy support");
+#endif
     }
 
     delete ftp;
@@ -314,6 +330,16 @@ void tst_QFtp::connectToHost_data()
     QTest::newRow( "error02" ) << QString("foo.bar") << (uint)21 << (int)QFtp::Unconnected;
 }
 
+static QByteArray msgTimedOut(const QString &host, quint16 port = 0)
+{
+    QByteArray result = "Network operation timed out on " + host.toLatin1();
+    if (port) {
+        result += ':';
+        result += QByteArray::number(port);
+    }
+    return result;
+}
+
 void tst_QFtp::connectToHost()
 {
     QFETCH( QString, host );
@@ -326,7 +352,7 @@ void tst_QFtp::connectToHost()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     QTEST( connectToHost_state, "state" );
 
@@ -334,9 +360,9 @@ void tst_QFtp::connectToHost()
     QVERIFY( it != resultMap.end() );
     QFETCH( int, state );
     if ( state == QFtp::Connected ) {
-        QVERIFY( it.value().success == 1 );
+        QCOMPARE( it.value().success, 1 );
     } else {
-        QVERIFY( it.value().success == 0 );
+        QCOMPARE( it.value().success , 0 );
     }
 }
 
@@ -369,10 +395,10 @@ void tst_QFtp::connectToUnresponsiveHost()
 #endif
     QVERIFY2(! QTestEventLoop::instance().timeout(), "Network timeout longer than expected (should have been 60 seconds)");
 
-    QVERIFY( ftp->state() == QFtp::Unconnected);
+    QCOMPARE( ftp->state(), QFtp::Unconnected);
     ResMapIt it = resultMap.find( QFtp::ConnectToHost );
     QVERIFY( it != resultMap.end() );
-    QVERIFY( it.value().success == 0 );
+    QCOMPARE( it.value().success, 0 );
 
     delete ftp;
     ftp = 0;
@@ -410,16 +436,17 @@ void tst_QFtp::login()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     ResMapIt it = resultMap.find( QFtp::Login );
     QVERIFY( it != resultMap.end() );
     QTEST( it.value().success, "success" );
 
+    const QFtp::State loginState = static_cast<QFtp::State>(login_state);
     if ( it.value().success ) {
-        QVERIFY( login_state == QFtp::LoggedIn );
+        QCOMPARE( loginState, QFtp::LoggedIn );
     } else {
-        QVERIFY( login_state != QFtp::LoggedIn );
+        QVERIFY2( loginState != QFtp::LoggedIn, msgComparison(loginState, "!=", QFtp::LoggedIn));
     }
 }
 
@@ -457,13 +484,13 @@ void tst_QFtp::close()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     QCOMPARE( close_state, (int)QFtp::Unconnected );
 
     ResMapIt it = resultMap.find( QFtp::Close );
     QVERIFY( it != resultMap.end() );
-    QVERIFY( it.value().success == 1 );
+    QCOMPARE( it.value().success, 1 );
 }
 
 void tst_QFtp::list_data()
@@ -525,7 +552,7 @@ void tst_QFtp::list()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     ResMapIt it = resultMap.find( QFtp::List );
     QVERIFY( it != resultMap.end() );
@@ -586,7 +613,7 @@ void tst_QFtp::cd()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() ) {
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
     }
 
     ResMapIt it = resultMap.find( QFtp::Cd );
@@ -611,8 +638,8 @@ void tst_QFtp::get_data()
     QTest::addColumn<bool>("useIODevice");
 
     // ### move this into external testdata
-    QFile file( SRCDIR "rfc3252.txt" );
-    QVERIFY( file.open( QIODevice::ReadOnly ) );
+    QFile file(rfc3252File);
+    QVERIFY2( file.open( QIODevice::ReadOnly ), qPrintable(file.errorString()) );
     QByteArray rfc3252 = file.readAll();
 
     // test the two get() overloads in one routine
@@ -662,7 +689,7 @@ void tst_QFtp::get()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     ResMapIt it = resultMap.find( QFtp::Get );
     QVERIFY( it != resultMap.end() );
@@ -672,17 +699,17 @@ void tst_QFtp::get()
     } else {
         QTEST( newData_ba, "res" );
     }
-    QVERIFY( bytesTotal != bytesTotal_init );
+    QVERIFY2( bytesTotal != bytesTotal_init, msgComparison(bytesTotal, "!=", bytesTotal_init) );
     if ( bytesTotal != -1 ) {
-        QVERIFY( bytesDone == bytesTotal );
+        QCOMPARE( bytesDone, bytesTotal );
     }
     if ( useIODevice ) {
         if ( bytesDone != bytesDone_init ) {
-            QVERIFY( (int)buf_ba.size() == bytesDone );
+            QCOMPARE( qlonglong(buf_ba.size()), bytesDone );
         }
     } else {
         if ( bytesDone != bytesDone_init ) {
-            QVERIFY( (int)newData_ba.size() == bytesDone );
+            QCOMPARE( qlonglong(newData_ba.size()), bytesDone );
         }
     }
 }
@@ -699,8 +726,8 @@ void tst_QFtp::put_data()
     QTest::addColumn<int>("success");
 
     // ### move this into external testdata
-    QFile file( SRCDIR "rfc3252.txt" );
-    QVERIFY( file.open( QIODevice::ReadOnly ) );
+    QFile file(rfc3252File);
+    QVERIFY2( file.open( QIODevice::ReadOnly ), qPrintable(file.errorString()) );
     QByteArray rfc3252 = file.readAll();
 
     QByteArray bigData( 10*1024*1024, 0 );
@@ -749,14 +776,14 @@ void tst_QFtp::put()
     QFETCH( QByteArray, fileData );
     QFETCH( bool, useIODevice );
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(QT_NO_NETWORKPROXY)
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy)
             QSKIP("With socks5 the put() test takes too long time on Windows.");
     }
-#endif
+#endif // OS_WIN && !QT_NO_NETWORKPROXY
 
     const int timestep = 50;
 
@@ -788,7 +815,7 @@ void tst_QFtp::put()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     it = resultMap.find( QFtp::Put );
     QVERIFY( it != resultMap.end() );
@@ -797,8 +824,8 @@ void tst_QFtp::put()
         QVERIFY( !fileExists( host, port, user, password, file ) );
         return; // the following tests are only meaningful if the file could be put
     }
-    QVERIFY( bytesTotal == (int)fileData.size() );
-    QVERIFY( bytesDone == bytesTotal );
+    QCOMPARE( bytesTotal, qlonglong(fileData.size()) );
+    QCOMPARE( bytesDone, bytesTotal );
 
     QVERIFY( fileExists( host, port, user, password, file ) );
 
@@ -821,9 +848,9 @@ void tst_QFtp::put()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
-    QVERIFY( done_success == 1 );
+    QCOMPARE( done_success, 1 );
     QTEST( buf.buffer(), "fileData" );
 
     //////////////////////////////////////////////////////////////////
@@ -839,7 +866,7 @@ void tst_QFtp::put()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     it = resultMap.find( QFtp::Remove );
     QVERIFY( it != resultMap.end() );
@@ -903,7 +930,7 @@ void tst_QFtp::mkdir()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     ResMapIt it = resultMap.find( QFtp::Mkdir );
     QVERIFY( it != resultMap.end() );
@@ -928,7 +955,7 @@ void tst_QFtp::mkdir()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     it = resultMap.find( QFtp::Mkdir );
     QVERIFY( it != resultMap.end() );
@@ -948,7 +975,7 @@ void tst_QFtp::mkdir()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     it = resultMap.find( QFtp::Rmdir );
     QVERIFY( it != resultMap.end() );
@@ -1061,11 +1088,11 @@ void tst_QFtp::renameInit( const QString &host, const QString &user, const QStri
         delete ftp;
         ftp = 0;
         if ( QTestEventLoop::instance().timeout() )
-            QFAIL( "Network operation timed out" );
+            QFAIL( msgTimedOut(host) );
 
         ResMapIt it = resultMap.find( QFtp::Put );
         QVERIFY( it != resultMap.end() );
-        QVERIFY( it.value().success == 1 );
+        QCOMPARE( it.value().success, 1 );
 
         QVERIFY( fileExists( host, 21, user, password, createFile ) );
     }
@@ -1086,11 +1113,11 @@ void tst_QFtp::renameCleanup( const QString &host, const QString &user, const QS
         delete ftp;
         ftp = 0;
         if ( QTestEventLoop::instance().timeout() )
-            QFAIL( "Network operation timed out" );
+            QFAIL( msgTimedOut(host) );
 
         ResMapIt it = resultMap.find( QFtp::Remove );
         QVERIFY( it != resultMap.end() );
-        QVERIFY( it.value().success == 1 );
+        QCOMPARE( it.value().success, 1 );
 
         QVERIFY( !fileExists( host, 21, user, password, fileToDelete ) );
     }
@@ -1131,7 +1158,7 @@ void tst_QFtp::rename()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host) );
 
     ResMapIt it = resultMap.find( QFtp::Rename );
     QVERIFY( it != resultMap.end() );
@@ -1287,25 +1314,27 @@ void tst_QFtp::commandSequence()
     QFETCH( QList<FtpCommand>, cmds );
 
     ftp = newFtp();
+    QString host;
+    quint16 port = 0;
     QList<FtpCommand>::iterator it;
     for ( it = cmds.begin(); it != cmds.end(); ++it ) {
         switch ( (*it).cmd ) {
         case QFtp::ConnectToHost:
             {
-                QVERIFY( (*it).args.count() == 2 );
-                uint port;
+                QCOMPARE( (*it).args.count(), 2 );
                 bool portOk;
-                port = (*it).args[1].toUInt( &portOk );
+                port = (*it).args[1].toUShort( &portOk );
                 QVERIFY( portOk );
-                ids << ftp->connectToHost( (*it).args[0], port );
+                host = (*it).args[0];
+                ids << ftp->connectToHost( host, port );
             }
             break;
         case QFtp::Login:
-            QVERIFY( (*it).args.count() == 2 );
+            QCOMPARE( (*it).args.count(), 2 );
             ids << ftp->login( (*it).args[0], (*it).args[1] );
             break;
         case QFtp::Close:
-            QVERIFY( (*it).args.count() == 0 );
+            QCOMPARE( (*it).args.count(), 0 );
             ids << ftp->close();
             break;
         default:
@@ -1318,7 +1347,7 @@ void tst_QFtp::commandSequence()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host) );
 
     QTEST( commandSequence_success, "success" );
 }
@@ -1345,6 +1374,7 @@ void tst_QFtp::abort_data()
 
 void tst_QFtp::abort()
 {
+    QSKIP("This test takes too long.");
     // In case you wonder where the abort() actually happens, look into
     // tst_QFtp::dataTransferProgress
     //
@@ -1376,7 +1406,7 @@ void tst_QFtp::abort()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
 
     ResMapIt it = resultMap.find( cmd );
     QVERIFY( it != resultMap.end() );
@@ -1386,18 +1416,18 @@ void tst_QFtp::abort()
         // the operation was aborted. So we have to use some heuristics.
         if ( host == QtNetworkSettings::serverName() ) {
             if ( cmd == QFtp::Get ) {
-                QVERIFY(bytesDone <= bytesTotal);
+                QVERIFY2(bytesDone <= bytesTotal, msgComparison(bytesDone, "<=", bytesTotal));
             } else {
                 // put commands should always be aborted, since we use really
                 // big data
-                QVERIFY( bytesDone != bytesTotal );
+                QVERIFY2( bytesDone != bytesTotal, msgComparison(bytesDone, "!=", bytesTotal) );
             }
         } else {
             // this could be tested by verifying that no more progress signals are emitted
-            QVERIFY(bytesDone <= bytesTotal);
+            QVERIFY2(bytesDone <= bytesTotal, msgComparison(bytesDone, "<=", bytesTotal));
         }
     } else {
-        QVERIFY( bytesDone != bytesTotal );
+        QVERIFY2( bytesDone != bytesTotal, msgComparison(bytesDone, "!=", bytesTotal) );
     }
 
     if ( cmd == QFtp::Put ) {
@@ -1414,11 +1444,11 @@ void tst_QFtp::abort()
         delete ftp;
         ftp = 0;
         if ( QTestEventLoop::instance().timeout() )
-            QFAIL( "Network operation timed out" );
+            QFAIL( msgTimedOut(host, port) );
 
         it = resultMap.find( QFtp::Remove );
         QVERIFY( it != resultMap.end() );
-        QVERIFY( it.value().success == 1 );
+        QCOMPARE( it.value().success, 1 );
     }
 }
 
@@ -1453,7 +1483,7 @@ void tst_QFtp::bytesAvailable()
 
     QTestEventLoop::instance().enterLoop( 40 );
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host) );
 
     ResMapIt it = resultMap.find( QFtp::Get );
     QVERIFY( it != resultMap.end() );
@@ -1469,7 +1499,7 @@ void tst_QFtp::bytesAvailable()
     QCOMPARE(bytesAvailable_done, bytesAvailDone);
 
     ftp->readAll();
-    QVERIFY( ftp->bytesAvailable() == 0 );
+    QCOMPARE( ftp->bytesAvailable(), 0 );
     delete ftp;
     ftp = 0;
 }
@@ -1487,7 +1517,7 @@ void tst_QFtp::activeMode()
     connect(&ftp, SIGNAL(done(bool)), SLOT(activeModeDone(bool)));
     QTestEventLoop::instance().enterLoop(900);
     QFile::remove("tst_QFtp_activeMode_inittab");
-    QVERIFY(done_success == 1);
+    QCOMPARE(done_success, 1);
 
 }
 
@@ -1546,7 +1576,7 @@ void tst_QFtp::proxy()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() ) {
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(host, port) );
     }
 
     ResMapIt it = resultMap.find( QFtp::Cd );
@@ -1581,7 +1611,7 @@ void tst_QFtp::binaryAscii()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(QtNetworkSettings::serverName()) );
 
     ResMapIt it = resultMap.find(QFtp::Put);
     QVERIFY(it != resultMap.end());
@@ -1603,7 +1633,7 @@ void tst_QFtp::binaryAscii()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(QtNetworkSettings::serverName()) );
 
     ResMapIt it2 = resultMap.find(QFtp::Get);
     QVERIFY(it2 != resultMap.end());
@@ -1611,7 +1641,7 @@ void tst_QFtp::binaryAscii()
     // most modern ftp servers leave the file as it is by default
     // (and do not remove the windows line ending), the -1 below could be
     // deleted in the future
-    QVERIFY(getData.size() == putData.size()-1);
+    QCOMPARE(getData.size(), putData.size() - 1);
     //////////////////////////////////////////////////////////////////
     // cleanup (i.e. remove the file) -- this also tests the remove command
     init();
@@ -1626,7 +1656,7 @@ void tst_QFtp::binaryAscii()
     delete ftp;
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() )
-        QFAIL( "Network operation timed out" );
+        QFAIL( msgTimedOut(QtNetworkSettings::serverName()) );
 
     it = resultMap.find( QFtp::Remove );
     QVERIFY( it != resultMap.end() );
@@ -1653,11 +1683,11 @@ void tst_QFtp::commandStarted( int id )
     qDebug( "%d:commandStarted( %d )", ftp->currentId(), id );
 #endif
     // make sure that the commandStarted and commandFinished are nested correctly
-    QVERIFY( current_id == 0 );
+    QCOMPARE( current_id, 0 );
     current_id = id;
 
     QVERIFY( !ids.isEmpty() );
-    QVERIFY( ids.first() == id );
+    QCOMPARE( ids.first(), id );
     if ( ids.count() > 1 ) {
         QVERIFY( ftp->hasPendingCommands() );
     } else {
@@ -1665,10 +1695,10 @@ void tst_QFtp::commandStarted( int id )
     }
 
     QVERIFY( ftp->currentId() == id );
-    QVERIFY( cur_state == ftp->state() );
+    QCOMPARE( cur_state, int(ftp->state()) );
     CURRENTCOMMAND_TEST;
 
-    QVERIFY( ftp->error() == QFtp::NoError );
+    QCOMPARE( ftp->error(), QFtp::NoError );
 }
 
 void tst_QFtp::commandFinished( int id, bool error )
@@ -1683,32 +1713,32 @@ void tst_QFtp::commandFinished( int id, bool error )
     bytesAvailable_finished = ftp->bytesAvailable();
 
     // make sure that the commandStarted and commandFinished are nested correctly
-    QVERIFY( current_id == id );
+    QCOMPARE( current_id, id );
     current_id = 0;
 
     QVERIFY( !ids.isEmpty() );
-    QVERIFY( ids.first() == id );
+    QCOMPARE( ids.first(), id );
     if ( !error && ids.count() > 1) {
         QVERIFY( ftp->hasPendingCommands() );
     } else {
         QVERIFY( !ftp->hasPendingCommands() );
     }
     if ( error ) {
-        QVERIFY( ftp->error() != QFtp::NoError );
+        QVERIFY2( ftp->error() != QFtp::NoError, msgComparison(ftp->error(), "!=", QFtp::NoError) );
         ids.clear();
     } else {
-        QVERIFY( ftp->error() == QFtp::NoError );
+        QCOMPARE( ftp->error(), QFtp::NoError );
         ids.pop_front();
     }
 
-    QVERIFY( ftp->currentId() == id );
-    QVERIFY( cur_state == ftp->state() );
+    QCOMPARE( ftp->currentId(), id );
+    QCOMPARE( cur_state, int(ftp->state()) );
     CURRENTCOMMAND_TEST;
 
     if ( QTest::currentTestFunction() != QLatin1String("commandSequence") ) {
         ResMapIt it = resultMap.find( ftp->currentCommand() );
         QVERIFY( it != resultMap.end() );
-        QVERIFY( it.value().success == -1 );
+        QCOMPARE( it.value().success, -1 );
         if ( error )
             it.value().success = 0;
         else
@@ -1723,25 +1753,25 @@ void tst_QFtp::done( bool error )
 #endif
     bytesAvailable_done = ftp->bytesAvailable();
 
-    QVERIFY( ftp->currentId() == 0 );
+    QCOMPARE( ftp->currentId(), 0 );
     QVERIFY( current_id == 0 );
     QVERIFY( ids.isEmpty() );
     QVERIFY( cur_state == ftp->state() );
     QVERIFY( !ftp->hasPendingCommands() );
 
     if ( QTest::currentTestFunction() == QLatin1String("commandSequence") ) {
-        QVERIFY( commandSequence_success == -1 );
+        QCOMPARE( commandSequence_success, -1 );
         if ( error )
             commandSequence_success = 0;
         else
             commandSequence_success = 1;
     }
-    QVERIFY( done_success == -1 );
+    QCOMPARE( done_success, -1 );
     if ( error ) {
-        QVERIFY( ftp->error() != QFtp::NoError );
+        QVERIFY2( ftp->error() != QFtp::NoError, msgComparison(ftp->error(), "!=", QFtp::NoError) );
         done_success = 0;
     } else {
-        QVERIFY( ftp->error() == QFtp::NoError );
+        QCOMPARE( ftp->error(), QFtp::NoError );
         done_success = 1;
     }
     QTestEventLoop::instance().exitLoop();
@@ -1755,13 +1785,13 @@ void tst_QFtp::stateChanged( int state )
     QCOMPARE( ftp->currentId(), current_id );
     CURRENTCOMMAND_TEST;
 
-    QVERIFY( state != cur_state );
+    QVERIFY2( state != cur_state, msgComparison(state, "!=", cur_state) );
     QCOMPARE( state, (int)ftp->state() );
     if ( state != QFtp::Unconnected ) {
         // make sure that the states are always emitted in the right order (for
         // this, we assume an ordering on the enum values, which they have at
         // the moment)
-        QVERIFY( cur_state < state );
+        QVERIFY2( cur_state < state, msgComparison(cur_state, "<", state) );
 
         // make sure that state changes are only emitted in response to certain
         // commands
@@ -1805,10 +1835,10 @@ void tst_QFtp::stateChanged( int state )
         ResMapIt it = resultMap.find( QFtp::Close );
         if ( it!=resultMap.end() && ftp->currentId()==it.value().id ) {
             if ( state == QFtp::Closing ) {
-                QVERIFY( close_state == -1 );
+                QCOMPARE( close_state, -1 );
                 close_state = state;
             } else if ( state == QFtp::Unconnected ) {
-                QVERIFY( close_state == QFtp::Closing );
+                QCOMPARE(close_state, int(QFtp::Closing) );
                 close_state = state;
             }
         }
@@ -1816,7 +1846,7 @@ void tst_QFtp::stateChanged( int state )
         ResMapIt it = resultMap.find( QFtp::Login );
         if ( it!=resultMap.end() && ftp->currentId()==it.value().id ) {
             if ( state == QFtp::LoggedIn ) {
-                QVERIFY( login_state == -1 );
+                QCOMPARE( login_state, -1 );
                 login_state = state;
             }
         }
@@ -1834,13 +1864,13 @@ void tst_QFtp::listInfo( const QUrlInfo &i )
     } else {
         QVERIFY( !ftp->hasPendingCommands() );
     }
-    QVERIFY( cur_state == ftp->state() );
+    QCOMPARE( cur_state, int(ftp->state()) );
     CURRENTCOMMAND_TEST;
 
     if ( QTest::currentTestFunction()==QLatin1String("list") || QTest::currentTestFunction()==QLatin1String("cd") || QTest::currentTestFunction()==QLatin1String("proxy") || inFileDirExistsFunction ) {
         ResMapIt it = resultMap.find( QFtp::List );
         QVERIFY( it != resultMap.end() );
-        QVERIFY( ftp->currentId() == it.value().id );
+        QCOMPARE( ftp->currentId(), it.value().id );
         listInfo_i << i;
     }
 }
@@ -1863,14 +1893,14 @@ void tst_QFtp::readyRead()
         int oldSize = newData_ba.size();
         qlonglong bytesAvail = ftp->bytesAvailable();
         QByteArray ba = ftp->readAll();
-        QVERIFY( ba.size() == (int) bytesAvail );
+        QCOMPARE( ba.size(), (int) bytesAvail );
         newData_ba.resize( oldSize + ba.size() );
         memcpy( newData_ba.data()+oldSize, ba.data(), ba.size() );
 
         if ( bytesTotal != -1 ) {
-            QVERIFY( (int)newData_ba.size() <= bytesTotal );
+            QVERIFY2( (int)newData_ba.size() <= bytesTotal, msgComparison(newData_ba.size(), "<=", bytesTotal) );
         }
-        QVERIFY( (int)newData_ba.size() == bytesDone );
+        QCOMPARE( qlonglong(newData_ba.size()), bytesDone );
     }
 }
 
@@ -1885,20 +1915,20 @@ void tst_QFtp::dataTransferProgress( qint64 done, qint64 total )
     } else {
         QVERIFY( !ftp->hasPendingCommands() );
     }
-    QVERIFY( cur_state == ftp->state() );
+    QCOMPARE( cur_state, int(ftp->state()) );
     CURRENTCOMMAND_TEST;
 
     if ( bytesTotal == bytesTotal_init ) {
         bytesTotal = total;
     } else {
-        QVERIFY( bytesTotal == total );
+        QCOMPARE( bytesTotal, total );
     }
 
-    QVERIFY( bytesTotal != bytesTotal_init );
-    QVERIFY( bytesDone <= done );
+    QVERIFY2( bytesTotal != bytesTotal_init, msgComparison(bytesTotal, "!=", bytesTotal_init) );
+    QVERIFY2( bytesDone <= done, msgComparison(bytesDone, "<=", done) );
     bytesDone = done;
     if ( bytesTotal != -1 ) {
-        QVERIFY( bytesDone <= bytesTotal );
+        QVERIFY2( bytesDone <= bytesTotal, msgComparison(bytesDone, "<=", bytesTotal) );
     }
 
     if ( QTest::currentTestFunction() == QLatin1String("abort") ) {
@@ -2031,7 +2061,7 @@ bool tst_QFtp::dirExists( const QString &host, quint16 port, const QString &user
     ftp = 0;
     if ( QTestEventLoop::instance().timeout() ) {
         // ### make this test work
-        // QFAIL( "Network operation timed out" );
+        // QFAIL( msgTimedOut(host, port) );
         qWarning("tst_QFtp::dirExists: Network operation timed out");
         return false;
     }

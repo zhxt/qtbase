@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -58,17 +50,17 @@
 #include <mach/mach_time.h>
 #endif
 
+#ifdef Q_OS_BLACKBERRY
+#include <qsocketnotifier.h>
+#endif // Q_OS_BLACKBERRY
+
 QT_BEGIN_NAMESPACE
 
 static inline bool time_update(struct timespec *tv, const struct timespec &start,
                                const struct timespec &timeout)
 {
-    if (!QElapsedTimer::isMonotonic()) {
-        // we cannot recalculate the timeout without a monotonic clock as the time may have changed
-        return false;
-    }
-
-    // clock source is monotonic, so we can recalculate how much timeout is left
+    // clock source is (hopefully) monotonic, so we can recalculate how much timeout is left;
+    // if it isn't monotonic, we'll simply hope that it hasn't jumped, because we have no alternative
     struct timespec now = qt_gettime();
     *tv = timeout + start - now;
     return tv->tv_sec >= 0;
@@ -79,7 +71,7 @@ int qt_safe_select(int nfds, fd_set *fdread, fd_set *fdwrite, fd_set *fdexcept,
 {
     if (!orig_timeout) {
         // no timeout -> block forever
-        register int ret;
+        int ret;
         EINTR_LOOP(ret, select(nfds, fdread, fdwrite, fdexcept, 0));
         return ret;
     }
@@ -109,5 +101,44 @@ int qt_safe_select(int nfds, fd_set *fdread, fd_set *fdwrite, fd_set *fdexcept,
         }
     }
 }
+
+int qt_select_msecs(int nfds, fd_set *fdread, fd_set *fdwrite, int timeout)
+{
+    if (timeout < 0)
+        return qt_safe_select(nfds, fdread, fdwrite, 0, 0);
+
+    struct timespec tv;
+    tv.tv_sec = timeout / 1000;
+    tv.tv_nsec = (timeout % 1000) * 1000 * 1000;
+    return qt_safe_select(nfds, fdread, fdwrite, 0, &tv);
+}
+
+#ifdef Q_OS_BLACKBERRY
+// The BlackBerry event dispatcher uses bps_get_event. Unfortunately, already registered
+// socket notifiers are disabled by a call to select. This is to rearm the standard streams.
+int bb_select(QList<QSocketNotifier *> socketNotifiers, int nfds, fd_set *fdread, fd_set *fdwrite,
+              int timeout)
+{
+    QList<bool> socketNotifiersEnabled;
+    socketNotifiersEnabled.reserve(socketNotifiers.count());
+    for (int a = 0; a < socketNotifiers.count(); ++a) {
+        if (socketNotifiers.at(a) && socketNotifiers.at(a)->isEnabled()) {
+            socketNotifiersEnabled.append(true);
+            socketNotifiers.at(a)->setEnabled(false);
+        } else {
+            socketNotifiersEnabled.append(false);
+        }
+    }
+
+    const int ret = qt_select_msecs(nfds, fdread, fdwrite, timeout);
+
+    for (int a = 0; a < socketNotifiers.count(); ++a) {
+        if (socketNotifiersEnabled.at(a) == true)
+            socketNotifiers.at(a)->setEnabled(true);
+    }
+
+    return ret;
+}
+#endif // Q_OS_BLACKBERRY
 
 QT_END_NAMESPACE

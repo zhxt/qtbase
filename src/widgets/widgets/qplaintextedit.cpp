@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -284,19 +276,19 @@ void QPlainTextDocumentLayoutPrivate::relayout()
 
 /*! \reimp
  */
-void QPlainTextDocumentLayout::documentChanged(int from, int /*charsRemoved*/, int charsAdded)
+void QPlainTextDocumentLayout::documentChanged(int from, int charsRemoved, int charsAdded)
 {
     Q_D(QPlainTextDocumentLayout);
     QTextDocument *doc = document();
     int newBlockCount = doc->blockCount();
+    int charsChanged = charsRemoved + charsAdded;
 
     QTextBlock changeStartBlock = doc->findBlock(from);
-    QTextBlock changeEndBlock = doc->findBlock(qMax(0, from + charsAdded - 1));
+    QTextBlock changeEndBlock = doc->findBlock(qMax(0, from + charsChanged - 1));
 
     if (changeStartBlock == changeEndBlock && newBlockCount == d->blockCount) {
         QTextBlock block = changeStartBlock;
-        int blockLineCount = block.layout()->lineCount();
-        if (block.isValid() && blockLineCount) {
+        if (block.isValid() && block.length()) {
             QRectF oldBr = blockBoundingRect(block);
             layoutBlock(block);
             QRectF newBr = blockBoundingRect(block);
@@ -347,7 +339,7 @@ void QPlainTextDocumentLayout::documentChanged(int from, int /*charsRemoved*/, i
     }
 
     if (!d->blockUpdate)
-	emit update(QRectF(0., -doc->documentMargin(), 1000000000., 1000000000.)); // optimization potential
+        emit update(QRectF(0., -doc->documentMargin(), 1000000000., 1000000000.)); // optimization potential
 }
 
 
@@ -612,6 +604,10 @@ QRectF QPlainTextEditControl::blockBoundingRect(const QTextBlock &block) const {
     return r;
 }
 
+QString QPlainTextEditControl::anchorAt(const QPointF &pos) const
+{
+    return textEdit->anchorAt(pos.toPoint());
+}
 
 void QPlainTextEditPrivate::setTopLine(int visualTopLine, int dx)
 {
@@ -639,9 +635,10 @@ void QPlainTextEditPrivate::setTopBlock(int blockNumber, int lineNumber, int dx)
         lineNumber = maxTopLine - block.firstLineNumber();
     }
 
-    bool vbarSignalsBlocked = vbar->blockSignals(true);
-    vbar->setValue(newTopLine);
-    vbar->blockSignals(vbarSignalsBlocked);
+    {
+        const QSignalBlocker blocker(vbar);
+        vbar->setValue(newTopLine);
+    }
 
     if (!dx && blockNumber == control->topBlock && lineNumber == topLine)
         return;
@@ -657,9 +654,10 @@ void QPlainTextEditPrivate::setTopBlock(int blockNumber, int lineNumber, int dx)
         control->topBlock = blockNumber;
         topLine = lineNumber;
 
-        bool vbarSignalsBlocked = vbar->blockSignals(true);
-        vbar->setValue(block.firstLineNumber() + lineNumber);
-        vbar->blockSignals(vbarSignalsBlocked);
+        {
+            const QSignalBlocker blocker(vbar);
+            vbar->setValue(block.firstLineNumber() + lineNumber);
+        }
 
         if (dx || dy) {
             viewport->scroll(q->isRightToLeft() ? -dx : dx, dy);
@@ -687,10 +685,9 @@ void QPlainTextEditPrivate::ensureVisible(int position, bool center, bool forceC
     QRectF br = control->blockBoundingRect(block);
     if (!br.isValid())
         return;
-    QRectF lr = br;
     QTextLine line = block.layout()->lineForTextPosition(position - block.position());
     Q_ASSERT(line.isValid());
-    lr = line.naturalTextRect().translated(br.topLeft());
+    QRectF lr = line.naturalTextRect().translated(br.topLeft());
 
     if (lr.bottom() >= visible.bottom() || (center && lr.top() < visible.top()) || forceCenter){
 
@@ -801,12 +798,13 @@ void QPlainTextEditPrivate::init(const QString &txt)
     q->setFocusPolicy(Qt::WheelFocus);
     q->setAttribute(Qt::WA_KeyCompression);
     q->setAttribute(Qt::WA_InputMethodEnabled);
+    q->setInputMethodHints(Qt::ImhMultiLine);
 
 #ifndef QT_NO_CURSOR
     viewport->setCursor(Qt::IBeamCursor);
 #endif
     originalOffsetY = 0;
-#ifdef Q_WS_WIN
+#ifdef Q_DEAD_CODE_FROM_QT4_WIN
     setSingleFingerPanEnabled(true);
 #endif
 }
@@ -994,7 +992,8 @@ void QPlainTextEditPrivate::_q_adjustScrollbars()
 
     } else {
         vmax = qMax(0, doc->lineCount() - 1);
-        vSliderLength = viewport->height() / q->fontMetrics().lineSpacing();
+        int lineSpacing = q->fontMetrics().lineSpacing();
+        vSliderLength = lineSpacing != 0 ? viewport->height() / lineSpacing : 0;
     }
 
 
@@ -1006,9 +1005,11 @@ void QPlainTextEditPrivate::_q_adjustScrollbars()
     QTextBlock firstVisibleBlock = q->firstVisibleBlock();
     if (firstVisibleBlock.isValid())
         visualTopLine = firstVisibleBlock.firstLineNumber() + topLine;
-    bool vbarSignalsBlocked = vbar->blockSignals(true);
-    vbar->setValue(visualTopLine);
-    vbar->blockSignals(vbarSignalsBlocked);
+
+    {
+        const QSignalBlocker blocker(vbar);
+        vbar->setValue(visualTopLine);
+    }
 
     hbar->setRange(0, (int)documentSize.width() - viewport->width());
     hbar->setPageStep(viewport->width());
@@ -1211,7 +1212,7 @@ void QPlainTextEditPrivate::ensureViewportLayouted()
     Users are only able to undo or redo actions if this property is
     true, and if there is an action that can be undone (or redone).
 
-    By default, this property is true.
+    By default, this property is \c true.
 */
 
 /*!
@@ -1313,6 +1314,35 @@ QTextDocument *QPlainTextEdit::document() const
 {
     Q_D(const QPlainTextEdit);
     return d->control->document();
+}
+
+/*!
+    \since 5.3
+
+    \property QPlainTextEdit::placeholderText
+    \brief the editor placeholder text
+
+    Setting this property makes the editor display a grayed-out
+    placeholder text as long as the document() is empty.
+
+    By default, this property contains an empty string.
+
+    \sa document()
+*/
+void QPlainTextEdit::setPlaceholderText(const QString &placeholderText)
+{
+    Q_D(QPlainTextEdit);
+    if (d->placeholderText != placeholderText) {
+        d->placeholderText = placeholderText;
+        if (d->control->document()->isEmpty())
+            d->viewport->update();
+    }
+}
+
+QString QPlainTextEdit::placeholderText() const
+{
+    Q_D(const QPlainTextEdit);
+    return d->placeholderText;
 }
 
 /*!
@@ -1776,7 +1806,7 @@ void QPlainTextEdit::keyReleaseEvent(QKeyEvent *e)
         }
     }
 #else
-    Q_UNUSED(e);
+    QWidget::keyReleaseEvent(e);
 #endif
 }
 
@@ -1941,7 +1971,16 @@ void QPlainTextEdit::paintEvent(QPaintEvent *e)
             }
 
 
-            layout->draw(&painter, offset, selections, er);
+            if (!placeholderText().isEmpty() && document()->isEmpty()) {
+              Q_D(QPlainTextEdit);
+              QColor col = d->control->palette().text().color();
+              col.setAlpha(128);
+              painter.setPen(col);
+              const int margin = int(document()->documentMargin());
+              painter.drawText(r.adjusted(margin, 0, 0, 0), Qt::AlignTop | Qt::TextWordWrap, placeholderText());
+            } else {
+              layout->draw(&painter, offset, selections, er);
+            }
             if ((drawCursor && !drawCursorAsBlock)
                 || (editable && context.cursorPosition < -1
                     && !layout->preeditAreaText().isEmpty())) {
@@ -2006,11 +2045,13 @@ void QPlainTextEdit::mouseMoveEvent(QMouseEvent *e)
     d->sendControlEvent(e);
     if (!(e->buttons() & Qt::LeftButton))
         return;
-    QRect visible = d->viewport->rect();
-    if (visible.contains(pos))
-        d->autoScrollTimer.stop();
-    else if (!d->autoScrollTimer.isActive())
-        d->autoScrollTimer.start(100, this);
+    if (e->source() == Qt::MouseEventNotSynthesized) {
+        const QRect visible = d->viewport->rect();
+        if (visible.contains(pos))
+            d->autoScrollTimer.stop();
+        else if (!d->autoScrollTimer.isActive())
+            d->autoScrollTimer.start(100, this);
+    }
 }
 
 /*! \reimp
@@ -2019,7 +2060,7 @@ void QPlainTextEdit::mouseReleaseEvent(QMouseEvent *e)
 {
     Q_D(QPlainTextEdit);
     d->sendControlEvent(e);
-    if (d->autoScrollTimer.isActive()) {
+    if (e->source() == Qt::MouseEventNotSynthesized && d->autoScrollTimer.isActive()) {
         d->autoScrollTimer.stop();
         d->ensureCursorVisible();
     }
@@ -2142,6 +2183,13 @@ void QPlainTextEdit::scrollContentsBy(int dx, int /*dy*/)
 */
 QVariant QPlainTextEdit::inputMethodQuery(Qt::InputMethodQuery property) const
 {
+    return inputMethodQuery(property, QVariant());
+}
+
+/*!\internal
+ */
+QVariant QPlainTextEdit::inputMethodQuery(Qt::InputMethodQuery property, QVariant argument) const
+{
     Q_D(const QPlainTextEdit);
     QVariant v;
     switch (property) {
@@ -2149,7 +2197,7 @@ QVariant QPlainTextEdit::inputMethodQuery(Qt::InputMethodQuery property) const
         v = QWidget::inputMethodQuery(property);
         break;
     default:
-        v = d->control->inputMethodQuery(property);
+        v = d->control->inputMethodQuery(property, argument);
         const QPoint offset(-d->horizontalOffset(), -0);
         if (v.type() == QVariant::RectF)
             v = v.toRectF().toRect().translated(offset);
@@ -2226,11 +2274,8 @@ void QPlainTextEdit::wheelEvent(QWheelEvent *e)
     Q_D(QPlainTextEdit);
     if (!(d->control->textInteractionFlags() & Qt::TextEditable)) {
         if (e->modifiers() & Qt::ControlModifier) {
-            const int delta = e->delta();
-            if (delta < 0)
-                zoomOut();
-            else if (delta > 0)
-                zoomIn();
+            float delta = e->angleDelta().y() / 120.f;
+            zoomInF(delta);
             return;
         }
     }
@@ -2250,12 +2295,7 @@ void QPlainTextEdit::wheelEvent(QWheelEvent *e)
 */
 void QPlainTextEdit::zoomIn(int range)
 {
-    QFont f = font();
-    const int newSize = f.pointSize() + range;
-    if (newSize <= 0)
-        return;
-    f.setPointSize(newSize);
-    setFont(f);
+    zoomInF(range);
 }
 
 /*!
@@ -2271,20 +2311,54 @@ void QPlainTextEdit::zoomIn(int range)
 */
 void QPlainTextEdit::zoomOut(int range)
 {
-    zoomIn(-range);
+    zoomInF(-range);
+}
+
+/*!
+    \internal
+*/
+void QPlainTextEdit::zoomInF(float range)
+{
+    if (range == 0.f)
+        return;
+    QFont f = font();
+    const float newSize = f.pointSizeF() + range;
+    if (newSize <= 0)
+        return;
+    f.setPointSizeF(newSize);
+    setFont(f);
 }
 
 #ifndef QT_NO_CONTEXTMENU
 /*!  This function creates the standard context menu which is shown
-  when the user clicks on the line edit with the right mouse
+  when the user clicks on the text edit with the right mouse
   button. It is called from the default contextMenuEvent() handler.
   The popup menu's ownership is transferred to the caller.
+
+  We recommend that you use the createStandardContextMenu(QPoint) version instead
+  which will enable the actions that are sensitive to where the user clicked.
 */
 
 QMenu *QPlainTextEdit::createStandardContextMenu()
 {
     Q_D(QPlainTextEdit);
     return d->control->createStandardContextMenu(QPointF(), this);
+}
+
+/*!
+  \since 5.5
+  This function creates the standard context menu which is shown
+  when the user clicks on the text edit with the right mouse
+  button. It is called from the default contextMenuEvent() handler
+  and it takes the \a position in document coordinates where the mouse click was.
+  This can enable actions that are sensitive to the position where the user clicked.
+  The popup menu's ownership is transferred to the caller.
+*/
+
+QMenu *QPlainTextEdit::createStandardContextMenu(const QPoint &position)
+{
+    Q_D(QPlainTextEdit);
+    return d->control->createStandardContextMenu(position, this);
 }
 #endif // QT_NO_CONTEXTMENU
 
@@ -2332,11 +2406,11 @@ QRect QPlainTextEdit::cursorRect() const
    As with many text editors, the plain text editor widget can be configured
    to insert or overwrite existing text with new text entered by the user.
 
-   If this property is true, existing text is overwritten, character-for-character
+   If this property is \c true, existing text is overwritten, character-for-character
    by new text; otherwise, text is inserted at the cursor position, displacing
    existing text.
 
-   By default, this property is false (new text does not overwrite existing text).
+   By default, this property is \c false (new text does not overwrite existing text).
 */
 
 bool QPlainTextEdit::overwriteMode() const
@@ -2435,7 +2509,7 @@ QMimeData *QPlainTextEdit::createMimeDataFromSelection() const
 }
 
 /*!
-    This function returns true if the contents of the MIME data object, specified
+    This function returns \c true if the contents of the MIME data object, specified
     by \a source, can be decoded and inserted into the document. It is called
     for example when during a drag operation the mouse enters this widget and it
     is necessary to determine whether it is possible to accept the drag.
@@ -2486,6 +2560,8 @@ void QPlainTextEdit::setReadOnly(bool ro)
     }
     setAttribute(Qt::WA_InputMethodEnabled, shouldEnableInputMethod(this));
     d->control->setTextInteractionFlags(flags);
+    QEvent event(QEvent::ReadOnlyChange);
+    QApplication::sendEvent(this, &event);
 }
 
 /*!
@@ -2747,14 +2823,35 @@ void QPlainTextEdit::setCenterOnScroll(bool enabled)
 
 /*!
     Finds the next occurrence of the string, \a exp, using the given
-    \a options. Returns true if \a exp was found and changes the
-    cursor to select the match; otherwise returns false.
+    \a options. Returns \c true if \a exp was found and changes the
+    cursor to select the match; otherwise returns \c false.
 */
 bool QPlainTextEdit::find(const QString &exp, QTextDocument::FindFlags options)
 {
     Q_D(QPlainTextEdit);
     return d->control->find(exp, options);
 }
+
+/*!
+    \fn bool QPlainTextEdit::find(const QRegExp &exp, QTextDocument::FindFlags options)
+
+    \since 5.3
+    \overload
+
+    Finds the next occurrence, matching the regular expression, \a exp, using the given
+    \a options. The QTextDocument::FindCaseSensitively option is ignored for this overload,
+    use QRegExp::caseSensitivity instead.
+
+    Returns \c true if a match was found and changes the cursor to select the match;
+    otherwise returns \c false.
+*/
+#ifndef QT_NO_REGEXP
+bool QPlainTextEdit::find(const QRegExp &exp, QTextDocument::FindFlags options)
+{
+    Q_D(QPlainTextEdit);
+    return d->control->find(exp, options);
+}
+#endif
 
 /*!
     \fn void QPlainTextEdit::copyAvailable(bool yes)

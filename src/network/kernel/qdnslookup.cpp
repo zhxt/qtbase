@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Jeremy Lainé <jeremy.laine@m4x.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -282,6 +274,23 @@ QDnsLookup::QDnsLookup(Type type, const QString &name, QObject *parent)
 }
 
 /*!
+    \fn QDnsLookup::QDnsLookup(Type type, const QString &name, const QHostAddress &nameserver, QObject *parent)
+    \since 5.4
+    Constructs a QDnsLookup object for the given \a type, \a name and
+    \a nameserver and sets \a parent as the parent object.
+*/
+
+QDnsLookup::QDnsLookup(Type type, const QString &name, const QHostAddress &nameserver, QObject *parent)
+    : QObject(*new QDnsLookupPrivate, parent)
+{
+    Q_D(QDnsLookup);
+    qRegisterMetaType<QDnsLookupReply>();
+    d->name = name;
+    d->type = type;
+    d->nameserver = nameserver;
+}
+
+/*!
     Destroys the QDnsLookup object.
 
     It is safe to delete a QDnsLookup object even if it is not finished, you
@@ -359,6 +368,25 @@ void QDnsLookup::setType(Type type)
     if (type != d->type) {
         d->type = type;
         emit typeChanged(type);
+    }
+}
+
+/*!
+    \property QDnsLookup::nameserver
+    \brief the nameserver to use for DNS lookup.
+*/
+
+QHostAddress QDnsLookup::nameserver() const
+{
+    return d_func()->nameserver;
+}
+
+void QDnsLookup::setNameserver(const QHostAddress &nameserver)
+{
+    Q_D(QDnsLookup);
+    if (nameserver != d->nameserver) {
+        d->nameserver = nameserver;
+        emit nameserverChanged(nameserver);
     }
 }
 
@@ -463,7 +491,7 @@ void QDnsLookup::lookup()
     Q_D(QDnsLookup);
     d->isFinished = false;
     d->reply = QDnsLookupReply();
-    d->runnable = new QDnsLookupRunnable(d->type, QUrl::toAce(d->name));
+    d->runnable = new QDnsLookupRunnable(d->type, QUrl::toAce(d->name), d->nameserver);
     connect(d->runnable, SIGNAL(finished(QDnsLookupReply)),
             this, SLOT(_q_lookupFinished(QDnsLookupReply)),
             Qt::BlockingQueuedConnection);
@@ -971,7 +999,7 @@ void QDnsLookupRunnable::run()
     }
 
     // Perform request.
-    query(requestType, requestName, &reply);
+    query(requestType, requestName, nameserver, &reply);
 
     // Sort results.
     if (!theDnsLookupSeedStorage()->hasLocalData()) {

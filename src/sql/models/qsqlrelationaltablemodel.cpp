@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -124,8 +116,8 @@ typedef QSqlRelationalTableModelSql Sql;
 /*!
     \fn bool QSqlRelation::isValid() const
 
-    Returns true if the QSqlRelation object is valid; otherwise
-    returns false.
+    Returns \c true if the QSqlRelation object is valid; otherwise
+    returns \c false.
 */
 
 class QRelatedTableModel;
@@ -158,7 +150,7 @@ class QRelatedTableModel : public QSqlTableModel
 {
 public:
     QRelatedTableModel(QRelation *rel, QObject *parent = 0, QSqlDatabase db = QSqlDatabase());
-    bool select();
+    bool select() Q_DECL_OVERRIDE;
 private:
     bool firstSelect;
     QRelation *relation;
@@ -270,12 +262,12 @@ public:
     {}
     QString fullyQualifiedFieldName(const QString &tableName, const QString &fieldName) const;
 
-    int nameToIndex(const QString &name) const;
+    int nameToIndex(const QString &name) const Q_DECL_OVERRIDE;
     mutable QVector<QRelation> relations;
     QSqlRecord baseRec; // the record without relations
     void clearChanges();
-    void clearCache();
-    void revertCachedRow(int row);
+    void clearCache() Q_DECL_OVERRIDE;
+    void revertCachedRow(int row) Q_DECL_OVERRIDE;
 
     void translateFieldNames(QSqlRecord &values) const;
     QSqlRelationalTableModel::JoinMode joinMode;
@@ -458,12 +450,12 @@ QVariant QSqlRelationalTableModel::data(const QModelIndex &index, int role) cons
     value might be applied to the database at once, or it may be
     cached in the model.
 
-    Returns true if the value could be set, or false on error (for
+    Returns \c true if the value could be set, or false on error (for
     example, if \a index is out of bounds).
 
     For relational columns, \a value must be the index, not the
     display value. The index must also exist in the referenced
-    table, otherwise the function returns false.
+    table, otherwise the function returns \c false.
 
     \sa editStrategy(), data(), submit(), revertRow()
 */
@@ -671,7 +663,7 @@ void QSqlRelationalTableModel::clear()
     \value InnerJoin - Inner join mode, return rows when there is at least one match in both tables.
     \value LeftJoin - Left join mode, returns all rows from the left table (table_name1), even if there are no matches in the right table (table_name2).
 
-    \sa QSqlRelationalTableModel::setJoinMode
+    \sa QSqlRelationalTableModel::setJoinMode()
     \since 4.8
 */
 

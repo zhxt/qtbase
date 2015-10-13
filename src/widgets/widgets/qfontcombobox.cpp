@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -50,9 +42,92 @@
 #include <qevent.h>
 #include <qapplication.h>
 #include <private/qcombobox_p.h>
+#include <QDesktopWidget>
 #include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
+
+static QFontDatabase::WritingSystem writingSystemFromScript(QLocale::Script script)
+{
+    switch (script) {
+    case QLocale::ArabicScript:
+        return QFontDatabase::Arabic;
+    case QLocale::CyrillicScript:
+        return QFontDatabase::Cyrillic;
+    case QLocale::GurmukhiScript:
+        return QFontDatabase::Gurmukhi;
+    case QLocale::SimplifiedHanScript:
+        return QFontDatabase::SimplifiedChinese;
+    case QLocale::TraditionalHanScript:
+        return QFontDatabase::TraditionalChinese;
+    case QLocale::LatinScript:
+        return QFontDatabase::Latin;
+    case QLocale::ArmenianScript:
+        return QFontDatabase::Armenian;
+    case QLocale::BengaliScript:
+        return QFontDatabase::Bengali;
+    case QLocale::DevanagariScript:
+        return QFontDatabase::Devanagari;
+    case QLocale::GeorgianScript:
+        return QFontDatabase::Georgian;
+    case QLocale::GreekScript:
+        return QFontDatabase::Greek;
+    case QLocale::GujaratiScript:
+        return QFontDatabase::Gujarati;
+    case QLocale::HebrewScript:
+        return QFontDatabase::Hebrew;
+    case QLocale::JapaneseScript:
+        return QFontDatabase::Japanese;
+    case QLocale::KhmerScript:
+        return QFontDatabase::Khmer;
+    case QLocale::KannadaScript:
+        return QFontDatabase::Kannada;
+    case QLocale::KoreanScript:
+        return QFontDatabase::Korean;
+    case QLocale::LaoScript:
+        return QFontDatabase::Lao;
+    case QLocale::MalayalamScript:
+        return QFontDatabase::Malayalam;
+    case QLocale::MyanmarScript:
+        return QFontDatabase::Myanmar;
+    case QLocale::TamilScript:
+        return QFontDatabase::Tamil;
+    case QLocale::TeluguScript:
+        return QFontDatabase::Telugu;
+    case QLocale::ThaanaScript:
+        return QFontDatabase::Thaana;
+    case QLocale::ThaiScript:
+        return QFontDatabase::Thai;
+    case QLocale::TibetanScript:
+        return QFontDatabase::Tibetan;
+    case QLocale::SinhalaScript:
+        return QFontDatabase::Sinhala;
+    case QLocale::SyriacScript:
+        return QFontDatabase::Syriac;
+    case QLocale::OriyaScript:
+        return QFontDatabase::Oriya;
+    case QLocale::OghamScript:
+        return QFontDatabase::Ogham;
+    case QLocale::RunicScript:
+        return QFontDatabase::Runic;
+    case QLocale::NkoScript:
+        return QFontDatabase::Nko;
+    default:
+        return QFontDatabase::Any;
+    }
+}
+
+static QFontDatabase::WritingSystem writingSystemFromLocale()
+{
+    QStringList uiLanguages = QLocale::system().uiLanguages();
+    QLocale::Script script;
+    if (!uiLanguages.isEmpty())
+        script = QLocale(uiLanguages.at(0)).script();
+    else
+        script = QLocale::system().script();
+
+    return writingSystemFromScript(script);
+}
 
 static QFontDatabase::WritingSystem writingSystemForFont(const QFont &font, bool *hasLatin)
 {
@@ -66,7 +141,22 @@ static QFontDatabase::WritingSystem writingSystemForFont(const QFont &font, bool
     if (writingSystems.isEmpty())
         return QFontDatabase::Any;
 
-    QFontDatabase::WritingSystem system = writingSystems.last();
+    QFontDatabase::WritingSystem system = writingSystemFromLocale();
+
+    if (writingSystems.contains(system))
+        return system;
+
+    if (system == QFontDatabase::TraditionalChinese
+            && writingSystems.contains(QFontDatabase::SimplifiedChinese)) {
+        return QFontDatabase::SimplifiedChinese;
+    }
+
+    if (system == QFontDatabase::SimplifiedChinese
+            && writingSystems.contains(QFontDatabase::TraditionalChinese)) {
+        return QFontDatabase::TraditionalChinese;
+    }
+
+    system = writingSystems.last();
 
     if (!*hasLatin) {
         // we need to show something
@@ -94,10 +184,10 @@ public:
     // painting
     void paint(QPainter *painter,
                const QStyleOptionViewItem &option,
-               const QModelIndex &index) const;
+               const QModelIndex &index) const Q_DECL_OVERRIDE;
 
     QSize sizeHint(const QStyleOptionViewItem &option,
-                   const QModelIndex &index) const;
+                   const QModelIndex &index) const Q_DECL_OVERRIDE;
 
     QIcon truetype;
     QIcon bitmap;
@@ -231,6 +321,9 @@ void QFontComboBoxPrivate::_q_updateModel()
     QFontInfo fi(currentFont);
 
     for (int i = 0; i < list.size(); ++i) {
+        if (fdb.isPrivateFamily(list.at(i)))
+            continue;
+
         if ((filters & scalableMask) && (filters & scalableMask) != scalableMask) {
             if (bool(filters & QFontComboBox::ScalableFonts) != fdb.isSmoothlyScalable(list.at(i)))
                 continue;
@@ -249,9 +342,10 @@ void QFontComboBoxPrivate::_q_updateModel()
     //this prevents the current index from changing
     //it will be updated just after this
     ///TODO: we should finda way to avoid blocking signals and have a real update of the model
-    const bool old = m->blockSignals(true);
-    m->setStringList(list);
-    m->blockSignals(old);
+    {
+        const QSignalBlocker blocker(m);
+        m->setStringList(list);
+    }
 
     if (list.isEmpty()) {
         if (currentFont != QFont()) {
@@ -448,8 +542,10 @@ bool QFontComboBox::event(QEvent *e)
 {
     if (e->type() == QEvent::Resize) {
         QListView *lview = qobject_cast<QListView*>(view());
-        if (lview)
-            lview->window()->setFixedWidth(width() * 5 / 3);
+        if (lview) {
+            lview->window()->setFixedWidth(qMin(width() * 5 / 3,
+                               QApplication::desktop()->availableGeometry(lview).width()));
+        }
     }
     return QComboBox::event(e);
 }

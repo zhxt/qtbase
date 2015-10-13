@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -267,7 +259,7 @@ namespace {
 }
 
 /*!
-    Creates the buffer object in the GL server.  Returns true if
+    Creates the buffer object in the GL server.  Returns \c true if
     the object was created; false otherwise.
 
     This function must be called with a current QGLContext.
@@ -307,7 +299,7 @@ bool QGLBuffer::create()
 #define ctx QGLContext::currentContext()
 
 /*!
-    Returns true if this buffer has been created; false otherwise.
+    Returns \c true if this buffer has been created; false otherwise.
 
     \sa create(), destroy()
 */
@@ -333,7 +325,7 @@ void QGLBuffer::destroy()
 
 /*!
     Reads the \a count bytes in this buffer starting at \a offset
-    into \a data.  Returns true on success; false if reading from
+    into \a data.  Returns \c true on success; false if reading from
     the buffer is not supported.  Buffer reading is not supported
     under OpenGL/ES.
 
@@ -347,9 +339,9 @@ bool QGLBuffer::read(int offset, void *data, int count)
     Q_D(QGLBuffer);
     if (!d->funcs->hasOpenGLFeature(QOpenGLFunctions::Buffers) || !d->guard->id())
         return false;
-    while (glGetError() != GL_NO_ERROR) ; // Clear error state.
+    while (d->funcs->glGetError() != GL_NO_ERROR) ; // Clear error state.
     d->funcs->glGetBufferSubData(d->type, offset, count, data);
-    return glGetError() == GL_NO_ERROR;
+    return d->funcs->glGetError() == GL_NO_ERROR;
 #else
     Q_UNUSED(offset);
     Q_UNUSED(data);
@@ -414,7 +406,7 @@ void QGLBuffer::allocate(const void *data, int count)
 
 /*!
     Binds the buffer associated with this object to the current
-    GL context.  Returns false if binding was not possible, usually because
+    GL context.  Returns \c false if binding was not possible, usually because
     type() is not supported on this GL implementation.
 
     The buffer must be bound to the same QGLContext current when create()
@@ -551,7 +543,7 @@ void *QGLBuffer::map(QGLBuffer::Access access)
 
 /*!
     Unmaps the buffer after it was mapped into the application's
-    memory space with a previous call to map().  Returns true if
+    memory space with a previous call to map().  Returns \c true if
     the unmap succeeded; false otherwise.
 
     It is assumed that this buffer has been bound to the current context,

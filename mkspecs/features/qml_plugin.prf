@@ -25,6 +25,17 @@ if(win32|mac):!macx-xcode {
 }
 isEmpty(TARGETPATH): TARGETPATH = $$eval(QT.$${CXX_MODULE}.name)
 
+!no_cxx_module:win32:CONFIG(shared, static|shared) {
+    # Embed a VERSIONINFO resource into the plugin's DLL.
+    isEmpty(VERSION): VERSION = $$MODULE_VERSION
+    CONFIG += skip_target_version_ext
+}
+
+# Insert the plugins URI into its meta data to enable usage
+# of static plugins in QtDeclarative:
+URI = $$replace(TARGETPATH, "/", ".")
+QMAKE_MOC_OPTIONS += -Muri=$$URI
+
 QMLTYPEFILE = $$_PRO_FILE_PWD_/plugins.qmltypes
 exists($$QMLTYPEFILE): QML_FILES += $$QMLTYPEFILE
 
@@ -45,7 +56,7 @@ INSTALLS += target
 
 # Some final setup
 
-TARGET = $$qtLibraryTarget($$TARGET)
+TARGET = $$qt5LibraryTarget($$TARGET)
 
 load(qt_targets)
 load(qt_common)
@@ -70,18 +81,22 @@ load(qt_common)
         }
 
         load(resolve_target)
-        qml1_target: \
+        qml1_target {
             qmlplugindump = qml1plugindump
-        else: \
+            importpath.name = QML_IMPORT_PATH
+        } else {
             qmlplugindump = qmlplugindump
+            importpath.name = QML2_IMPORT_PATH
+        }
         qtPrepareTool(QMLPLUGINDUMP, $$qmlplugindump)
         importpath.value =
-        for(qmod, QMAKEMODULES) {
-            qmod = $$section(qmod, /, 0, -3)/imports
-            qml1_target: qmod = $$qmod/QtDeclarative
+        for(qmod, QTREPOS) {
+            qml1_target: \
+                qmod = $$qmod/imports
+            else: \
+                qmod = $$qmod/qml
             exists($$qmod): importpath.value += $$shell_path($$qmod)
         }
-        importpath.name = QML_IMPORT_PATH
         importpath.value = $$unique(importpath.value)
         qtAddToolEnv(QMLPLUGINDUMP, importpath)
         TARGETPATHBASE = $$replace(TARGETPATH, \\.\\d+\$, )
@@ -95,12 +110,3 @@ load(qt_common)
 }
 
 load(qml_module)
-
-unix|win32-g++* {
-    !isEmpty(_QMAKE_SUPER_CACHE_): \
-        lib_replace.match = $$dirname(_QMAKE_SUPER_CACHE_)/[^/][^/]*/lib
-    else: \
-        lib_replace.match = $$MODULE_BASE_OUTDIR
-    lib_replace.replace = $$[QT_INSTALL_LIBS/raw]
-    QMAKE_PRL_INSTALL_REPLACE += lib_replace
-}

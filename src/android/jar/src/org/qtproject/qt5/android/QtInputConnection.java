@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the Android port of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,8 +35,6 @@
 package org.qtproject.qt5.android;
 
 import android.content.Context;
-import android.os.Build;
-import android.view.View;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.ExtractedText;
@@ -63,6 +53,8 @@ class QtExtractedText
 
 class QtNativeInputConnection
 {
+    static native boolean beginBatchEdit();
+    static native boolean endBatchEdit();
     static native boolean commitText(String text, int newCursorPosition);
     static native boolean commitCompletion(String text, int position);
     static native boolean deleteSurroundingText(int leftLength, int rightLength);
@@ -73,12 +65,23 @@ class QtNativeInputConnection
     static native String getTextAfterCursor(int length, int flags);
     static native String getTextBeforeCursor(int length, int flags);
     static native boolean setComposingText(String text, int newCursorPosition);
+    static native boolean setComposingRegion(int start, int end);
     static native boolean setSelection(int start, int end);
     static native boolean selectAll();
     static native boolean cut();
     static native boolean copy();
     static native boolean copyURL();
     static native boolean paste();
+    static native boolean updateCursorPosition();
+}
+
+class HideKeyboardRunnable implements Runnable {
+    private long m_hideTimeStamp = System.nanoTime();
+
+    @Override
+    public void run() {
+        QtNative.activityDelegate().setKeyboardVisibility(false, m_hideTimeStamp);
+    }
 }
 
 public class QtInputConnection extends BaseInputConnection
@@ -91,67 +94,63 @@ public class QtInputConnection extends BaseInputConnection
     private static final int ID_SWITCH_INPUT_METHOD = android.R.id.switchInputMethod;
     private static final int ID_ADD_TO_DICTIONARY = android.R.id.addToDictionary;
 
-    View m_view;
-    boolean m_closing;
-    public QtInputConnection(View targetView)
+    private QtEditText m_view = null;
+
+    private void setClosing(boolean closing)
+    {
+        if (closing) {
+            m_view.postDelayed(new HideKeyboardRunnable(), 100);
+        } else {
+            QtNative.activityDelegate().setKeyboardVisibility(true, System.nanoTime());
+        }
+    }
+
+    public QtInputConnection(QtEditText targetView)
     {
         super(targetView, true);
         m_view = targetView;
-        m_closing = false;
     }
 
     @Override
     public boolean beginBatchEdit()
     {
-        m_closing = false;
-        return true;
+        setClosing(false);
+        return QtNativeInputConnection.beginBatchEdit();
     }
 
     @Override
     public boolean endBatchEdit()
     {
-        m_closing = false;
-        return true;
+        setClosing(false);
+        return QtNativeInputConnection.endBatchEdit();
     }
 
     @Override
     public boolean commitCompletion(CompletionInfo text)
     {
-        m_closing = false;
+        setClosing(false);
         return QtNativeInputConnection.commitCompletion(text.getText().toString(), text.getPosition());
     }
 
     @Override
     public boolean commitText(CharSequence text, int newCursorPosition)
     {
-        m_closing = false;
+        setClosing(false);
         return QtNativeInputConnection.commitText(text.toString(), newCursorPosition);
     }
 
     @Override
     public boolean deleteSurroundingText(int leftLength, int rightLength)
     {
-        m_closing = false;
+        setClosing(false);
         return QtNativeInputConnection.deleteSurroundingText(leftLength, rightLength);
     }
 
     @Override
     public boolean finishComposingText()
     {
-        if (m_closing) {
-            QtNative.activityDelegate().m_keyboardIsHiding = true;
-            m_view.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    if (QtNative.activityDelegate().m_keyboardIsHiding)
-                        QtNative.activityDelegate().m_keyboardIsVisible=false;
-                }
-            }, 5000); // it seems finishComposingText comes musch faster than onKeyUp event,
-                      // so we must delay hide notification
-            m_closing = false;
-        } else {
-            m_closing = true;
-        }
+        // on some/all android devices hide event is not coming, but instead finishComposingText() is called twice
+        setClosing(true);
         return QtNativeInputConnection.finishComposingText();
     }
 
@@ -167,6 +166,9 @@ public class QtInputConnection extends BaseInputConnection
         QtExtractedText qExtractedText = QtNativeInputConnection.getExtractedText(request.hintMaxChars,
                                                                                   request.hintMaxLines,
                                                                                   flags);
+        if (qExtractedText == null)
+            return null;
+
         ExtractedText extractedText = new ExtractedText();
         extractedText.partialEndOffset = qExtractedText.partialEndOffset;
         extractedText.partialStartOffset = qExtractedText.partialStartOffset;
@@ -233,12 +235,21 @@ public class QtInputConnection extends BaseInputConnection
     @Override
     public boolean setComposingText(CharSequence text, int newCursorPosition)
     {
+        setClosing(false);
         return QtNativeInputConnection.setComposingText(text.toString(), newCursorPosition);
+    }
+
+    @Override
+    public boolean setComposingRegion(int start, int end)
+    {
+        setClosing(false);
+        return QtNativeInputConnection.setComposingRegion(start, end);
     }
 
     @Override
     public boolean setSelection(int start, int end)
     {
+        setClosing(false);
         return QtNativeInputConnection.setSelection(start, end);
     }
 }

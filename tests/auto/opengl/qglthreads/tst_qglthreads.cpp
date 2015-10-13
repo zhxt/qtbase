@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +39,10 @@
 #include <QtWidgets/QApplication>
 #include <QtOpenGL/QtOpenGL>
 #include "tst_qglthreads.h"
+
+#ifndef QT_OPENGL_ES_2
+#include <QtGui/QOpenGLFunctions_1_0>
+#endif
 
 #define RUNNING_TIME 5000
 
@@ -216,6 +212,11 @@ public:
     {
         m_gl = new QGLWidget(0, shareWidget);
         moveToThread(this);
+
+    }
+
+    void moveContextToThread()
+    {
         m_gl->context()->moveToThread(this);
     }
 
@@ -307,6 +308,7 @@ void tst_QGLThreads::textureUploadInThread()
     display.show();
     QVERIFY(QTest::qWaitForWindowActive(&display));
 
+    thread.moveContextToThread();
     thread.start();
 
     while (thread.isRunning()) {
@@ -333,51 +335,59 @@ static inline float qrandom() { return (rand() % 100) / 100.f; }
 
 void renderAScene(int w, int h)
 {
-#ifdef QT_OPENGL_ES_2
-            QGLShaderProgram program;
-            program.addShaderFromSourceCode(QGLShader::Vertex, "attribute highp vec2 pos; void main() { gl_Position = vec4(pos.xy, 1.0, 1.0); }");
-            program.addShaderFromSourceCode(QGLShader::Fragment, "uniform lowp vec4 color; void main() { gl_FragColor = color; }");
-            program.bindAttributeLocation("pos", 0);
-            program.bind();
-            int colorId = program.uniformLocation("color");
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
 
-            glEnableVertexAttribArray(0);
+    if (QOpenGLContext::currentContext()->isOpenGLES()) {
+        Q_UNUSED(w);
+        Q_UNUSED(h);
+        QGLShaderProgram program;
+        program.addShaderFromSourceCode(QGLShader::Vertex, "attribute highp vec2 pos; void main() { gl_Position = vec4(pos.xy, 1.0, 1.0); }");
+        program.addShaderFromSourceCode(QGLShader::Fragment, "uniform lowp vec4 color; void main() { gl_FragColor = color; }");
+        program.bindAttributeLocation("pos", 0);
+        program.bind();
 
-            for (int i=0; i<1000; ++i) {
-                GLfloat pos[] = {
-                    (rand() % 100) / 100.,
-                    (rand() % 100) / 100.,
-                    (rand() % 100) / 100.,
-                    (rand() % 100) / 100.,
-                    (rand() % 100) / 100.,
-                    (rand() % 100) / 100.
-                };
+        funcs->glEnableVertexAttribArray(0);
 
-                glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, pos);
-                glDrawArrays(GL_TRIANGLE_STRIP, 0, 3);
-            }
-#else
-            glViewport(0, 0, w, h);
+        for (int i=0; i<1000; ++i) {
+            GLfloat pos[] = {
+                (rand() % 100) / 100.f,
+                (rand() % 100) / 100.f,
+                (rand() % 100) / 100.f,
+                (rand() % 100) / 100.f,
+                (rand() % 100) / 100.f,
+                (rand() % 100) / 100.f
+            };
 
-            glMatrixMode(GL_PROJECTION);
-            glLoadIdentity();
-            glFrustum(0, w, h, 0, 1, 100);
-            glTranslated(0, 0, -1);
+            funcs->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, pos);
+            funcs->glDrawArrays(GL_TRIANGLE_STRIP, 0, 3);
+        }
+    } else {
+#ifndef QT_OPENGL_ES_2
+        QOpenGLFunctions_1_0 *gl1funcs = QOpenGLContext::currentContext()->versionFunctions<QOpenGLFunctions_1_0>();
+        gl1funcs->initializeOpenGLFunctions();
 
-            glMatrixMode(GL_MODELVIEW);
-            glLoadIdentity();
+        gl1funcs->glViewport(0, 0, w, h);
 
-            for (int i=0;i<1000; ++i) {
-                glBegin(GL_TRIANGLES);
-                glColor3f(qrandom(), qrandom(), qrandom());
-                glVertex2f(qrandom() * w, qrandom() * h);
-                glColor3f(qrandom(), qrandom(), qrandom());
-                glVertex2f(qrandom() * w, qrandom() * h);
-                glColor3f(qrandom(), qrandom(), qrandom());
-                glVertex2f(qrandom() * w, qrandom() * h);
-                glEnd();
-            }
+        gl1funcs->glMatrixMode(GL_PROJECTION);
+        gl1funcs->glLoadIdentity();
+        gl1funcs->glFrustum(0, w, h, 0, 1, 100);
+        gl1funcs->glTranslated(0, 0, -1);
+
+        gl1funcs->glMatrixMode(GL_MODELVIEW);
+        gl1funcs->glLoadIdentity();
+
+        for (int i=0;i<1000; ++i) {
+            gl1funcs->glBegin(GL_TRIANGLES);
+            gl1funcs->glColor3f(qrandom(), qrandom(), qrandom());
+            gl1funcs->glVertex2f(qrandom() * w, qrandom() * h);
+            gl1funcs->glColor3f(qrandom(), qrandom(), qrandom());
+            gl1funcs->glVertex2f(qrandom() * w, qrandom() * h);
+            gl1funcs->glColor3f(qrandom(), qrandom(), qrandom());
+            gl1funcs->glVertex2f(qrandom() * w, qrandom() * h);
+            gl1funcs->glEnd();
+        }
 #endif
+    }
 }
 
 class ThreadSafeGLWidget : public QGLWidget
@@ -424,8 +434,9 @@ public:
             QSize s = m_widget->newSize;
             m_widget->mutex.unlock();
 
+            QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
             if (s != m_size) {
-                glViewport(0, 0, s.width(), s.height());
+                funcs->glViewport(0, 0, s.width(), s.height());
             }
 
             if (QGLContext::currentContext() != m_widget->context()) {
@@ -433,7 +444,7 @@ public:
                 break;
             }
 
-            glClear(GL_COLOR_BUFFER_BIT);
+            funcs->glClear(GL_COLOR_BUFFER_BIT);
 
             int w = m_widget->width();
             int h = m_widget->height();
@@ -441,7 +452,7 @@ public:
             renderAScene(w, h);
 
             int color;
-            glReadPixels(w / 2, h / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &color);
+            funcs->glReadPixels(w / 2, h / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &color);
 
             m_widget->swapBuffers();
         }
@@ -626,6 +637,12 @@ class PaintThreadManager
 public:
     PaintThreadManager(int count) : numThreads(count)
     {
+        for (int i=0; i<numThreads; ++i)
+            devices.append(new T);
+        // Wait until resize events are processed on the internal
+        // QGLWidgets of the buffers to suppress errors
+        // about makeCurrent() from the wrong thread.
+        QCoreApplication::processEvents();
         for (int i=0; i<numThreads; ++i) {
             devices.append(new T);
             threads.append(new QThread);
@@ -711,7 +728,7 @@ void tst_QGLThreads::painterOnPixmapInThread()
     if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::ThreadedOpenGL)
         || !QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::ThreadedPixmaps))
         QSKIP("No platformsupport for ThreadedOpenGL or ThreadedPixmaps");
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
     QSKIP("Drawing text in threads onto X11 drawables currently crashes on some X11 servers.");
 #endif
     PaintThreadManager<PixmapWrapper> painterThreads(5);

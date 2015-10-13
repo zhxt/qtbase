@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -51,6 +43,7 @@
 #include "qsqldriver.h"
 #include "qpointer.h"
 #include "qsqlresult_p.h"
+#include "private/qsqldriver_p.h"
 #include <QDebug>
 
 QT_BEGIN_NAMESPACE
@@ -63,15 +56,20 @@ QString QSqlResultPrivate::holderAt(int index) const
 // return a unique id for bound names
 QString QSqlResultPrivate::fieldSerial(int i) const
 {
-    ushort arr[] = { ':', 'f', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    ushort *ptr = &arr[1];
+    ushort arr[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    ushort *end = &arr[(sizeof(arr)/sizeof(*arr))];
+    ushort *ptr = end;
 
     while (i > 0) {
-        *(++ptr) = 'a' + i % 16;
+        *(--ptr) = 'a' + i % 16;
         i >>= 4;
     }
 
-    return QString(reinterpret_cast<const QChar *>(arr), int(ptr - arr) + 1);
+    const int nb = end - ptr;
+    *(--ptr) = 'a' + nb;
+    *(--ptr) = ':';
+
+    return QString::fromUtf16(ptr, int(end - ptr));
 }
 
 static bool qIsAlnum(QChar ch)
@@ -89,6 +87,7 @@ QString QSqlResultPrivate::positionalToNamedBinding(const QString &query) const
     result.reserve(n * 5 / 4);
     QChar closingQuote;
     int count = 0;
+    bool ignoreBraces = (sqldriver->d_func()->dbmsType == QSqlDriver::PostgreSQL);
 
     for (int i = 0; i < n; ++i) {
         QChar ch = query.at(i);
@@ -110,7 +109,7 @@ QString QSqlResultPrivate::positionalToNamedBinding(const QString &query) const
             } else {
                 if (ch == QLatin1Char('\'') || ch == QLatin1Char('"') || ch == QLatin1Char('`'))
                     closingQuote = ch;
-                else if (ch == QLatin1Char('['))
+                else if (!ignoreBraces && ch == QLatin1Char('['))
                     closingQuote = QLatin1Char(']');
                 result += ch;
             }
@@ -129,6 +128,7 @@ QString QSqlResultPrivate::namedToPositionalBinding(const QString &query)
     QChar closingQuote;
     int count = 0;
     int i = 0;
+    bool ignoreBraces = (sqldriver->d_func()->dbmsType == QSqlDriver::PostgreSQL);
 
     while (i < n) {
         QChar ch = query.at(i);
@@ -160,7 +160,7 @@ QString QSqlResultPrivate::namedToPositionalBinding(const QString &query)
             } else {
                 if (ch == QLatin1Char('\'') || ch == QLatin1Char('"') || ch == QLatin1Char('`'))
                     closingQuote = ch;
-                else if (ch == QLatin1Char('['))
+                else if (!ignoreBraces && ch == QLatin1Char('['))
                     closingQuote = QLatin1Char(']');
                 result += ch;
                 ++i;
@@ -289,9 +289,9 @@ int QSqlResult::at() const
 
 
 /*!
-    Returns true if the result is positioned on a valid record (that
+    Returns \c true if the result is positioned on a valid record (that
     is, the result is not positioned before the first or after the
-    last record); otherwise returns false.
+    last record); otherwise returns \c false.
 
     \sa at()
 */
@@ -305,13 +305,13 @@ bool QSqlResult::isValid() const
 /*!
     \fn bool QSqlResult::isNull(int index)
 
-    Returns true if the field at position \a index in the current row
-    is null; otherwise returns false.
+    Returns \c true if the field at position \a index in the current row
+    is null; otherwise returns \c false.
 */
 
 /*!
-    Returns true if the result has records to be retrieved; otherwise
-    returns false.
+    Returns \c true if the result has records to be retrieved; otherwise
+    returns \c false.
 */
 
 bool QSqlResult::isActive() const
@@ -350,8 +350,8 @@ void QSqlResult::setSelect(bool select)
 }
 
 /*!
-    Returns true if the current result is from a \c SELECT statement;
-    otherwise returns false.
+    Returns \c true if the current result is from a \c SELECT statement;
+    otherwise returns \c false.
 
     \sa setSelect()
 */
@@ -538,8 +538,8 @@ bool QSqlResult::fetchPrevious()
 }
 
 /*!
-    Returns true if you can only scroll forward through the result
-    set; otherwise returns false.
+    Returns \c true if you can only scroll forward through the result
+    set; otherwise returns \c false.
 
     \sa setForwardOnly()
 */
@@ -573,8 +573,8 @@ void QSqlResult::setForwardOnly(bool forward)
 
 /*!
     Prepares the given \a query, using the underlying database
-    functionality where possible. Returns true if the query is
-    prepared successfully; otherwise returns false.
+    functionality where possible. Returns \c true if the query is
+    prepared successfully; otherwise returns \c false.
 
     Note: This method should have been called "safePrepare()".
 
@@ -602,7 +602,7 @@ bool QSqlResult::savePrepare(const QString& query)
 /*!
     Prepares the given \a query for execution; the query will normally
     use placeholders so that it can be executed repeatedly. Returns
-    true if the query is prepared successfully; otherwise returns false.
+    true if the query is prepared successfully; otherwise returns \c false.
 
     \sa exec()
 */
@@ -680,7 +680,9 @@ void QSqlResult::bindValue(int index, const QVariant& val, QSql::ParamType param
 {
     Q_D(QSqlResult);
     d->binds = PositionalBinding;
-    d->indexes[d->fieldSerial(index)].append(index);
+    QList<int>& indexes = d->indexes[d->fieldSerial(index)];
+    if (!indexes.contains(index))
+        indexes.append(index);
     if (d->values.count() <= index)
         d->values.resize(index + 1);
     d->values[index] = val;
@@ -693,12 +695,6 @@ void QSqlResult::bindValue(int index, const QVariant& val, QSql::ParamType param
 
     Binds the value \a val of parameter type \a paramType to the \a
     placeholder name in the current record (row).
-
-   Values cannot be bound to multiple locations in the query, eg:
-   \code
-   INSERT INTO testtable (id, name, samename) VALUES (:id, :name, :name)
-   \endcode
-   Binding to name will bind to the first :name, but not the second.
 
     \note Binding an undefined placeholder will result in undefined behavior.
 
@@ -841,6 +837,9 @@ QString QSqlResult::executedQuery() const
     return d->executedQuery;
 }
 
+/*!
+    Resets the number of bind parameters.
+*/
 void QSqlResult::resetBindCount()
 {
     Q_D(QSqlResult);
@@ -860,8 +859,8 @@ QString QSqlResult::boundValueName(int index) const
 }
 
 /*!
-    Returns true if at least one of the query's bound values is a \c
-    QSql::Out or a QSql::InOut; otherwise returns false.
+    Returns \c true if at least one of the query's bound values is a \c
+    QSql::Out or a QSql::InOut; otherwise returns \c false.
 
     \sa bindValueType()
 */

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -59,8 +51,8 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
     NSButton *button = [[NSButton alloc] initWithFrame:buttonFrameRect];
     [button setButtonType:NSMomentaryLightButton];
     [button setBezelStyle:NSRoundedBezelStyle];
-    [button setTitle:(NSString*)(CFStringRef)QCFString(QCoreApplication::translate("QDialogButtonBox", text)
-                                                       .remove(QLatin1Char('&')))];
+    [button setTitle:(NSString*)(CFStringRef)QCFString(
+            qt_mac_removeMnemonics(QCoreApplication::translate("QDialogButtonBox", text)))];
     [[button cell] setFont:[NSFont systemFontOfSize:
             [NSFont systemFontSizeForControlSize:NSRegularControlSize]]];
     [superview addSubview:button];
@@ -81,33 +73,63 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
     NSInteger mResultCode;
     BOOL mDialogIsExecuting;
     BOOL mResultSet;
+    BOOL mClosingDueToKnownButton;
 };
+- (void)restoreOriginalContentView;
 - (void)relayout;
 - (void)updateQtColor;
 - (void)finishOffWithCode:(NSInteger)code;
 @end
 
-@implementation QT_MANGLE_NAMESPACE(QNSColorPanelDelegate)
+QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
 
-- (id)initWithDialogHelper:(QCocoaColorDialogHelper *)helper
+@implementation QNSColorPanelDelegate
+
+- (id)init
 {
     self = [super init];
     mColorPanel = [NSColorPanel sharedColorPanel];
-    mHelper = helper;
+    mHelper = 0;
+    mStolenContentView = 0;
+    mOkButton = 0;
+    mCancelButton = 0;
     mResultCode = NSCancelButton;
     mDialogIsExecuting = false;
     mResultSet = false;
+    mClosingDueToKnownButton = false;
 
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7)
-        [mColorPanel setRestorable:NO];
-#endif
+    [mColorPanel setRestorable:NO];
 
+    [[NSNotificationCenter defaultCenter] addObserver:self
+        selector:@selector(colorChanged:)
+        name:NSColorPanelColorDidChangeNotification
+        object:mColorPanel];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+      selector:@selector(windowWillClose:)
+      name:NSWindowWillCloseNotification
+      object:mColorPanel];
+
+    [mColorPanel retain];
+    return self;
+}
+
+- (void)dealloc
+{
+    [self restoreOriginalContentView];
+    [mColorPanel setDelegate:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+
+    [super dealloc];
+}
+
+- (void)setDialogHelper:(QCocoaColorDialogHelper *)helper
+{
+    mHelper = helper;
+    [mColorPanel setShowsAlpha:mHelper->options()->testOption(QColorDialogOptions::ShowAlphaChannel)];
     if (mHelper->options()->testOption(QColorDialogOptions::NoButtons)) {
-        mStolenContentView = 0;
-        mOkButton = 0;
-        mCancelButton = 0;
-    } else {
+        [self restoreOriginalContentView];
+    } else if (!mStolenContentView) {
         // steal the color panel's contents view
         mStolenContentView = [mColorPanel contentView];
         [mStolenContentView retain];
@@ -132,33 +154,6 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
         [mCancelButton setAction:@selector(onCancelClicked)];
         [mCancelButton setTarget:self];
     }
-
-    [[NSNotificationCenter defaultCenter] addObserver:self
-        selector:@selector(colorChanged:)
-        name:NSColorPanelColorDidChangeNotification
-        object:mColorPanel];
-
-    [mColorPanel retain];
-    return self;
-}
-
-- (void)dealloc
-{
-    if (mOkButton) {
-        NSView *ourContentView = [mColorPanel contentView];
-
-        // return stolen stuff to its rightful owner
-        [mStolenContentView removeFromSuperview];
-        [mColorPanel setContentView:mStolenContentView];
-        [mOkButton release];
-        [mCancelButton release];
-        [ourContentView release];
-    }
-
-    [mColorPanel setDelegate:nil];
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-
-    [super dealloc];
 }
 
 - (void)closePanel
@@ -176,7 +171,34 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
 {
     Q_UNUSED(notification);
     [self updateQtColor];
-    emit mHelper->colorSelected(mQtColor);
+    if (mHelper)
+        emit mHelper->colorSelected(mQtColor);
+}
+
+- (void)windowWillClose:(NSNotification *)notification
+{
+    Q_UNUSED(notification);
+    if (mCancelButton && mHelper && !mClosingDueToKnownButton) {
+        mClosingDueToKnownButton = true; // prevent repeating emit
+        emit mHelper->reject();
+    }
+}
+
+- (void)restoreOriginalContentView
+{
+    if (mStolenContentView) {
+        NSView *ourContentView = [mColorPanel contentView];
+
+        // return stolen stuff to its rightful owner
+        [mStolenContentView removeFromSuperview];
+        [mColorPanel setContentView:mStolenContentView];
+        [mOkButton release];
+        [mCancelButton release];
+        [ourContentView release];
+        mOkButton = 0;
+        mCancelButton = 0;
+        mStolenContentView = 0;
+    }
 }
 
 - (void)relayout
@@ -229,6 +251,7 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
 
 - (void)onOkClicked
 {
+    mClosingDueToKnownButton = true;
     [mColorPanel close];
     [self updateQtColor];
     [self finishOffWithCode:NSOKButton];
@@ -237,6 +260,7 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
 - (void)onCancelClicked
 {
     if (mOkButton) {
+        mClosingDueToKnownButton = true;
         [mColorPanel close];
         mQtColor = QColor();
         [self finishOffWithCode:NSCancelButton];
@@ -273,13 +297,15 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
             mQtColor.setRgbF(red, green, blue, alpha);
         }
     }
-    emit mHelper->currentColorChanged(mQtColor);
+    if (mHelper)
+        emit mHelper->currentColorChanged(mQtColor);
 }
 
 - (void)showModelessPanel
 {
     mDialogIsExecuting = false;
     mResultSet = false;
+    mClosingDueToKnownButton = false;
     [mColorPanel makeKeyAndOrderFront:mColorPanel];
 }
 
@@ -293,12 +319,13 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
     // close down during the cleanup.
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);
     [NSApp runModalForWindow:mColorPanel];
+    mDialogIsExecuting = false;
     return (mResultCode == NSOKButton);
 }
 
-- (QT_PREPEND_NAMESPACE(QPlatformDialogHelper::DialogCode))dialogResultCode
+- (QPlatformDialogHelper::DialogCode)dialogResultCode
 {
-    return (mResultCode == NSOKButton) ? QT_PREPEND_NAMESPACE(QPlatformDialogHelper::Accepted) : QT_PREPEND_NAMESPACE(QPlatformDialogHelper::Rejected);
+    return (mResultCode == NSOKButton) ? QPlatformDialogHelper::Accepted : QPlatformDialogHelper::Rejected;
 }
 
 - (BOOL)windowShouldClose:(id)window
@@ -310,7 +337,8 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
         [self finishOffWithCode:NSCancelButton];
     } else {
         mResultSet = true;
-        emit mHelper->reject();
+        if (mHelper)
+            emit mHelper->reject();
     }
     return true;
 }
@@ -345,27 +373,101 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
 
 QT_BEGIN_NAMESPACE
 
-QCocoaColorDialogHelper::QCocoaColorDialogHelper() :
-    mDelegate(0)
+class QCocoaColorPanel
+{
+public:
+    QCocoaColorPanel()
+    {
+        mDelegate = [[QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) alloc] init];
+    }
+
+    ~QCocoaColorPanel()
+    {
+        [mDelegate release];
+    }
+
+    void init(QCocoaColorDialogHelper *helper)
+    {
+        [mDelegate setDialogHelper:helper];
+    }
+
+    void cleanup(QCocoaColorDialogHelper *helper)
+    {
+        if (mDelegate->mHelper == helper)
+            mDelegate->mHelper = 0;
+    }
+
+    bool exec()
+    {
+        // Note: If NSApp is not running (which is the case if e.g a top-most
+        // QEventLoop has been interrupted, and the second-most event loop has not
+        // yet been reactivated (regardless if [NSApp run] is still on the stack)),
+        // showing a native modal dialog will fail.
+        return [mDelegate runApplicationModalPanel];
+    }
+
+    bool show(Qt::WindowModality windowModality, QWindow *parent)
+    {
+        Q_UNUSED(parent);
+        if (windowModality != Qt::WindowModal)
+            [mDelegate showModelessPanel];
+        // no need to show a Qt::WindowModal dialog here, because it's necessary to call exec() in that case
+        return true;
+    }
+
+    void hide()
+    {
+        [mDelegate closePanel];
+    }
+
+    QColor currentColor() const
+    {
+        return mDelegate->mQtColor;
+    }
+
+    void setCurrentColor(const QColor &color)
+    {
+        // make sure that if ShowAlphaChannel option is set then also setShowsAlpha
+        // needs to be set, otherwise alpha value is omitted
+        if (color.alpha() < 255)
+            [mDelegate->mColorPanel setShowsAlpha:YES];
+
+        NSColor *nsColor;
+        const QColor::Spec spec = color.spec();
+        if (spec == QColor::Cmyk) {
+            nsColor = [NSColor colorWithDeviceCyan:color.cyanF()
+                                           magenta:color.magentaF()
+                                            yellow:color.yellowF()
+                                             black:color.blackF()
+                                             alpha:color.alphaF()];
+        } else {
+            nsColor = [NSColor colorWithCalibratedRed:color.redF()
+                                                green:color.greenF()
+                                                 blue:color.blueF()
+                                                alpha:color.alphaF()];
+        }
+        mDelegate->mQtColor = color;
+        [mDelegate->mColorPanel setColor:nsColor];
+    }
+
+private:
+    QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *mDelegate;
+};
+
+Q_GLOBAL_STATIC(QCocoaColorPanel, sharedColorPanel)
+
+QCocoaColorDialogHelper::QCocoaColorDialogHelper()
 {
 }
 
 QCocoaColorDialogHelper::~QCocoaColorDialogHelper()
 {
-    if (!mDelegate)
-        return;
-    [reinterpret_cast<QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *>(mDelegate) release];
-    mDelegate = 0;
+    sharedColorPanel()->cleanup(this);
 }
 
 void QCocoaColorDialogHelper::exec()
 {
-    // Note: If NSApp is not running (which is the case if e.g a top-most
-    // QEventLoop has been interrupted, and the second-most event loop has not
-    // yet been reactivated (regardless if [NSApp run] is still on the stack)),
-    // showing a native modal dialog will fail.
-    QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *delegate = static_cast<QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *>(mDelegate);
-    if ([delegate runApplicationModalPanel])
+    if (sharedColorPanel()->exec())
         emit accept();
     else
         emit reject();
@@ -375,83 +477,24 @@ bool QCocoaColorDialogHelper::show(Qt::WindowFlags, Qt::WindowModality windowMod
 {
     if (windowModality == Qt::WindowModal)
         windowModality = Qt::ApplicationModal;
-    return showCocoaColorPanel(windowModality, parent);
+    sharedColorPanel()->init(this);
+    return sharedColorPanel()->show(windowModality, parent);
 }
 
 void QCocoaColorDialogHelper::hide()
 {
-    if (!mDelegate)
-        return;
-    [reinterpret_cast<QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *>(mDelegate)->mColorPanel close];
+    sharedColorPanel()->hide();
 }
 
 void QCocoaColorDialogHelper::setCurrentColor(const QColor &color)
 {
-    if (!mDelegate)
-        createNSColorPanelDelegate();
-    QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *delegate = static_cast<QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *>(mDelegate);
-
-    // make sure that if ShowAlphaChannel option is set then also setShowsAlpha
-    // needs to be set, otherwise alpha value is omitted
-    [delegate->mColorPanel setShowsAlpha:options()->testOption(QColorDialogOptions::ShowAlphaChannel)];
-
-    NSColor *nsColor;
-    const QColor::Spec spec = color.spec();
-    if (spec == QColor::Cmyk) {
-        nsColor = [NSColor colorWithDeviceCyan:color.cyanF()
-                                       magenta:color.magentaF()
-                                        yellow:color.yellowF()
-                                         black:color.blackF()
-                                         alpha:color.alphaF()];
-    } else {
-        nsColor = [NSColor colorWithCalibratedRed:color.redF()
-                                            green:color.greenF()
-                                             blue:color.blueF()
-                                            alpha:color.alphaF()];
-    }
-    delegate->mQtColor = color;
-    [delegate->mColorPanel setColor:nsColor];
+    sharedColorPanel()->init(this);
+    sharedColorPanel()->setCurrentColor(color);
 }
 
 QColor QCocoaColorDialogHelper::currentColor() const
 {
-    if (!mDelegate)
-        return QColor();
-    return reinterpret_cast<QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *>(mDelegate)->mQtColor;
-}
-
-void QCocoaColorDialogHelper::createNSColorPanelDelegate()
-{
-    if (mDelegate)
-        return;
-
-    QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *delegate = [[QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) alloc]
-          initWithDialogHelper:this];
-
-    mDelegate = delegate;
-}
-
-bool QCocoaColorDialogHelper::showCocoaColorPanel(Qt::WindowModality windowModality, QWindow *parent)
-{
-    Q_UNUSED(parent);
-    createNSColorPanelDelegate();
-    QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *delegate = static_cast<QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *>(mDelegate);
-    [delegate->mColorPanel setShowsAlpha:options()->testOption(QColorDialogOptions::ShowAlphaChannel)];
-    if (windowModality != Qt::WindowModal)
-        [delegate showModelessPanel];
-    // no need to show a Qt::WindowModal dialog here, because it's necessary to call exec() in that case
-    return true;
-}
-
-bool QCocoaColorDialogHelper::hideCocoaColorPanel()
-{
-    if (!mDelegate){
-        return false;
-    } else {
-        QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *delegate = static_cast<QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) *>(mDelegate);
-        [delegate closePanel];
-        return true;
-    }
+    return sharedColorPanel()->currentColor();
 }
 
 QT_END_NAMESPACE

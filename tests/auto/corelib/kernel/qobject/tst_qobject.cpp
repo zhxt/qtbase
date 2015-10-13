@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -90,7 +82,7 @@ private slots:
     void thread();
     void thread0();
     void moveToThread();
-    void sender();
+    void senderTest();
     void declareInterface();
     void qpointerResetBeforeDestroyedSignal();
     void testUserData();
@@ -99,9 +91,8 @@ private slots:
     void floatProperty();
     void qrealProperty();
     void property();
-#ifndef QT_NO_PROCESS
     void recursiveSignalEmission();
-#endif
+    void signalBlocking();
     void blockingQueuedConnection();
     void childEvents();
     void installEventFilter();
@@ -136,6 +127,8 @@ private slots:
     void connectConvert();
     void connectWithReference();
     void connectManyArguments();
+    void connectForwardDeclare();
+    void connectNoDefaultConstructorArg();
     void returnValue_data();
     void returnValue();
     void returnValue2_data();
@@ -144,8 +137,16 @@ private slots:
     void connectPrivateSlots();
     void connectFunctorArgDifference();
     void connectFunctorOverloads();
+    void connectFunctorQueued();
+    void connectFunctorWithContext();
+    void connectFunctorDeadlock();
+    void connectStaticSlotWithObject();
     void disconnectDoesNotLeakFunctor();
+    void contextDoesNotLeakFunctor();
     void connectBase();
+    void qmlConnect();
+    void exceptions();
+    void noDeclarativeParentChangedOnDestruction();
 };
 
 struct QObjectCreatedOnShutdown
@@ -260,6 +261,21 @@ public slots:
 };
 
 int ReceiverObject::sequence = 0;
+
+static void playWithObjects()
+{
+    // Do operations that will lock the internal signalSlotLock mutex on many QObjects.
+    // The more QObjects, the higher the chance that the signalSlotLock mutex used
+    // is already in use. If the number of objects is higher than the number of mutexes in
+    // the pool (currently 131), the deadlock should always trigger. Use an even higher number
+    // to be on the safe side.
+    const int objectCount = 1024;
+    SenderObject lotsOfObjects[objectCount];
+    for (int i = 0; i < objectCount; ++i) {
+        QObject::connect(&lotsOfObjects[i], &SenderObject::signal1,
+                         &lotsOfObjects[i], &SenderObject::aPublicSlot);
+    }
+}
 
 void tst_QObject::initTestCase()
 {
@@ -447,7 +463,7 @@ void tst_QObject::connectSlotsByName()
     sender.setObjectName("Sender");
 
     QTest::ignoreMessage(QtWarningMsg, "QMetaObject::connectSlotsByName: No matching signal for on_child_signal()");
-    QTest::ignoreMessage(QtWarningMsg, "QMetaObject::connectSlotsByName: Connecting slot on_Sender_signalManyParams() with the first of the following compatible signals: (\"signalManyParams(int,int,int,QString,bool)\", \"signalManyParams(int,int,int,QString,bool,bool)\") ");
+    QTest::ignoreMessage(QtWarningMsg, "QMetaObject::connectSlotsByName: Connecting slot on_Sender_signalManyParams() with the first of the following compatible signals: (\"signalManyParams(int,int,int,QString,bool)\", \"signalManyParams(int,int,int,QString,bool,bool)\")");
     QMetaObject::connectSlotsByName(&receiver);
 
     receiver.called_slots.clear();
@@ -901,6 +917,8 @@ void tst_QObject::connectDisconnectNotifyPMF()
     s->clearNotifications();
     QMetaObject::Connection conn = connect((SenderObject*)s, &SenderObject::signal1,
                                            (ReceiverObject*)r, &ReceiverObject::slot1);
+
+    QVERIFY(conn);
 
     // Test disconnectNotify when disconnecting by QMetaObject::Connection
     QVERIFY(QObject::disconnect(conn));
@@ -1359,10 +1377,10 @@ struct CheckInstanceCount
 struct CustomType
 {
     CustomType(int l1 = 0, int l2 = 0, int l3 = 0): i1(l1), i2(l2), i3(l3)
-    { ++instanceCount; }
+    { ++instanceCount; playWithObjects(); }
     CustomType(const CustomType &other): i1(other.i1), i2(other.i2), i3(other.i3)
-    { ++instanceCount; }
-    ~CustomType() { --instanceCount; }
+    { ++instanceCount; playWithObjects(); }
+    ~CustomType() { --instanceCount; playWithObjects(); }
 
     int i1, i2, i3;
     int value() { return i1 + i2 + i3; }
@@ -1486,7 +1504,6 @@ typedef QString CustomString;
 class PropertyObject : public QObject
 {
     Q_OBJECT
-    Q_ENUMS(Alpha Priority)
 
     Q_PROPERTY(Alpha alpha READ alpha WRITE setAlpha)
     Q_PROPERTY(Priority priority READ priority WRITE setPriority)
@@ -1548,6 +1565,9 @@ private:
     float m_float;
     qreal m_qreal;
     CustomString m_customString;
+
+    Q_ENUM(Alpha)
+    Q_ENUM(Priority)
 };
 
 Q_DECLARE_METATYPE(PropertyObject::Priority)
@@ -2061,7 +2081,7 @@ void tst_QObject::metamethod()
     m = mobj->method(mobj->indexOfMethod("signal5()"));
     QVERIFY(m.methodSignature() == "signal5()");
     QVERIFY(m.methodType() == QMetaMethod::Signal);
-    QVERIFY(m.access() == QMetaMethod::Protected);
+    QVERIFY(m.access() == QMetaMethod::Public);
     QVERIFY(!(m.attributes() & QMetaMethod::Scriptable));
     QVERIFY((m.attributes() & QMetaMethod::Compatibility));
 
@@ -2151,7 +2171,7 @@ signals:
     void theSignal();
 };
 
-void tst_QObject::sender()
+void tst_QObject::senderTest()
 {
     {
         SuperObject sender;
@@ -2942,6 +2962,9 @@ void tst_QObject::dynamicProperties()
     QVERIFY(!obj.setProperty("myuserproperty", "Hello"));
     QCOMPARE(obj.changedDynamicProperties.count(), 1);
     QCOMPARE(obj.changedDynamicProperties.first(), QByteArray("myuserproperty"));
+    //check if there is no redundant DynamicPropertyChange events
+    QVERIFY(!obj.setProperty("myuserproperty", "Hello"));
+    QCOMPARE(obj.changedDynamicProperties.count(), 1);
     obj.changedDynamicProperties.clear();
 
     QCOMPARE(obj.property("myuserproperty").toString(), QString("Hello"));
@@ -2960,9 +2983,11 @@ void tst_QObject::dynamicProperties()
     QVERIFY(obj.dynamicPropertyNames().isEmpty());
 }
 
-#ifndef QT_NO_PROCESS
 void tst_QObject::recursiveSignalEmission()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QProcess proc;
     // signalbug helper app should always be next to this test binary
     const QString path = QStringLiteral("signalbug/signalbug");
@@ -2971,8 +2996,32 @@ void tst_QObject::recursiveSignalEmission()
     QVERIFY(proc.waitForFinished());
     QVERIFY(proc.exitStatus() == QProcess::NormalExit);
     QCOMPARE(proc.exitCode(), 0);
-}
 #endif
+}
+
+void tst_QObject::signalBlocking()
+{
+    SenderObject sender;
+    ReceiverObject receiver;
+
+    receiver.connect(&sender, SIGNAL(signal1()), SLOT(slot1()));
+
+    sender.emitSignal1();
+    QVERIFY(receiver.called(1));
+    receiver.reset();
+
+    sender.blockSignals(true);
+
+    sender.emitSignal1();
+    QVERIFY(!receiver.called(1));
+    receiver.reset();
+
+    sender.blockSignals(false);
+
+    sender.emitSignal1();
+    QVERIFY(receiver.called(1));
+    receiver.reset();
+}
 
 void tst_QObject::blockingQueuedConnection()
 {
@@ -4724,6 +4773,9 @@ class LotsOfSignalsAndSlots: public QObject
         #endif*/
         static void static_slot_vPFvvE(fptr) {}
 
+        void slot_vcRQObject(const QObject &) {}
+        void slot_vRQObject(QObject &) {}
+
     signals:
         void signal_v();
         void signal_vi(int);
@@ -4740,6 +4792,9 @@ class LotsOfSignalsAndSlots: public QObject
 
         void const_signal_v() const;
         void const_signal_vi(int) const;
+
+        void signal_vcRQObject(const QObject &);
+        void signal_vRQObject(QObject &);
 
         void signal(short&, short, long long, short);
         void otherSignal(const char *);
@@ -4858,6 +4913,14 @@ void tst_QObject::connectCxx0xTypeMatching()
     QVERIFY(QObject::connect(&obj, &Foo::const_signal_vi, &obj, &Foo::slot_vi));
     QVERIFY(QObject::connect(&obj, &Foo::signal_vi, &obj, &Foo::const_slot_vi));
     QVERIFY(QObject::connect(&obj, &Foo::signal_vi, &obj, &Foo::const_slot_v));
+
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vcRQObject, &obj, &Foo::slot_vcRQObject));
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vRQObject, &obj, &Foo::slot_vRQObject));
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vRQObject, &obj, &Foo::slot_vcRQObject));
+    // QVERIFY(QObject::connect(&obj, &Foo::signal_vcRQObject, &obj, &Foo::slot_vRQObject)); // Should be an error  (const& -> &)
+
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vRi, &obj, &Foo::slot_vs));
+
 }
 
 class StringVariant : public QObject
@@ -5147,6 +5210,47 @@ void tst_QObject::connectManyArguments()
     emit ob2.signal6("a", "b", "c", "d", "e", "f");
     QCOMPARE(ob2.count, 6);
     QCOMPARE(ManyArgumentNamespace::count, 12);
+}
+
+class ForwardDeclared;
+
+class ForwardDeclareArguments : public QObject
+{
+    Q_OBJECT
+signals:
+    void mySignal(const ForwardDeclared&);
+public slots:
+    void mySlot(const ForwardDeclared&) {}
+};
+
+void tst_QObject::connectForwardDeclare()
+{
+    ForwardDeclareArguments ob;
+    // it should compile
+    QVERIFY(connect(&ob, &ForwardDeclareArguments::mySignal, &ob, &ForwardDeclareArguments::mySlot, Qt::QueuedConnection));
+}
+
+class NoDefaultConstructor
+{
+    Q_GADGET
+public:
+    NoDefaultConstructor(int) {}
+};
+
+class NoDefaultContructorArguments : public QObject
+{
+    Q_OBJECT
+signals:
+    void mySignal(const NoDefaultConstructor&);
+public slots:
+    void mySlot(const NoDefaultConstructor&) {}
+};
+
+void tst_QObject::connectNoDefaultConstructorArg()
+{
+    NoDefaultContructorArguments ob;
+    // it should compile
+    QVERIFY(connect(&ob, &NoDefaultContructorArguments::mySignal, &ob, &NoDefaultContructorArguments::mySlot, Qt::QueuedConnection));
 }
 
 class ReturnValue : public QObject {
@@ -5515,8 +5619,8 @@ public:
 };
 
 class ConnectToPrivateSlotPrivate : public QObjectPrivate {
-public:
     Q_DECLARE_PUBLIC(ConnectToPrivateSlot)
+public:
     int receivedCount;
     QVariant receivedValue;
 
@@ -5599,6 +5703,159 @@ void tst_QObject::connectFunctorArgDifference()
 #endif
 
     QVERIFY(true);
+}
+
+class ContextObject : public QObject
+{
+    Q_OBJECT
+public:
+    void compareSender(QObject *s) { QCOMPARE(s, sender()); }
+};
+
+struct SlotArgFunctor
+{
+    SlotArgFunctor(int *s) : status(s), context(Q_NULLPTR), sender(Q_NULLPTR) {}
+    SlotArgFunctor(ContextObject *context, QObject *sender, int *s) : status(s), context(context), sender(sender) {}
+    void operator()() { *status = 2; if (context) context->compareSender(sender); }
+
+protected:
+    int *status;
+    ContextObject *context;
+    QObject *sender;
+};
+
+void tst_QObject::connectFunctorQueued()
+{
+    int status = 1;
+    SenderObject obj;
+    QEventLoop e;
+
+    connect(&obj, &SenderObject::signal1, this, SlotArgFunctor(&status), Qt::QueuedConnection);
+    connect(&obj, &SenderObject::signal1, &e, &QEventLoop::quit, Qt::QueuedConnection);
+
+    obj.emitSignal1();
+    QCOMPARE(status, 1);
+    e.exec();
+    QCOMPARE(status, 2);
+
+#if defined(Q_COMPILER_LAMBDA)
+    status = 1;
+    connect(&obj, &SenderObject::signal1, this, [&status] { status = 2; }, Qt::QueuedConnection);
+
+    obj.emitSignal1();
+    QCOMPARE(status, 1);
+    e.exec();
+    QCOMPARE(status, 2);
+#endif
+}
+
+void tst_QObject::connectFunctorWithContext()
+{
+    int status = 1;
+    SenderObject obj;
+    ContextObject *context = new ContextObject;
+    QEventLoop e;
+
+    connect(&obj, &SenderObject::signal1, context, SlotArgFunctor(&status));
+    connect(&obj, &SenderObject::signal1, &e, &QEventLoop::quit, Qt::QueuedConnection);
+
+    // When the context gets deleted, the connection should decay and the signal shouldn't trigger
+    // The connection is queued to make sure the destroyed signal propagates correctly and
+    // cuts the connection.
+    connect(context, &QObject::destroyed, &obj, &SenderObject::signal1, Qt::QueuedConnection);
+    context->deleteLater();
+
+    QCOMPARE(status, 1);
+    e.exec();
+    QCOMPARE(status, 1);
+
+    // Check the sender arg is set correctly in the context
+    context = new ContextObject;
+
+    connect(&obj, &SenderObject::signal1, context,
+            SlotArgFunctor(context, &obj, &status), Qt::QueuedConnection);
+
+    obj.emitSignal1();
+    QCOMPARE(status, 1);
+    e.exec();
+    QCOMPARE(status, 2);
+
+#if defined(Q_COMPILER_LAMBDA)
+    status = 1;
+    connect(&obj, &SenderObject::signal1, this, [this, &status, &obj] { status = 2; QCOMPARE(sender(), &obj); }, Qt::QueuedConnection);
+
+    obj.emitSignal1();
+    QCOMPARE(status, 1);
+    e.exec();
+    QCOMPARE(status, 2);
+#endif
+
+    // Free
+    context->deleteLater();
+}
+
+class MyFunctor
+{
+public:
+    explicit MyFunctor(QObject *objectToDisconnect)
+        : m_objectToDisconnect(objectToDisconnect)
+    {}
+
+    ~MyFunctor() {
+        playWithObjects();
+    }
+
+    void operator()() {
+        // This will cause the slot object associated with this functor to be destroyed after
+        // this function returns. That in turn will destroy this functor.
+        // If our dtor runs with the signalSlotLock held, the bunch of connect()
+        // performed there will deadlock trying to lock that lock again.
+        m_objectToDisconnect->disconnect();
+    }
+
+private:
+    QObject *m_objectToDisconnect;
+};
+
+void tst_QObject::connectFunctorDeadlock()
+{
+    SenderObject sender;
+    MyFunctor functor(&sender);
+    QObject::connect(&sender, &SenderObject::signal1, functor);
+    sender.emitSignal1();
+}
+
+static int s_static_slot_checker = 1;
+
+class StaticSlotChecker : public QObject
+{
+    Q_OBJECT
+public Q_SLOTS:
+    static void staticSlot() { s_static_slot_checker = 2; }
+};
+
+void tst_QObject::connectStaticSlotWithObject()
+{
+    SenderObject sender;
+    StaticSlotChecker *receiver = new StaticSlotChecker;
+    QEventLoop e;
+
+    QVERIFY(connect(&sender, &SenderObject::signal1, receiver, &StaticSlotChecker::staticSlot, Qt::QueuedConnection));
+    connect(&sender, &SenderObject::signal1, &e, &QEventLoop::quit, Qt::QueuedConnection);
+
+    sender.emitSignal1();
+    QCOMPARE(s_static_slot_checker, 1);
+    e.exec();
+    QCOMPARE(s_static_slot_checker, 2);
+
+    s_static_slot_checker = 1;
+
+    connect(receiver, &QObject::destroyed, &sender, &SenderObject::signal1, Qt::QueuedConnection);
+    receiver->deleteLater();
+
+    QCOMPARE(s_static_slot_checker, 1);
+    e.exec();
+    QCOMPARE(s_static_slot_checker, 1);
 }
 
 struct ComplexFunctor {
@@ -5726,27 +5983,61 @@ void tst_QObject::connectFunctorOverloads()
 #endif
 }
 
+class GetSenderObject : public QObject
+{
+    Q_OBJECT
+public:
+    QObject *accessSender() { return sender(); }
+
+public Q_SLOTS:
+    void triggerSignal() { Q_EMIT aSignal(); }
+
+Q_SIGNALS:
+    void aSignal();
+};
+
 static int countedStructObjectsCount = 0;
 struct CountedStruct
 {
-    CountedStruct() { ++countedStructObjectsCount; }
-    CountedStruct(const CountedStruct &) { ++countedStructObjectsCount; }
+    CountedStruct() : sender(Q_NULLPTR) { ++countedStructObjectsCount; }
+    CountedStruct(GetSenderObject *sender) : sender(sender) { ++countedStructObjectsCount; }
+    CountedStruct(const CountedStruct &o) : sender(o.sender) { ++countedStructObjectsCount; }
     CountedStruct &operator=(const CountedStruct &) { return *this; }
-    ~CountedStruct() { --countedStructObjectsCount; }
-    void operator()() const {}
+    // accessSender here allows us to check if there's a deadlock
+    ~CountedStruct() { --countedStructObjectsCount; if (sender != Q_NULLPTR) (void)sender->accessSender(); }
+    void operator()() const { }
+
+    GetSenderObject *sender;
 };
 
 void tst_QObject::disconnectDoesNotLeakFunctor()
 {
     QCOMPARE(countedStructObjectsCount, 0);
     {
+        GetSenderObject obj;
         QMetaObject::Connection c;
         {
-            CountedStruct s;
+            CountedStruct s(&obj);
             QCOMPARE(countedStructObjectsCount, 1);
-            QTimer timer;
 
-            c = connect(&timer, &QTimer::timeout, s);
+            c = connect(&obj, &GetSenderObject::aSignal, s);
+            QVERIFY(c);
+            QCOMPARE(countedStructObjectsCount, 2);
+            QVERIFY(QObject::disconnect(c));
+            QCOMPARE(countedStructObjectsCount, 1);
+        }
+        QCOMPARE(countedStructObjectsCount, 0);
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+    {
+        GetSenderObject obj;
+        QMetaObject::Connection c;
+        {
+            CountedStruct s(&obj);
+            QObject context;
+            QCOMPARE(countedStructObjectsCount, 1);
+
+            c = connect(&obj, &GetSenderObject::aSignal, &context, s);
             QVERIFY(c);
             QCOMPARE(countedStructObjectsCount, 2);
             QVERIFY(QObject::disconnect(c));
@@ -5768,7 +6059,11 @@ void tst_QObject::disconnectDoesNotLeakFunctor()
             QVERIFY(c2);
             QCOMPARE(countedStructObjectsCount, 2);
             QVERIFY(QObject::disconnect(c1));
+            QVERIFY(!c1);
+            QVERIFY(!c2);
             // functor object has been destroyed
+            QCOMPARE(countedStructObjectsCount, 1);
+            QVERIFY(!QObject::disconnect(c2));
             QCOMPARE(countedStructObjectsCount, 1);
         }
         QCOMPARE(countedStructObjectsCount, 0);
@@ -5797,6 +6092,33 @@ void tst_QObject::disconnectDoesNotLeakFunctor()
     }
     QCOMPARE(countedStructObjectsCount, 0);
     {
+        QTimer *timer = new QTimer;
+        QEventLoop e;
+
+        connect(timer, &QTimer::timeout, CountedStruct());
+        QCOMPARE(countedStructObjectsCount, 1); // only one instance, in Qt internals
+        timer->deleteLater();
+        connect(timer, &QObject::destroyed, &e, &QEventLoop::quit, Qt::QueuedConnection);
+        e.exec();
+        QCOMPARE(countedStructObjectsCount, 0); // functor being destroyed
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+    {
+        GetSenderObject obj;
+
+        connect(&obj, &GetSenderObject::aSignal, CountedStruct(&obj));
+        QCOMPARE(countedStructObjectsCount, 1);
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+    {
+        GetSenderObject obj;
+
+        connect(&obj, &GetSenderObject::aSignal, CountedStruct(&obj));
+        QCOMPARE(countedStructObjectsCount, 1);
+        QObject::disconnect(&obj, &GetSenderObject::aSignal, 0, 0);
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+    {
 #if defined(Q_COMPILER_LAMBDA)
         CountedStruct s;
         QCOMPARE(countedStructObjectsCount, 1);
@@ -5806,6 +6128,67 @@ void tst_QObject::disconnectDoesNotLeakFunctor()
         QVERIFY(c);
         QCOMPARE(countedStructObjectsCount, 2);
         QVERIFY(QObject::disconnect(c));
+        QCOMPARE(countedStructObjectsCount, 1);
+#endif // Q_COMPILER_LAMBDA
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+}
+
+void tst_QObject::contextDoesNotLeakFunctor()
+{
+    QCOMPARE(countedStructObjectsCount, 0);
+    {
+        QMetaObject::Connection c;
+        {
+            QEventLoop e;
+            ContextObject *context = new ContextObject;
+            SenderObject obj;
+
+            connect(&obj, &SenderObject::signal1, context, CountedStruct());
+            connect(context, &QObject::destroyed, &e, &QEventLoop::quit, Qt::QueuedConnection);
+            context->deleteLater();
+
+            QCOMPARE(countedStructObjectsCount, 1);
+            e.exec();
+            QCOMPARE(countedStructObjectsCount, 0);
+        }
+        QCOMPARE(countedStructObjectsCount, 0);
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+    {
+        GetSenderObject obj;
+        QMetaObject::Connection c;
+        {
+            CountedStruct s(&obj);
+            QEventLoop e;
+            ContextObject *context = new ContextObject;
+            QCOMPARE(countedStructObjectsCount, 1);
+
+            connect(&obj, &GetSenderObject::aSignal, context, s);
+            QCOMPARE(countedStructObjectsCount, 2);
+
+            connect(context, &QObject::destroyed, &e, &QEventLoop::quit, Qt::QueuedConnection);
+            context->deleteLater();
+
+            e.exec();
+            QCOMPARE(countedStructObjectsCount, 1);
+        }
+        QCOMPARE(countedStructObjectsCount, 0);
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+    {
+#if defined(Q_COMPILER_LAMBDA)
+        CountedStruct s;
+        QEventLoop e;
+        ContextObject *context = new ContextObject;
+        QCOMPARE(countedStructObjectsCount, 1);
+        QTimer timer;
+
+        connect(&timer, &QTimer::timeout, context, [s](){});
+        QCOMPARE(countedStructObjectsCount, 2);
+        connect(context, &QObject::destroyed, &e, &QEventLoop::quit, Qt::QueuedConnection);
+        context->deleteLater();
+        e.exec();
         QCOMPARE(countedStructObjectsCount, 1);
 #endif // Q_COMPILER_LAMBDA
     }
@@ -5833,8 +6216,207 @@ void tst_QObject::connectBase()
     QCOMPARE( r1.count_slot1, 1 );
     QCOMPARE( r1.count_slot2, 1 );
     QCOMPARE( r1.count_slot3, 1 );
+
+    QVERIFY( QObject::disconnect( &sub, &SubSender::signal1 , &r1, &ReceiverObject::slot1 ) );
+    QVERIFY( QObject::disconnect( &sub, static_cast<void (SenderObject::*)()>(&SubSender::signal2) , &r1, &ReceiverObject::slot2 ) );
+    QVERIFY( QObject::disconnect( &sub, static_cast<void (SubSender::*)()>(&SubSender::signal3) , &r1, &ReceiverObject::slot3 ) );
+
+    sub.emitSignal1();
+    sub.emitSignal2();
+    sub.emitSignal3();
+
+    QCOMPARE( r1.count_slot1, 1 );
+    QCOMPARE( r1.count_slot2, 1 );
+    QCOMPARE( r1.count_slot3, 1 );
 }
 
+struct QmlReceiver : public QtPrivate::QSlotObjectBase
+{
+    int callCount;
+    void *magic;
+
+    QmlReceiver()
+        : QtPrivate::QSlotObjectBase(&impl)
+        , callCount(0)
+        , magic(0)
+    {}
+
+    static void impl(int which, QSlotObjectBase *this_, QObject *, void **metaArgs, bool *ret)
+    {
+        switch (which) {
+        case Destroy: delete static_cast<QmlReceiver*>(this_); return;
+        case Call: static_cast<QmlReceiver*>(this_)->callCount++; return;
+        case Compare: *ret = static_cast<QmlReceiver*>(this_)->magic == metaArgs[0]; return;
+        case NumOperations: break;
+        }
+    }
+};
+
+void tst_QObject::qmlConnect()
+{
+#ifdef QT_BUILD_INTERNAL
+    SenderObject sender;
+    QmlReceiver *receiver = new QmlReceiver;
+    receiver->magic = receiver;
+    receiver->ref();
+
+    QVERIFY(QObjectPrivate::connect(&sender, sender.metaObject()->indexOfSignal("signal1()"),
+                                    receiver, Qt::AutoConnection));
+
+    QCOMPARE(receiver->callCount, 0);
+    sender.emitSignal1();
+    QCOMPARE(receiver->callCount, 1);
+
+    void *a[] = {
+        receiver
+    };
+    QVERIFY(QObjectPrivate::disconnect(&sender, sender.metaObject()->indexOfSignal("signal1()"), reinterpret_cast<void**>(&a)));
+
+    sender.emitSignal1();
+    QCOMPARE(receiver->callCount, 1);
+
+    receiver->destroyIfLastRef();
+#else
+    QSKIP("Needs QT_BUILD_INTERNAL");
+#endif
+}
+
+#ifndef QT_NO_EXCEPTIONS
+class ObjectException : public std::exception { };
+
+struct ThrowFunctor
+{
+    CountedStruct operator()(const CountedStruct &, CountedStruct s2) const
+    {
+        throw ObjectException();
+        return s2;
+    }
+    CountedStruct s;
+};
+#endif
+
+class ExceptionThrower : public QObject
+{
+  Q_OBJECT
+public slots:
+    CountedStruct throwException(const CountedStruct &, CountedStruct s2)
+    {
+#ifndef QT_NO_EXCEPTIONS
+        throw ObjectException();
+#endif
+        return s2;
+    }
+signals:
+    CountedStruct mySignal(const CountedStruct &s1, CountedStruct s2);
+};
+
+void tst_QObject::exceptions()
+{
+#ifndef QT_NO_EXCEPTIONS
+    ReceiverObject receiver;
+
+    // String based syntax
+    {
+        QCOMPARE(countedStructObjectsCount, 0);
+        ExceptionThrower thrower;
+        receiver.reset();
+
+        connect(&thrower, SIGNAL(mySignal(CountedStruct,CountedStruct)), &receiver, SLOT(slot1()));
+        connect(&thrower, SIGNAL(mySignal(CountedStruct,CountedStruct)), &thrower, SLOT(throwException(CountedStruct,CountedStruct)));
+        connect(&thrower, SIGNAL(mySignal(CountedStruct,CountedStruct)), &receiver, SLOT(slot2()));
+        try {
+            CountedStruct s;
+            emit thrower.mySignal(s, s);
+            QFAIL("Exception not thrown?");
+        } catch (ObjectException&) {}
+        QCOMPARE(receiver.count_slot1, 1);
+        QCOMPARE(receiver.count_slot2, 0);
+        QCOMPARE(countedStructObjectsCount, 0);
+    }
+    // Pointer to member function
+    {
+        QCOMPARE(countedStructObjectsCount, 0);
+        ExceptionThrower thrower;
+        receiver.reset();
+
+        connect(&thrower, &ExceptionThrower::mySignal, &receiver, &ReceiverObject::slot1);
+        connect(&thrower, &ExceptionThrower::mySignal, &thrower, &ExceptionThrower::throwException);
+        connect(&thrower, &ExceptionThrower::mySignal, &receiver, &ReceiverObject::slot2);
+        try {
+            CountedStruct s;
+            emit thrower.mySignal(s, s);
+            QFAIL("Exception not thrown?");
+        } catch (ObjectException&) {}
+        QCOMPARE(receiver.count_slot1, 1);
+        QCOMPARE(receiver.count_slot2, 0);
+        QCOMPARE(countedStructObjectsCount, 0);
+    }
+    // Functor
+    {
+        QCOMPARE(countedStructObjectsCount, 0);
+        ExceptionThrower thrower;
+        receiver.reset();
+
+        connect(&thrower, &ExceptionThrower::mySignal, &receiver, &ReceiverObject::slot1);
+        connect(&thrower, &ExceptionThrower::mySignal, ThrowFunctor());
+        connect(&thrower, &ExceptionThrower::mySignal, &receiver, &ReceiverObject::slot2);
+        try {
+            CountedStruct s;
+            emit thrower.mySignal(s, s);
+            QFAIL("Exception not thrown?");
+        } catch (ObjectException&) {}
+        QCOMPARE(receiver.count_slot1, 1);
+        QCOMPARE(receiver.count_slot2, 0);
+        QCOMPARE(countedStructObjectsCount, 1); // the Functor
+    }
+    QCOMPARE(countedStructObjectsCount, 0);
+
+
+#else
+    QSKIP("Needs exceptions");
+#endif
+}
+
+#ifdef QT_BUILD_INTERNAL
+static bool parentChangeCalled = false;
+
+static void testParentChanged(QAbstractDeclarativeData *, QObject *, QObject *)
+{
+    parentChangeCalled = true;
+}
+#endif
+
+void tst_QObject::noDeclarativeParentChangedOnDestruction()
+{
+#ifdef QT_BUILD_INTERNAL
+    typedef void (*ParentChangedCallback)(QAbstractDeclarativeData *, QObject *, QObject *);
+    QScopedValueRollback<ParentChangedCallback> rollback(QAbstractDeclarativeData::parentChanged);
+    QAbstractDeclarativeData::parentChanged = testParentChanged;
+
+    QObject *parent = new QObject;
+    QObject *child = new QObject;
+
+    QAbstractDeclarativeData dummy;
+    QObjectPrivate::get(child)->declarativeData = &dummy;
+
+    parentChangeCalled = false;
+    child->setParent(parent);
+
+    QVERIFY(parentChangeCalled);
+    parentChangeCalled = false;
+
+    delete child;
+    QVERIFY(!parentChangeCalled);
+
+    delete parent;
+#else
+    QSKIP("Needs QT_BUILD_INTERNAL");
+#endif
+}
+
+// Test for QtPrivate::HasQ_OBJECT_Macro
+Q_STATIC_ASSERT(QtPrivate::HasQ_OBJECT_Macro<tst_QObject>::Value);
+Q_STATIC_ASSERT(!QtPrivate::HasQ_OBJECT_Macro<SiblingDeleter>::Value);
 
 QTEST_MAIN(tst_QObject)
 #include "tst_qobject.moc"

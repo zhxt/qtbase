@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -98,7 +90,7 @@ QT_BEGIN_NAMESPACE
     \since 4.4
 
     \value Recursive In this mode, a thread can lock the same
-    QReadWriteLock multiple times and the mutex won't be unlocked
+    QReadWriteLock multiple times. The QReadWriteLock won't be unlocked
     until a corresponding number of unlock() calls have been made.
 
     \value NonRecursive In this mode, a thread may only lock a
@@ -172,7 +164,7 @@ void QReadWriteLock::lockForRead()
 
 /*!
     Attempts to lock for reading. If the lock was obtained, this
-    function returns true, otherwise it returns false instead of
+    function returns \c true, otherwise it returns \c false instead of
     waiting for the lock to become available, i.e. it does not block.
 
     The lock attempt will fail if another thread has locked for
@@ -217,8 +209,8 @@ bool QReadWriteLock::tryLockForRead()
 
 /*! \overload
 
-    Attempts to lock for reading. This function returns true if the
-    lock was obtained; otherwise it returns false. If another thread
+    Attempts to lock for reading. This function returns \c true if the
+    lock was obtained; otherwise it returns \c false. If another thread
     has locked for writing, this function will wait for at most \a
     timeout milliseconds for the lock to become available.
 
@@ -309,7 +301,7 @@ void QReadWriteLock::lockForWrite()
 
 /*!
     Attempts to lock for writing. If the lock was obtained, this
-    function returns true; otherwise, it returns false immediately.
+    function returns \c true; otherwise, it returns \c false immediately.
 
     The lock attempt will fail if another thread has locked for
     reading or writing.
@@ -352,8 +344,8 @@ bool QReadWriteLock::tryLockForWrite()
 
 /*! \overload
 
-    Attempts to lock for writing. This function returns true if the
-    lock was obtained; otherwise it returns false. If another thread
+    Attempts to lock for writing. This function returns \c true if the
+    lock was obtained; otherwise it returns \c false. If another thread
     has locked for reading or writing, this function will wait for at
     most \a timeout milliseconds for the lock to become available.
 

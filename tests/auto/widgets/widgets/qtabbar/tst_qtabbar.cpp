@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -97,6 +89,9 @@ private slots:
     void changeTitleWhileDoubleClickingTab();
 
     void taskQTBUG_10052_widgetLayoutWhenMoving();
+
+    void tabBarClicked();
+    void autoHide();
 };
 
 // Testing get/set functions
@@ -314,12 +309,17 @@ void tst_QTabBar::sizeHints()
     tabBar.setUsesScrollButtons(false);
     tabBar.setElideMode(Qt::ElideRight);
 //    qDebug() << tabBar.minimumSizeHint() << tabBar.sizeHint();
-    QVERIFY(tabBar.minimumSizeHint().width() < 500);
-    QVERIFY(tabBar.sizeHint().width() > 700); // unchanged
+
+    // The sizeHint is very much dependent on the screen DPI value
+    // so we can not really predict it.
+    int tabBarMinSizeHintWidth = tabBar.minimumSizeHint().width();
+    int tabBarSizeHintWidth = tabBar.sizeHint().width();
+    QVERIFY(tabBarMinSizeHintWidth < tabBarSizeHintWidth);
+    QVERIFY(tabBarSizeHintWidth > 700); // unchanged
 
     tabBar.addTab("This is tab10 with a very long title");
-    QVERIFY(tabBar.minimumSizeHint().width() < 600);
-    QVERIFY(tabBar.sizeHint().width() > 700); // unchanged
+    QVERIFY(tabBar.minimumSizeHint().width() > tabBarMinSizeHintWidth);
+    QVERIFY(tabBar.sizeHint().width() > tabBarSizeHintWidth);
 }
 
 void tst_QTabBar::setUsesScrollButtons_data()
@@ -650,6 +650,75 @@ void tst_QTabBar::taskQTBUG_10052_widgetLayoutWhenMoving()
     tabBar.moveTab(0, 1);
     QTRY_VERIFY(w1.moved);
     QVERIFY(w2.moved);
+}
+
+void tst_QTabBar::tabBarClicked()
+{
+    QTabBar tabBar;
+    tabBar.addTab("0");
+    QSignalSpy clickSpy(&tabBar, SIGNAL(tabBarClicked(int)));
+    QSignalSpy doubleClickSpy(&tabBar, SIGNAL(tabBarDoubleClicked(int)));
+
+    QCOMPARE(clickSpy.count(), 0);
+    QCOMPARE(doubleClickSpy.count(), 0);
+
+    Qt::MouseButton button = Qt::LeftButton;
+    while (button <= Qt::MaxMouseButton) {
+        const QPoint tabPos = tabBar.tabRect(0).center();
+
+        QTest::mouseClick(&tabBar, button, 0, tabPos);
+        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), 0);
+        QCOMPARE(doubleClickSpy.count(), 0);
+
+        QTest::mouseDClick(&tabBar, button, 0, tabPos);
+        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), 0);
+        QCOMPARE(doubleClickSpy.count(), 1);
+        QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), 0);
+
+        const QPoint barPos(tabBar.tabRect(0).right() + 5, tabBar.tabRect(0).center().y());
+
+        QTest::mouseClick(&tabBar, button, 0, barPos);
+        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), -1);
+        QCOMPARE(doubleClickSpy.count(), 0);
+
+        QTest::mouseDClick(&tabBar, button, 0, barPos);
+        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), -1);
+        QCOMPARE(doubleClickSpy.count(), 1);
+        QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), -1);
+
+        button = Qt::MouseButton(button << 1);
+    }
+}
+
+void tst_QTabBar::autoHide()
+{
+    QTabBar tabBar;
+    QVERIFY(!tabBar.autoHide());
+    QVERIFY(!tabBar.isVisible());
+    tabBar.show();
+    QVERIFY(tabBar.isVisible());
+    tabBar.addTab("0");
+    QVERIFY(tabBar.isVisible());
+    tabBar.removeTab(0);
+    QVERIFY(tabBar.isVisible());
+
+    tabBar.setAutoHide(true);
+    QVERIFY(!tabBar.isVisible());
+    tabBar.addTab("0");
+    QVERIFY(!tabBar.isVisible());
+    tabBar.addTab("1");
+    QVERIFY(tabBar.isVisible());
+    tabBar.removeTab(0);
+    QVERIFY(!tabBar.isVisible());
+    tabBar.removeTab(0);
+    QVERIFY(!tabBar.isVisible());
+
+    tabBar.setAutoHide(false);
+    QVERIFY(tabBar.isVisible());
 }
 
 QTEST_MAIN(tst_QTabBar)

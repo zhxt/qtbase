@@ -1,45 +1,35 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-#define QT_STRICT_ITERATORS
 
 #include <qmap.h>
 #include <QtTest/QtTest>
@@ -59,6 +49,7 @@ private slots:
     void count();
     void clear();
     void beginEnd();
+    void firstLast();
     void key();
 
     void swap();
@@ -87,7 +78,14 @@ private slots:
     void initializerList();
     void testInsertWithHint();
     void testInsertMultiWithHint();
+    void eraseValidIteratorOnSharedMap();
 };
+
+struct IdentityTracker {
+    int value, id;
+};
+
+inline bool operator<(IdentityTracker lhs, IdentityTracker rhs) { return lhs.value < rhs.value; }
 
 typedef QMap<QString, QString> StringMap;
 
@@ -374,6 +372,34 @@ void tst_QMap::beginEnd()
     map2.insert( "2", "c" );
     QVERIFY( map.constBegin() == map.constBegin() );
     QVERIFY( map.constBegin() != map2.constBegin() );
+}
+
+void tst_QMap::firstLast()
+{
+    // sample string->string map
+    StringMap map;
+    map.insert("0", "a");
+    map.insert("1", "b");
+    map.insert("5", "e");
+
+    QCOMPARE(map.firstKey(), QStringLiteral("0"));
+    QCOMPARE(map.lastKey(), QStringLiteral("5"));
+    QCOMPARE(map.first(), QStringLiteral("a"));
+    QCOMPARE(map.last(), QStringLiteral("e"));
+
+    // const map
+    const StringMap const_map = map;
+    QCOMPARE(map.firstKey(), const_map.firstKey());
+    QCOMPARE(map.lastKey(), const_map.lastKey());
+    QCOMPARE(map.first(), const_map.first());
+    QCOMPARE(map.last(), const_map.last());
+
+    map.take(map.firstKey());
+    QCOMPARE(map.firstKey(), QStringLiteral("1"));
+    QCOMPARE(map.lastKey(), QStringLiteral("5"));
+
+    map.take(map.lastKey());
+    QCOMPARE(map.lastKey(), map.lastKey());
 }
 
 void tst_QMap::key()
@@ -956,12 +982,14 @@ void tst_QMap::qmultimap_specific()
 
 void tst_QMap::const_shared_null()
 {
+    QMap<int, QString> map2;
+#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
     QMap<int, QString> map1;
     map1.setSharable(false);
     QVERIFY(map1.isDetached());
 
-    QMap<int, QString> map2;
     map2.setSharable(true);
+#endif
     QVERIFY(!map2.isDetached());
 }
 
@@ -1018,6 +1046,7 @@ const T &const_(const T &t)
 
 void tst_QMap::setSharable()
 {
+#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
     QMap<int, QString> map;
 
     map.insert(1, "um");
@@ -1067,6 +1096,7 @@ void tst_QMap::setSharable()
         QVERIFY(!map.isDetached());
         QVERIFY(copy.isSharedWith(map));
     }
+#endif
 }
 
 void tst_QMap::insert()
@@ -1089,6 +1119,33 @@ void tst_QMap::insert()
         intMap.insert(i, -1);
         QCOMPARE(intMap.size(), 1000);
         QCOMPARE(intMap.value(i), -1);
+    }
+
+    {
+        QMap<IdentityTracker, int> map;
+        QCOMPARE(map.size(), 0);
+        const int dummy = -1;
+        IdentityTracker id00 = {0, 0}, id01 = {0, 1}, searchKey = {0, dummy};
+        QCOMPARE(map.insert(id00, id00.id).key().id, id00.id);
+        QCOMPARE(map.size(), 1);
+        QCOMPARE(map.insert(id01, id01.id).key().id, id00.id); // first key inserted is kept
+        QCOMPARE(map.size(), 1);
+        QCOMPARE(map.find(searchKey).value(), id01.id);  // last-inserted value
+        QCOMPARE(map.find(searchKey).key().id, id00.id); // but first-inserted key
+    }
+    {
+        QMultiMap<IdentityTracker, int> map;
+        QCOMPARE(map.size(), 0);
+        const int dummy = -1;
+        IdentityTracker id00 = {0, 0}, id01 = {0, 1}, searchKey = {0, dummy};
+        QCOMPARE(map.insert(id00, id00.id).key().id, id00.id);
+        QCOMPARE(map.size(), 1);
+        QCOMPARE(map.insert(id01, id01.id).key().id, id01.id);
+        QCOMPARE(map.size(), 2);
+        QMultiMap<IdentityTracker, int>::const_iterator pos = map.constFind(searchKey);
+        QCOMPARE(pos.value(), pos.key().id); // key fits to value it was inserted with
+        ++pos;
+        QCOMPARE(pos.value(), pos.key().id); // key fits to value it was inserted with
     }
 }
 
@@ -1147,10 +1204,15 @@ void tst_QMap::checkMostLeftNode()
 void tst_QMap::initializerList()
 {
 #ifdef Q_COMPILER_INITIALIZER_LISTS
-    QMap<int, QString> map{{1, "hello"}, {2, "initializer_list"}};
+    QMap<int, QString> map = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
     QCOMPARE(map.count(), 2);
-    QVERIFY(map[1] == "hello");
-    QVERIFY(map[2] == "initializer_list");
+    QCOMPARE(map[1], QString("hello"));
+    QCOMPARE(map[2], QString("initializer_list"));
+
+    // note the difference to std::map:
+    // std::map<int, QString> stdm = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
+    // QCOMPARE(stdm.size(), 2UL);
+    // QCOMPARE(stdm[1], QString("bar"));
 
     QMultiMap<QString, int> multiMap{{"il", 1}, {"il", 2}, {"il", 3}};
     QCOMPARE(multiMap.count(), 3);
@@ -1176,7 +1238,6 @@ void tst_QMap::initializerList()
 void tst_QMap::testInsertWithHint()
 {
     QMap<int, int> map;
-    map.setSharable(false);
 
     // Check with end hint();
     map.insert(map.constEnd(), 3, 1);     // size == 1
@@ -1240,7 +1301,6 @@ void tst_QMap::testInsertWithHint()
 void tst_QMap::testInsertMultiWithHint()
 {
     QMap<int, int> map;
-    map.setSharable(false);
 
     typedef QMap<int, int>::const_iterator cite; // Hack since we define QT_STRICT_ITERATORS
     map.insertMulti(cite(map.end()), 64, 65);
@@ -1289,6 +1349,62 @@ void tst_QMap::testInsertMultiWithHint()
     QCOMPARE(map.size(), 14);
 }
 
+void tst_QMap::eraseValidIteratorOnSharedMap()
+{
+    QMap<int, int> a, b;
+    a.insert(10, 10);
+    a.insertMulti(10, 40);
+    a.insertMulti(10, 25);
+    a.insertMulti(10, 30);
+    a.insert(20, 20);
+
+    QMap<int, int>::iterator i = a.begin();
+    while (i.value() != 25)
+        ++i;
+
+    b = a;
+    a.erase(i);
+
+    QCOMPARE(b.size(), 5);
+    QCOMPARE(a.size(), 4);
+
+    for (i = a.begin(); i != a.end(); ++i)
+        QVERIFY(i.value() != 25);
+
+    int itemsWith10 = 0;
+    for (i = b.begin(); i != b.end(); ++i)
+        itemsWith10 += (i.key() == 10);
+
+    QCOMPARE(itemsWith10, 4);
+
+    // Border cases
+    QMap <QString, QString> ms1, ms2, ms3;
+    ms1.insert("foo", "bar");
+    ms1.insertMulti("foo", "quux");
+    ms1.insertMulti("foo", "bar");
+
+    QMap <QString, QString>::iterator si = ms1.begin();
+    ms2 = ms1;
+    ms1.erase(si);
+    si = ms1.begin();
+    QCOMPARE(si.value(), QString("quux"));
+    ++si;
+    QCOMPARE(si.value(), QString("bar"));
+
+    si = ms2.begin();
+    ++si;
+    ++si;
+    ms3 = ms2;
+    ms2.erase(si);
+    si = ms2.begin();
+    QCOMPARE(si.value(), QString("bar"));
+    ++si;
+    QCOMPARE(si.value(), QString("quux"));
+
+    QCOMPARE(ms1.size(), 2);
+    QCOMPARE(ms2.size(), 2);
+    QCOMPARE(ms3.size(), 3);
+}
 
 QTEST_APPLESS_MAIN(tst_QMap)
 #include "tst_qmap.moc"

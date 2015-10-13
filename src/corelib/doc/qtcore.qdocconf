@@ -2,10 +2,9 @@ include($QT_INSTALL_DOCS/global/qt-module-defaults.qdocconf)
 
 project                 = QtCore
 description             = Qt Core Reference Documentation
-url                     = http://qt-project.org/doc/qt-$QT_VER/qtcore
 version                 = $QT_VERSION
 
-examplesinstallpath     = core
+examplesinstallpath     = corelib
 
 qhp.projects            = QtCore
 
@@ -26,7 +25,7 @@ qhp.QtCore.subprojects.classes.sortPages = true
 
 tagfile                 = ../../../doc/qtcore/qtcore.tags
 
-depends                 += qtgui qtwidgets qtnetwork qtdoc qtquick qtlinguist qtdesigner
+depends                 += activeqt qtdbus qtgui qtwidgets qtnetwork qtdoc qtmacextras qtquick qtlinguist qtdesigner qtconcurrent qtxml qmake qtwinextras qtqml
 
 headerdirs  += ..
 
@@ -35,7 +34,16 @@ sourcedirs  += ..
 exampledirs += \
                ../ \
                snippets \
-               ../../../examples/threads/ \
-               ../../../examples/tools/
+               ../../../examples/corelib \
+               ../../../examples/network/dnslookup \
+               ../../../examples/widgets/tools
 
 imagedirs   += images
+
+excludedirs += snippets
+
+excludefiles += ../../../examples/widgets/tools/customcompleter/doc/src/customcompleter.qdoc \
+                ../../../examples/widgets/tools/codecs/doc/src/codecs.qdoc
+
+navigation.landingpage = "Qt Core"
+navigation.cppclassespage = "Qt Core C++ Classes"

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +36,7 @@
 #include "qmakeevaluator_p.h"
 #include "qmakeglobals.h"
 #include "qmakeparser.h"
+#include "qmakevfs.h"
 #include "ioutils.h"
 
 #include <qbytearray.h>
@@ -55,6 +48,14 @@
 #include <qset.h>
 #include <qstringlist.h>
 #include <qtextstream.h>
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+# include <qjsondocument.h>
+# include <qjsonobject.h>
+# include <qjsonarray.h>
+#endif
+#ifdef PROEVALUATOR_THREAD_SAFE
+# include <qthreadpool.h>
+#endif
 
 #ifdef Q_OS_UNIX
 #include <time.h>
@@ -87,17 +88,17 @@ enum ExpandFunc {
     E_INVALID = 0, E_MEMBER, E_FIRST, E_LAST, E_SIZE, E_CAT, E_FROMFILE, E_EVAL, E_LIST,
     E_SPRINTF, E_FORMAT_NUMBER, E_JOIN, E_SPLIT, E_BASENAME, E_DIRNAME, E_SECTION,
     E_FIND, E_SYSTEM, E_UNIQUE, E_REVERSE, E_QUOTE, E_ESCAPE_EXPAND,
-    E_UPPER, E_LOWER, E_FILES, E_PROMPT, E_RE_ESCAPE, E_VAL_ESCAPE,
+    E_UPPER, E_LOWER, E_TITLE, E_FILES, E_PROMPT, E_RE_ESCAPE, E_VAL_ESCAPE,
     E_REPLACE, E_SORT_DEPENDS, E_RESOLVE_DEPENDS, E_ENUMERATE_VARS,
     E_SHADOWED, E_ABSOLUTE_PATH, E_RELATIVE_PATH, E_CLEAN_PATH,
-    E_SYSTEM_PATH, E_SHELL_PATH, E_SYSTEM_QUOTE, E_SHELL_QUOTE
+    E_SYSTEM_PATH, E_SHELL_PATH, E_SYSTEM_QUOTE, E_SHELL_QUOTE, E_GETENV
 };
 
 enum TestFunc {
     T_INVALID = 0, T_REQUIRES, T_GREATERTHAN, T_LESSTHAN, T_EQUALS,
     T_EXISTS, T_EXPORT, T_CLEAR, T_UNSET, T_EVAL, T_CONFIG, T_SYSTEM,
     T_DEFINED, T_CONTAINS, T_INFILE,
-    T_COUNT, T_ISEMPTY, T_INCLUDE, T_LOAD, T_DEBUG, T_LOG, T_MESSAGE, T_WARNING, T_ERROR, T_IF,
+    T_COUNT, T_ISEMPTY, T_PARSE_JSON, T_INCLUDE, T_LOAD, T_DEBUG, T_LOG, T_MESSAGE, T_WARNING, T_ERROR, T_IF,
     T_MKPATH, T_WRITE_FILE, T_TOUCH, T_CACHE
 };
 
@@ -130,6 +131,7 @@ void QMakeEvaluator::initFunctionStatics()
         { "escape_expand", E_ESCAPE_EXPAND },
         { "upper", E_UPPER },
         { "lower", E_LOWER },
+        { "title", E_TITLE },
         { "re_escape", E_RE_ESCAPE },
         { "val_escape", E_VAL_ESCAPE },
         { "files", E_FILES },
@@ -146,6 +148,7 @@ void QMakeEvaluator::initFunctionStatics()
         { "shell_path", E_SHELL_PATH },
         { "system_quote", E_SYSTEM_QUOTE },
         { "shell_quote", E_SHELL_QUOTE },
+        { "getenv", E_GETENV },
     };
     for (unsigned i = 0; i < sizeof(expandInits)/sizeof(expandInits[0]); ++i)
         statics.expands.insert(ProKey(expandInits[i].name), expandInits[i].func);
@@ -173,6 +176,9 @@ void QMakeEvaluator::initFunctionStatics()
         { "infile", T_INFILE },
         { "count", T_COUNT },
         { "isEmpty", T_ISEMPTY },
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+        { "parseJson", T_PARSE_JSON },
+#endif
         { "load", T_LOAD },
         { "include", T_INCLUDE },
         { "debug", T_DEBUG },
@@ -208,12 +214,12 @@ static QString windowsErrorCode()
                   NULL);
     QString ret = QString::fromWCharArray(string);
     LocalFree((HLOCAL)string);
-    return ret;
+    return ret.trimmed();
 }
 #endif
 
-static QString
-quoteValue(const ProString &val)
+QString
+QMakeEvaluator::quoteValue(const ProString &val)
 {
     QString ret;
     ret.reserve(val.size());
@@ -281,46 +287,86 @@ quoteValue(const ProString &val)
     return ret;
 }
 
-static bool
-doWriteFile(const QString &name, QIODevice::OpenMode mode, const QString &contents, QString *errStr)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+static void addJsonValue(const QJsonValue &value, const QString &keyPrefix, ProValueMap *map);
+
+static void insertJsonKeyValue(const QString &key, const QStringList &values, ProValueMap *map)
 {
-    QByteArray bytes = contents.toLocal8Bit();
-    QFile cfile(name);
-    if (!(mode & QIODevice::Append) && cfile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        if (cfile.readAll() == bytes)
-            return true;
-        cfile.close();
-    }
-    if (!cfile.open(mode | QIODevice::WriteOnly | QIODevice::Text)) {
-        *errStr = cfile.errorString();
-        return false;
-    }
-    cfile.write(bytes);
-    cfile.close();
-    if (cfile.error() != QFile::NoError) {
-        *errStr = cfile.errorString();
-        return false;
-    }
-    return true;
+    map->insert(ProKey(key), ProStringList(values));
 }
+
+static void addJsonArray(const QJsonArray &array, const QString &keyPrefix, ProValueMap *map)
+{
+    QStringList keys;
+    for (int i = 0; i < array.count(); ++i) {
+        keys.append(QString::number(i));
+        addJsonValue(array.at(i), keyPrefix + QString::number(i), map);
+    }
+    insertJsonKeyValue(keyPrefix + QLatin1String("_KEYS_"), keys, map);
+}
+
+static void addJsonObject(const QJsonObject &object, const QString &keyPrefix, ProValueMap *map)
+{
+    foreach (const QString &key, object.keys())
+        addJsonValue(object.value(key), keyPrefix + key, map);
+
+    insertJsonKeyValue(keyPrefix + QLatin1String("_KEYS_"), object.keys(), map);
+}
+
+static void addJsonValue(const QJsonValue &value, const QString &keyPrefix, ProValueMap *map)
+{
+    switch (value.type()) {
+    case QJsonValue::Bool:
+        insertJsonKeyValue(keyPrefix, QStringList() << (value.toBool() ? QLatin1String("true") : QLatin1String("false")), map);
+        break;
+    case QJsonValue::Double:
+        insertJsonKeyValue(keyPrefix, QStringList() << QString::number(value.toDouble()), map);
+        break;
+    case QJsonValue::String:
+        insertJsonKeyValue(keyPrefix, QStringList() << value.toString(), map);
+        break;
+    case QJsonValue::Array:
+        addJsonArray(value.toArray(), keyPrefix + QLatin1Char('.'), map);
+        break;
+    case QJsonValue::Object:
+        addJsonObject(value.toObject(), keyPrefix + QLatin1Char('.'), map);
+        break;
+    default:
+        break;
+    }
+}
+
+static QMakeEvaluator::VisitReturn parseJsonInto(const QByteArray &json, const QString &into, ProValueMap *value)
+{
+    QJsonDocument document = QJsonDocument::fromJson(json);
+    if (document.isNull())
+        return QMakeEvaluator::ReturnFalse;
+
+    QString currentKey = into + QLatin1Char('.');
+
+    // top-level item is either an array or object
+    if (document.isArray())
+        addJsonArray(document.array(), currentKey, value);
+    else if (document.isObject())
+        addJsonObject(document.object(), currentKey, value);
+    else
+        return QMakeEvaluator::ReturnFalse;
+
+    return QMakeEvaluator::ReturnTrue;
+}
+#endif
 
 QMakeEvaluator::VisitReturn
 QMakeEvaluator::writeFile(const QString &ctx, const QString &fn, QIODevice::OpenMode mode,
                           const QString &contents)
 {
-    QFileInfo qfi(fn);
-    if (!QDir::current().mkpath(qfi.path())) {
-        evalError(fL1S("Cannot create %1directory %2.")
-                  .arg(ctx, QDir::toNativeSeparators(qfi.path())));
-        return ReturnFalse;
-    }
     QString errStr;
-    if (!doWriteFile(qfi.filePath(), mode, contents, &errStr)) {
-        evalError(fL1S("Cannot write %1file %2: %3.")
-                  .arg(ctx, QDir::toNativeSeparators(qfi.filePath()), errStr));
+    if (!m_vfs->writeFile(fn, mode, contents, &errStr)) {
+        evalError(fL1S("Cannot write %1file %2: %3")
+                  .arg(ctx, QDir::toNativeSeparators(fn), errStr));
         return ReturnFalse;
     }
-    m_parser->discardFileFromCache(qfi.filePath());
+    m_parser->discardFileFromCache(fn);
     return ReturnTrue;
 }
 
@@ -383,8 +429,9 @@ QByteArray QMakeEvaluator::getCommandOutput(const QString &args) const
 
 void QMakeEvaluator::populateDeps(
         const ProStringList &deps, const ProString &prefix, const ProStringList &suffixes,
+        const ProString &priosfx,
         QHash<ProKey, QSet<ProKey> > &dependencies, ProValueMap &dependees,
-        ProStringList &rootSet) const
+        QMultiMap<int, ProString> &rootSet) const
 {
     foreach (const ProString &item, deps)
         if (!dependencies.contains(item.toKey())) {
@@ -393,13 +440,13 @@ void QMakeEvaluator::populateDeps(
             foreach (const ProString &suffix, suffixes)
                 depends += values(ProKey(prefix + item + suffix));
             if (depends.isEmpty()) {
-                rootSet << item;
+                rootSet.insert(first(ProKey(prefix + item + priosfx)).toInt(), item);
             } else {
                 foreach (const ProString &dep, depends) {
                     dset.insert(dep.toKey());
                     dependees[dep.toKey()] << item;
                 }
-                populateDeps(depends, prefix, suffixes, dependencies, dependees, rootSet);
+                populateDeps(depends, prefix, suffixes, priosfx, dependencies, dependees, rootSet);
             }
         }
 }
@@ -828,9 +875,16 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
         break;
     case E_UPPER:
     case E_LOWER:
+    case E_TITLE:
         for (int i = 0; i < args.count(); ++i) {
             QString rstr = args.at(i).toQString(m_tmp1);
-            rstr = (func_t == E_UPPER) ? rstr.toUpper() : rstr.toLower();
+            if (func_t == E_UPPER) {
+                rstr = rstr.toUpper();
+            } else {
+                rstr = rstr.toLower();
+                if (func_t == E_TITLE && rstr.length() > 0)
+                    rstr[0] = rstr.at(0).toTitleCase();
+            }
             ret << (rstr.isSharedWith(m_tmp1) ? args.at(i) : ProString(rstr).setSource(args.at(i)));
         }
         break;
@@ -913,27 +967,31 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
         break;
     case E_SORT_DEPENDS:
     case E_RESOLVE_DEPENDS:
-        if (args.count() < 1 || args.count() > 3) {
-            evalError(fL1S("%1(var, [prefix, [suffixes]]) requires one to three arguments.")
+        if (args.count() < 1 || args.count() > 4) {
+            evalError(fL1S("%1(var, [prefix, [suffixes, [prio-suffix]]]) requires one to four arguments.")
                       .arg(func.toQString(m_tmp1)));
         } else {
             QHash<ProKey, QSet<ProKey> > dependencies;
             ProValueMap dependees;
-            ProStringList rootSet;
+            QMultiMap<int, ProString> rootSet;
             ProStringList orgList = values(args.at(0).toKey());
-            populateDeps(orgList, (args.count() < 2 ? ProString() : args.at(1)),
+            ProString prefix = args.count() < 2 ? ProString() : args.at(1);
+            ProString priosfx = args.count() < 4 ? ProString(".priority") : args.at(3);
+            populateDeps(orgList, prefix,
                          args.count() < 3 ? ProStringList(ProString(".depends"))
                                           : split_value_list(args.at(2).toQString(m_tmp2)),
-                         dependencies, dependees, rootSet);
-            for (int i = 0; i < rootSet.size(); ++i) {
-                const ProString &item = rootSet.at(i);
+                         priosfx, dependencies, dependees, rootSet);
+            while (!rootSet.isEmpty()) {
+                QMultiMap<int, ProString>::iterator it = rootSet.begin();
+                const ProString item = *it;
+                rootSet.erase(it);
                 if ((func_t == E_RESOLVE_DEPENDS) || orgList.contains(item))
                     ret.prepend(item);
                 foreach (const ProString &dep, dependees[item.toKey()]) {
                     QSet<ProKey> &dset = dependencies[dep.toKey()];
-                    dset.remove(rootSet.at(i).toKey()); // *Don't* use 'item' - rootSet may have changed!
+                    dset.remove(item.toKey());
                     if (dset.isEmpty())
-                        rootSet << dep;
+                        rootSet.insert(first(ProKey(prefix + dep + priosfx)).toInt(), dep);
                 }
             }
         }
@@ -1003,10 +1061,18 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
             evalError(fL1S("shell_path(path) requires one argument."));
         } else {
             QString rstr = args.at(0).toQString(m_tmp1);
-            if (m_dirSep.startsWith(QLatin1Char('\\')))
+            if (m_dirSep.startsWith(QLatin1Char('\\'))) {
                 rstr.replace(QLatin1Char('/'), QLatin1Char('\\'));
-            else
+            } else {
                 rstr.replace(QLatin1Char('\\'), QLatin1Char('/'));
+#ifdef Q_OS_WIN
+                // Convert d:/foo/bar to msys-style /d/foo/bar.
+                if (rstr.length() > 2 && rstr.at(1) == QLatin1Char(':') && rstr.at(2) == QLatin1Char('/')) {
+                    rstr[1] = rstr.at(0);
+                    rstr[0] = QLatin1Char('/');
+                }
+#endif
+            }
             ret << (rstr.isSharedWith(m_tmp1) ? args.at(0) : ProString(rstr).setSource(args.at(0)));
         }
         break;
@@ -1030,6 +1096,15 @@ ProStringList QMakeEvaluator::evaluateBuiltinExpand(
             ret << (rstr.isSharedWith(m_tmp1) ? args.at(0) : ProString(rstr).setSource(args.at(0)));
         }
         break;
+    case E_GETENV:
+        if (args.count() != 1) {
+            evalError(fL1S("getenv(arg) requires one argument."));
+        } else {
+            const ProString &var = args.at(0);
+            const ProString &val = ProString(m_option->getEnv(var.toQString(m_tmp1)));
+            ret << val;
+        }
+        break;
     default:
         evalError(fL1S("Function '%1' is not implemented.").arg(func.toQString(m_tmp1)));
         break;
@@ -1046,7 +1121,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
     switch (func_t) {
     case T_DEFINED: {
         if (args.count() < 1 || args.count() > 2) {
-            evalError(fL1S("defined(function, [\"test\"|\"replace\"])"
+            evalError(fL1S("defined(function, [\"test\"|\"replace\"|\"var\"])"
                            " requires one or two arguments."));
             return ReturnFalse;
         }
@@ -1118,24 +1193,22 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             }
         }
         return ReturnFalse;
-#ifdef PROEVALUATOR_FULL
     case T_REQUIRES:
+#ifdef PROEVALUATOR_FULL
         checkRequirements(args);
-        return ReturnFalse; // Another qmake breakage
 #endif
+        return ReturnFalse; // Another qmake breakage
     case T_EVAL: {
             VisitReturn ret = ReturnFalse;
             ProFile *pro = m_parser->parsedProBlock(args.join(statics.field_sep),
                                                     m_current.pro->fileName(), m_current.line);
-            if (pro) {
-                if (m_cumulative || pro->isOk()) {
-                    m_locationStack.push(m_current);
-                    visitProBlock(pro, pro->tokPtr());
-                    ret = ReturnTrue; // This return value is not too useful, but that's qmake
-                    m_current = m_locationStack.pop();
-                }
-                pro->deref();
+            if (m_cumulative || pro->isOk()) {
+                m_locationStack.push(m_current);
+                visitProBlock(pro, pro->tokPtr());
+                ret = ReturnTrue; // This return value is not too useful, but that's qmake
+                m_current = m_locationStack.pop();
             }
+            pro->deref();
             return ret;
         }
     case T_IF: {
@@ -1207,9 +1280,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             return ReturnFalse;
         }
         int cnt = values(map(args.at(0))).count();
+        int val = args.at(1).toQString(m_tmp1).toInt();
         if (args.count() == 3) {
             const ProString &comp = args.at(2);
-            const int val = args.at(1).toQString(m_tmp1).toInt();
             if (comp == QLatin1String(">") || comp == QLatin1String("greaterThan")) {
                 return returnBool(cnt > val);
             } else if (comp == QLatin1String(">=")) {
@@ -1220,13 +1293,13 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                 return returnBool(cnt <= val);
             } else if (comp == QLatin1String("equals") || comp == QLatin1String("isEqual")
                        || comp == QLatin1String("=") || comp == QLatin1String("==")) {
-                return returnBool(cnt == val);
+                // fallthrough
             } else {
                 evalError(fL1S("Unexpected modifier to count(%2).").arg(comp.toQString(m_tmp1)));
                 return ReturnFalse;
             }
         }
-        return returnBool(cnt == args.at(1).toQString(m_tmp1).toInt());
+        return returnBool(cnt == val);
     }
     case T_GREATERTHAN:
     case T_LESSTHAN: {
@@ -1295,6 +1368,18 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             m_valuemapStack.top()[var] = statics.fakeValue;
         return ReturnTrue;
     }
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+    case T_PARSE_JSON: {
+        if (args.count() != 2) {
+            evalError(fL1S("parseJson(variable, into) requires two arguments."));
+            return ReturnFalse;
+        }
+
+        QByteArray json = values(args.at(0).toKey()).join(QLatin1Char(' ')).toUtf8();
+        QString parseInto = args.at(1).toQString(m_tmp2);
+        return parseJsonInto(json, parseInto, &m_valuemapStack.top());
+    }
+#endif
     case T_INCLUDE: {
         if (args.count() < 1 || args.count() > 3) {
             evalError(fL1S("include(file, [into, [silent]]) requires one, two or three arguments."));
@@ -1389,14 +1474,14 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
         }
         return (func_t == T_ERROR && !m_cumulative) ? ReturnError : ReturnTrue;
     }
-#ifdef PROEVALUATOR_FULL
     case T_SYSTEM: {
-        if (m_cumulative) // Anything else would be insanity
-            return ReturnFalse;
         if (args.count() != 1) {
             evalError(fL1S("system(exec) requires one argument."));
             return ReturnFalse;
         }
+#ifdef PROEVALUATOR_FULL
+        if (m_cumulative) // Anything else would be insanity
+            return ReturnFalse;
 #ifndef QT_BOOTSTRAPPED
         QProcess proc;
         proc.setProcessChannelMode(QProcess::ForwardedChannels);
@@ -1407,8 +1492,10 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                                   + IoUtils::shellQuote(QDir::toNativeSeparators(currentDirectory()))
                                   + QLatin1String(" && ") + args.at(0)).toLocal8Bit().constData()) == 0);
 #endif
-    }
+#else
+        return ReturnTrue;
 #endif
+    }
     case T_ISEMPTY: {
         if (args.count() != 1) {
             evalError(fL1S("isEmpty(var) requires one argument."));
@@ -1423,6 +1510,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
         }
         const QString &file = resolvePath(m_option->expandEnvVars(args.at(0).toQString(m_tmp1)));
 
+        // Don't use VFS here:
+        // - it supports neither listing nor even directories
+        // - it's unlikely that somebody would test for files they created themselves
         if (IoUtils::exists(file))
             return ReturnTrue;
         int slsh = file.lastIndexOf(QLatin1Char('/'));
@@ -1435,17 +1525,18 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
 
         return ReturnFalse;
     }
-#ifdef PROEVALUATOR_FULL
     case T_MKPATH: {
         if (args.count() != 1) {
             evalError(fL1S("mkpath(file) requires one argument."));
             return ReturnFalse;
         }
+#ifdef PROEVALUATOR_FULL
         const QString &fn = resolvePath(args.at(0).toQString(m_tmp1));
         if (!QDir::current().mkpath(fn)) {
             evalError(fL1S("Cannot create directory %1.").arg(QDir::toNativeSeparators(fn)));
             return ReturnFalse;
         }
+#endif
         return ReturnTrue;
     }
     case T_WRITE_FILE: {
@@ -1470,6 +1561,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             evalError(fL1S("touch(file, reffile) requires two arguments."));
             return ReturnFalse;
         }
+#ifdef PROEVALUATOR_FULL
         const QString &tfn = resolvePath(args.at(0).toQString(m_tmp1));
         const QString &rfn = resolvePath(args.at(1).toQString(m_tmp2));
 #ifdef Q_OS_UNIX
@@ -1490,7 +1582,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                                   GENERIC_READ, FILE_SHARE_READ,
                                   NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (rHand == INVALID_HANDLE_VALUE) {
-            evalError(fL1S("Cannot open() reference file %1: %2.").arg(rfn, windowsErrorCode()));
+            evalError(fL1S("Cannot open reference file %1: %2").arg(rfn, windowsErrorCode()));
             return ReturnFalse;
         }
         FILETIME ft;
@@ -1500,21 +1592,22 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                                   GENERIC_WRITE, FILE_SHARE_READ,
                                   NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (wHand == INVALID_HANDLE_VALUE) {
-            evalError(fL1S("Cannot open() %1: %2.").arg(tfn, windowsErrorCode()));
+            evalError(fL1S("Cannot open %1: %2").arg(tfn, windowsErrorCode()));
             return ReturnFalse;
         }
         SetFileTime(wHand, 0, 0, &ft);
         CloseHandle(wHand);
 #endif
+#endif
         return ReturnTrue;
     }
     case T_CACHE: {
         if (args.count() > 3) {
-            evalError(fL1S("cache(var, [set|add|sub] [transient] [super], [srcvar]) requires one to three arguments."));
+            evalError(fL1S("cache(var, [set|add|sub] [transient] [super|stash], [srcvar]) requires one to three arguments."));
             return ReturnFalse;
         }
         bool persist = true;
-        bool super = false;
+        enum { TargetStash, TargetCache, TargetSuper } target = TargetCache;
         enum { CacheSet, CacheAdd, CacheSub } mode = CacheSet;
         ProKey srcvar;
         if (args.count() >= 2) {
@@ -1523,7 +1616,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                 if (m_tmp3 == QLatin1String("transient")) {
                     persist = false;
                 } else if (m_tmp3 == QLatin1String("super")) {
-                    super = true;
+                    target = TargetSuper;
+                } else if (m_tmp3 == QLatin1String("stash")) {
+                    target = TargetStash;
                 } else if (m_tmp3 == QLatin1String("set")) {
                     mode = CacheSet;
                 } else if (m_tmp3 == QLatin1String("add")) {
@@ -1558,8 +1653,31 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             ProStringList newval;
             bool changed = false;
             for (bool hostBuild = false; ; hostBuild = true) {
-                if (QMakeBaseEnv *baseEnv = m_option->baseEnvs.value(
-                            QMakeBaseKey(m_buildRoot, hostBuild))) {
+#ifdef PROEVALUATOR_THREAD_SAFE
+                m_option->mutex.lock();
+#endif
+                QMakeBaseEnv *baseEnv =
+                        m_option->baseEnvs.value(QMakeBaseKey(m_buildRoot, m_stashfile, hostBuild));
+#ifdef PROEVALUATOR_THREAD_SAFE
+                // It's ok to unlock this before locking baseEnv,
+                // as we have no intention to initialize the env.
+                m_option->mutex.unlock();
+#endif
+                do {
+                    if (!baseEnv)
+                        break;
+#ifdef PROEVALUATOR_THREAD_SAFE
+                    QMutexLocker locker(&baseEnv->mutex);
+                    if (baseEnv->inProgress && baseEnv->evaluator != this) {
+                        // The env is still in the works, but it may be already past the cache
+                        // loading. So we need to wait for completion and amend it as usual.
+                        QThreadPool::globalInstance()->releaseThread();
+                        baseEnv->cond.wait(&baseEnv->mutex);
+                        QThreadPool::globalInstance()->reserveThread();
+                    }
+                    if (!baseEnv->isOk)
+                        break;
+#endif
                     QMakeEvaluator *baseEval = baseEnv->evaluator;
                     const ProStringList &oldval = baseEval->values(dstvar);
                     if (mode == CacheSet) {
@@ -1569,28 +1687,30 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                         if (mode == CacheAdd)
                             newval += diffval;
                         else
-                            removeEach(&newval, diffval);
+                            newval.removeEach(diffval);
                     }
                     if (oldval != newval) {
-                        baseEval->valuesRef(dstvar) = newval;
-                        if (super) {
-                            do {
-                                if (dstvar == QLatin1String("QMAKEPATH")) {
-                                    baseEval->m_qmakepath = newval.toQStringList();
-                                    baseEval->updateMkspecPaths();
-                                } else if (dstvar == QLatin1String("QMAKEFEATURES")) {
-                                    baseEval->m_qmakefeatures = newval.toQStringList();
-                                } else {
-                                    break;
-                                }
-                                baseEval->updateFeaturePaths();
-                                if (hostBuild == m_hostBuild)
-                                    m_featureRoots = baseEval->m_featureRoots;
-                            } while (false);
+                        if (target != TargetStash || !m_stashfile.isEmpty()) {
+                            baseEval->valuesRef(dstvar) = newval;
+                            if (target == TargetSuper) {
+                                do {
+                                    if (dstvar == QLatin1String("QMAKEPATH")) {
+                                        baseEval->m_qmakepath = newval.toQStringList();
+                                        baseEval->updateMkspecPaths();
+                                    } else if (dstvar == QLatin1String("QMAKEFEATURES")) {
+                                        baseEval->m_qmakefeatures = newval.toQStringList();
+                                    } else {
+                                        break;
+                                    }
+                                    baseEval->updateFeaturePaths();
+                                    if (hostBuild == m_hostBuild)
+                                        m_featureRoots = baseEval->m_featureRoots;
+                                } while (false);
+                            }
                         }
                         changed = true;
                     }
-                }
+                } while (false);
                 if (hostBuild)
                     break;
             }
@@ -1617,17 +1737,17 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             varstr += QLatin1Char('\n');
         }
         QString fn;
-        if (super) {
+        if (target == TargetSuper) {
             if (m_superfile.isEmpty()) {
-                m_superfile = m_outputDir + QLatin1String("/.qmake.super");
-                printf("Info: creating super cache file %s\n", qPrintable(m_superfile));
+                m_superfile = QDir::cleanPath(m_outputDir + QLatin1String("/.qmake.super"));
+                printf("Info: creating super cache file %s\n", qPrintable(QDir::toNativeSeparators(m_superfile)));
                 valuesRef(ProKey("_QMAKE_SUPER_CACHE_")) << ProString(m_superfile);
             }
             fn = m_superfile;
-        } else {
+        } else if (target == TargetCache) {
             if (m_cachefile.isEmpty()) {
-                m_cachefile = m_outputDir + QLatin1String("/.qmake.cache");
-                printf("Info: creating cache file %s\n", qPrintable(m_cachefile));
+                m_cachefile = QDir::cleanPath(m_outputDir + QLatin1String("/.qmake.cache"));
+                printf("Info: creating cache file %s\n", qPrintable(QDir::toNativeSeparators(m_cachefile)));
                 valuesRef(ProKey("_QMAKE_CACHE_")) << ProString(m_cachefile);
                 // We could update m_{source,build}Root and m_featureRoots here, or even
                 // "re-home" our rootEnv, but this doesn't sound too useful - if somebody
@@ -1636,10 +1756,17 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                 // The sub-projects will find the new cache all by themselves.
             }
             fn = m_cachefile;
+        } else {
+            fn = m_stashfile;
+            if (fn.isEmpty())
+                fn = QDir::cleanPath(m_outputDir + QLatin1String("/.qmake.stash"));
+            if (!m_vfs->exists(fn)) {
+                printf("Info: creating stash file %s\n", qPrintable(QDir::toNativeSeparators(fn)));
+                valuesRef(ProKey("_QMAKE_STASH_")) << ProString(fn);
+            }
         }
         return writeFile(fL1S("cache "), fn, QIODevice::Append, varstr);
     }
-#endif
     default:
         evalError(fL1S("Function '%1' is not implemented.").arg(function.toQString(m_tmp1)));
         return ReturnFalse;

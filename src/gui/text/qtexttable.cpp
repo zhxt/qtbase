@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,7 +37,6 @@
 #include <qdebug.h>
 #include "qtexttable_p.h"
 #include "qvarlengtharray.h"
-#include "private/qfunctions_p.h"
 
 #include <algorithm>
 #include <stdlib.h>
@@ -217,7 +208,7 @@ int QTextTableCell::columnSpan() const
 /*!
     \fn bool QTextTableCell::isValid() const
 
-    Returns true if this is a valid table cell; otherwise returns
+    Returns \c true if this is a valid table cell; otherwise returns
     false.
 */
 
@@ -303,15 +294,15 @@ QTextFrame::iterator QTextTableCell::end() const
 /*!
     \fn QTextCursor QTextTableCell::operator==(const QTextTableCell &other) const
 
-    Returns true if this cell object and the \a other cell object
-    describe the same cell; otherwise returns false.
+    Returns \c true if this cell object and the \a other cell object
+    describe the same cell; otherwise returns \c false.
 */
 
 /*!
     \fn QTextCursor QTextTableCell::operator!=(const QTextTableCell &other) const
 
-    Returns true if this cell object and the \a other cell object
-    describe different cells; otherwise returns false.
+    Returns \c true if this cell object and the \a other cell object
+    describe different cells; otherwise returns \c false.
 */
 
 /*!
@@ -355,12 +346,12 @@ QTextTable *QTextTablePrivate::createTable(QTextDocumentPrivate *pieceTable, int
 
     for (int i = 1; i < rows*cols; ++i) {
         d->cells.append(pieceTable->insertBlock(QTextBeginningOfFrame, pos, cellIdx, charIdx));
-// 	    qDebug("      addCell at %d", pos);
+//      qDebug("      addCell at %d", pos);
         ++pos;
     }
 
     d->fragment_end = pieceTable->insertBlock(QTextEndOfFrame, pos, cellIdx, charIdx);
-// 	qDebug("      addEOR at %d", pos);
+//  qDebug("      addEOR at %d", pos);
     ++pos;
 
     d->blockFragmentUpdates = false;
@@ -379,12 +370,12 @@ struct QFragmentFindHelper
     const QTextDocumentPrivate::FragmentMap &fragmentMap;
 };
 
-Q_STATIC_GLOBAL_INLINE_OPERATOR bool operator<(int fragment, const QFragmentFindHelper &helper)
+static inline bool operator<(int fragment, const QFragmentFindHelper &helper)
 {
     return helper.fragmentMap.position(fragment) < helper.pos;
 }
 
-Q_STATIC_GLOBAL_INLINE_OPERATOR bool operator<(const QFragmentFindHelper &helper, int fragment)
+static inline bool operator<(const QFragmentFindHelper &helper, int fragment)
 {
     return helper.pos < helper.fragmentMap.position(fragment);
 }
@@ -393,10 +384,10 @@ int QTextTablePrivate::findCellIndex(int fragment) const
 {
     QFragmentFindHelper helper(pieceTable->fragmentMap().position(fragment),
                               pieceTable->fragmentMap());
-    QList<int>::ConstIterator it = qBinaryFind(cells.begin(), cells.end(), helper);
-    if (it == cells.end())
+    QList<int>::ConstIterator it = std::lower_bound(cells.constBegin(), cells.constEnd(), helper);
+    if ((it == cells.constEnd()) || (helper < *it))
         return -1;
-    return it - cells.begin();
+    return it - cells.constBegin();
 }
 
 void QTextTablePrivate::fragmentAdded(QChar type, uint fragment)
@@ -482,7 +473,7 @@ void QTextTablePrivate::update() const
             for (int jj = 0; jj < colspan; ++jj) {
                 Q_ASSERT(grid[(r+ii)*nCols + c+jj] == 0);
                 grid[(r+ii)*nCols + c+jj] = fragment;
-//  		    qDebug("    setting cell %d span=%d/%d at %d/%d", fragment, rowspan, colspan, r+ii, c+jj);
+//              qDebug("    setting cell %d span=%d/%d at %d/%d", fragment, rowspan, colspan, r+ii, c+jj);
             }
         }
     }
@@ -654,7 +645,7 @@ void QTextTable::resize(int rows, int cols)
     int nCols = this->columns();
 
     if (rows == nRows && cols == nCols)
-	return;
+        return;
 
     d->pieceTable->beginEditBlock();
 
@@ -682,7 +673,7 @@ void QTextTable::insertRows(int pos, int num)
 {
     Q_D(QTextTable);
     if (num <= 0)
-	return;
+        return;
 
     if (d->dirty)
         d->update();
@@ -744,7 +735,7 @@ void QTextTable::insertColumns(int pos, int num)
 {
     Q_D(QTextTable);
     if (num <= 0)
-	return;
+        return;
 
     if (d->dirty)
         d->update();
@@ -932,7 +923,7 @@ void QTextTable::removeColumns(int pos, int num)
 //     qDebug() << "-------- removeCols" << pos << num;
 
     if (num <= 0 || pos < 0)
-	return;
+        return;
     if (d->dirty)
         d->update();
     if (pos >= d->nCols)
@@ -1048,8 +1039,9 @@ void QTextTable::mergeCells(int row, int column, int numRows, int numCols)
 
     // find the position at which to insert the contents of the merged cells
     QFragmentFindHelper helper(origCellPosition, p->fragmentMap());
-    QList<int>::Iterator it = qBinaryFind(d->cells.begin(), d->cells.end(), helper);
+    QList<int>::Iterator it = std::lower_bound(d->cells.begin(), d->cells.end(), helper);
     Q_ASSERT(it != d->cells.end());
+    Q_ASSERT(!(helper < *it));
     Q_ASSERT(*it == cellFragment);
     const int insertCellIndex = it - d->cells.begin();
     int insertFragment = d->cells.value(insertCellIndex + 1, d->fragment_end);
@@ -1080,8 +1072,9 @@ void QTextTable::mergeCells(int row, int column, int numRows, int numCols)
 
             if (firstCellIndex == -1) {
                 QFragmentFindHelper helper(pos, p->fragmentMap());
-                QList<int>::Iterator it = qBinaryFind(d->cells.begin(), d->cells.end(), helper);
+                QList<int>::Iterator it = std::lower_bound(d->cells.begin(), d->cells.end(), helper);
                 Q_ASSERT(it != d->cells.end());
+                Q_ASSERT(!(helper < *it));
                 Q_ASSERT(*it == fragment);
                 firstCellIndex = cellIndex = it - d->cells.begin();
             }
@@ -1270,12 +1263,6 @@ int QTextTable::columns() const
 
     return d->nCols;
 }
-
-#if 0
-void QTextTable::mergeCells(const QTextCursor &selection)
-{
-}
-#endif
 
 /*!
     \fn QTextCursor QTextTable::rowStart(const QTextCursor &cursor) const

@@ -68,36 +68,53 @@ SOURCES += \
 
 win32 {
         SOURCES += \
-                kernel/qeventdispatcher_win.cpp \
                 kernel/qcoreapplication_win.cpp \
                 kernel/qwineventnotifier.cpp \
                 kernel/qsharedmemory_win.cpp \
                 kernel/qsystemsemaphore_win.cpp
         HEADERS += \
-                kernel/qeventdispatcher_win_p.h \
                 kernel/qwineventnotifier.h
+
+        winrt {
+            SOURCES += kernel/qeventdispatcher_winrt.cpp
+            HEADERS += kernel/qeventdispatcher_winrt_p.h
+        } else {
+            SOURCES += kernel/qeventdispatcher_win.cpp
+            HEADERS += kernel/qeventdispatcher_win_p.h
+        }
 }
 
-
-wince*: {
+wince {
         SOURCES += \
                 kernel/qfunctions_wince.cpp
         HEADERS += \
                 kernel/qfunctions_wince.h
 }
 
-mac {
-    SOURCES += \
-        kernel/qcoreapplication_mac.cpp
+winrt {
+        SOURCES += \
+                kernel/qfunctions_winrt.cpp
+        HEADERS += \
+                kernel/qfunctions_winrt.h
 }
 
-mac:!nacl {
-       HEADERS += \
-                kernel/qcore_mac_p.h
-       SOURCES += \
-                kernel/qcore_mac.cpp
-       OBJECTIVE_SOURCES += \
-                kernel/qcore_mac_objc.mm
+mac {
+    HEADERS += \
+        kernel/qcore_mac_p.h
+
+    SOURCES += \
+        kernel/qcoreapplication_mac.cpp \
+        kernel/qcore_mac.cpp
+
+    OBJECTIVE_SOURCES += \
+        kernel/qcore_mac_objc.mm
+
+    LIBS_PRIVATE += -framework Foundation
+
+    osx: LIBS_PRIVATE += -framework CoreServices
+
+    # We need UIKit for UIDevice
+    ios: LIBS_PRIVATE += -framework UIKit
 }
 
 nacl {
@@ -132,7 +149,11 @@ unix|integrity {
    contains(QT_CONFIG, clock-gettime):include($$QT_SOURCE_TREE/config.tests/unix/clock-gettime/clock-gettime.pri)
 
     !android {
-        SOURCES += kernel/qsharedmemory_unix.cpp \
+        SOURCES += kernel/qsharedmemory_posix.cpp \
+                   kernel/qsharedmemory_systemv.cpp \
+                   kernel/qsharedmemory_unix.cpp \
+                   kernel/qsystemsemaphore_posix.cpp \
+                   kernel/qsystemsemaphore_systemv.cpp \
                    kernel/qsystemsemaphore_unix.cpp
     } else {
         SOURCES += kernel/qsharedmemory_android.cpp \
@@ -154,3 +175,24 @@ blackberry {
                 kernel/qeventdispatcher_blackberry_p.h
 }
 
+qqnx_pps {
+        LIBS_PRIVATE += -lpps
+        SOURCES += \
+                kernel/qppsattribute.cpp \
+                kernel/qppsobject.cpp
+        HEADERS += \
+                kernel/qppsattribute_p.h \
+                kernel/qppsattributeprivate_p.h \
+                kernel/qppsobject_p.h \
+                kernel/qppsobjectprivate_p.h
+}
+
+android:!android-no-sdk {
+        SOURCES += \
+                   kernel/qjnionload.cpp \
+                   kernel/qjnihelpers.cpp \
+                   kernel/qjni.cpp
+        HEADERS += \
+                   kernel/qjnihelpers_p.h \
+                   kernel/qjni_p.h
+}

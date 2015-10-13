@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 David Faure <faure@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,14 +39,36 @@
 #include <qdir.h>
 #include <qset.h>
 
-#if defined(Q_OS_UNIX)
-# include <unistd.h> // for geteuid
-# include <sys/types.h>
+#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
+#include <unistd.h> // for geteuid
 #endif
 
 #if defined(Q_OS_WIN)
 # include <windows.h>
 #endif
+
+// Restore permissions so that the QTemporaryDir cleanup can happen
+class PermissionRestorer
+{
+    Q_DISABLE_COPY(PermissionRestorer)
+public:
+    explicit PermissionRestorer(const QString& path) : m_path(path) {}
+    ~PermissionRestorer()  { restore(); }
+
+    inline void restore()
+    {
+        QFile file(m_path);
+#ifdef Q_OS_UNIX
+        file.setPermissions(QFile::Permissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+#else
+        file.setPermissions(QFile::WriteOwner);
+        file.remove();
+#endif
+    }
+
+private:
+    const QString m_path;
+};
 
 class tst_QSaveFile : public QObject
 {
@@ -71,15 +85,25 @@ private slots:
     void transactionalWriteNoPermissionsOnFile();
     void transactionalWriteCanceled();
     void transactionalWriteErrorRenaming();
+    void symlink();
+    void directory();
 };
+
+static inline QByteArray msgCannotOpen(const QFileDevice &f)
+{
+    QString result = QStringLiteral("Cannot open ") + QDir::toNativeSeparators(f.fileName())
+        + QStringLiteral(": ") + f.errorString();
+    return result.toLocal8Bit();
+}
 
 void tst_QSaveFile::transactionalWrite()
 {
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     const QString targetFile = dir.path() + QString::fromLatin1("/outfile");
     QFile::remove(targetFile);
     QSaveFile file(targetFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
     QVERIFY(file.isOpen());
     QCOMPARE(file.fileName(), targetFile);
     QVERIFY(!QFile::exists(targetFile));
@@ -95,6 +119,14 @@ void tst_QSaveFile::transactionalWrite()
     QFile reader(targetFile);
     QVERIFY(reader.open(QIODevice::ReadOnly));
     QCOMPARE(QString::fromLatin1(reader.readAll()), QString::fromLatin1("Hello"));
+
+    // check that permissions are the same as for QFile
+    const QString otherFile = dir.path() + QString::fromLatin1("/otherfile");
+    QFile::remove(otherFile);
+    QFile other(otherFile);
+    other.open(QIODevice::WriteOnly);
+    other.close();
+    QCOMPARE(QFile::permissions(targetFile), QFile::permissions(otherFile));
 }
 
 void tst_QSaveFile::saveTwice()
@@ -102,27 +134,29 @@ void tst_QSaveFile::saveTwice()
     // Check that we can reuse a QSaveFile object
     // (and test the case of an existing target file)
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     const QString targetFile = dir.path() + QString::fromLatin1("/outfile");
     QSaveFile file(targetFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
     QCOMPARE(file.write("Hello"), Q_INT64_C(5));
     QVERIFY2(file.commit(), qPrintable(file.errorString()));
 
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
     QCOMPARE(file.write("World"), Q_INT64_C(5));
     QVERIFY2(file.commit(), qPrintable(file.errorString()));
 
     QFile reader(targetFile);
-    QVERIFY(reader.open(QIODevice::ReadOnly));
+    QVERIFY2(reader.open(QIODevice::ReadOnly), msgCannotOpen(reader).constData());
     QCOMPARE(QString::fromLatin1(reader.readAll()), QString::fromLatin1("World"));
 }
 
 void tst_QSaveFile::textStreamManualFlush()
 {
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     const QString targetFile = dir.path() + QString::fromLatin1("/outfile");
     QSaveFile file(targetFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
 
     QTextStream ts(&file);
     ts << "Manual flush";
@@ -140,9 +174,10 @@ void tst_QSaveFile::textStreamManualFlush()
 void tst_QSaveFile::textStreamAutoFlush()
 {
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     const QString targetFile = dir.path() + QString::fromLatin1("/outfile");
     QSaveFile file(targetFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
 
     QTextStream ts(&file);
     ts << "Auto-flush.";
@@ -165,29 +200,13 @@ void tst_QSaveFile::transactionalWriteNoPermissionsOnDir_data()
 void tst_QSaveFile::transactionalWriteNoPermissionsOnDir()
 {
 #ifdef Q_OS_UNIX
+#if !defined(Q_OS_VXWORKS)
+    if (::geteuid() == 0)
+        QSKIP("Test is not applicable with root privileges");
+#endif
     QFETCH(bool, directWriteFallback);
-    // Restore permissions so that the QTemporaryDir cleanup can happen
-    class PermissionRestorer
-    {
-        QString m_path;
-    public:
-        PermissionRestorer(const QString& path)
-            : m_path(path)
-        {}
-
-        ~PermissionRestorer()
-        {
-            restore();
-        }
-        void restore()
-        {
-            QFile file(m_path);
-            file.setPermissions(QFile::Permissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
-        }
-    };
-
-
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     QVERIFY(QFile(dir.path()).setPermissions(QFile::ReadOwner | QFile::ExeOwner));
     PermissionRestorer permissionRestorer(dir.path());
 
@@ -212,7 +231,7 @@ void tst_QSaveFile::transactionalWriteNoPermissionsOnDir()
     file.setDirectWriteFallback(directWriteFallback);
     QCOMPARE(file.directWriteFallback(), directWriteFallback);
     if (directWriteFallback) {
-        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
         QCOMPARE((int)file.error(), (int)QFile::NoError);
         QCOMPARE(file.write("World"), Q_INT64_C(5));
         QVERIFY(file.commit());
@@ -222,7 +241,7 @@ void tst_QSaveFile::transactionalWriteNoPermissionsOnDir()
         QCOMPARE(QString::fromLatin1(reader.readAll()), QString::fromLatin1("World"));
         reader.close();
 
-        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
         QCOMPARE((int)file.error(), (int)QFile::NoError);
         QCOMPARE(file.write("W"), Q_INT64_C(1));
         file.cancelWriting(); // no effect, as per the documentation
@@ -239,11 +258,17 @@ void tst_QSaveFile::transactionalWriteNoPermissionsOnDir()
 
 void tst_QSaveFile::transactionalWriteNoPermissionsOnFile()
 {
+#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
+    if (::geteuid() == 0)
+        QSKIP("Test is not applicable with root privileges");
+#endif
     // Setup an existing but readonly file
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     const QString targetFile = dir.path() + QString::fromLatin1("/outfile");
     QFile file(targetFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    PermissionRestorer permissionRestorer(targetFile);
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
     QCOMPARE(file.write("Hello"), Q_INT64_C(5));
     file.close();
     file.setPermissions(QFile::ReadOwner);
@@ -260,10 +285,11 @@ void tst_QSaveFile::transactionalWriteNoPermissionsOnFile()
 void tst_QSaveFile::transactionalWriteCanceled()
 {
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     const QString targetFile = dir.path() + QString::fromLatin1("/outfile");
     QFile::remove(targetFile);
     QSaveFile file(targetFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
 
     QTextStream ts(&file);
     ts << "This writing operation will soon be canceled.\n";
@@ -282,36 +308,17 @@ void tst_QSaveFile::transactionalWriteCanceled()
 
 void tst_QSaveFile::transactionalWriteErrorRenaming()
 {
+#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
+    if (::geteuid() == 0)
+        QSKIP("Test is not applicable with root privileges");
+#endif
     QTemporaryDir dir;
+    QVERIFY(dir.isValid());
     const QString targetFile = dir.path() + QString::fromLatin1("/outfile");
     QSaveFile file(targetFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
     QCOMPARE(file.write("Hello"), qint64(5));
     QVERIFY(!QFile::exists(targetFile));
-
-    // Restore permissions so that the QTemporaryDir cleanup can happen
-    class PermissionRestorer
-    {
-    public:
-        PermissionRestorer(const QString& path)
-            : m_path(path)
-        {}
-
-        ~PermissionRestorer()
-        {
-            QFile file(m_path);
-#ifdef Q_OS_UNIX
-            file.setPermissions(QFile::Permissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
-#else
-            file.setPermissions(QFile::WriteOwner);
-            file.remove();
-#endif
-        }
-
-    private:
-        QString m_path;
-    };
-
 #ifdef Q_OS_UNIX
     // Make rename() fail for lack of permissions in the directory
     QFile dirAsFile(dir.path()); // yay, I have to use QFile to change a dir's permissions...
@@ -320,7 +327,7 @@ void tst_QSaveFile::transactionalWriteErrorRenaming()
 #else
     // Windows: Make rename() fail for lack of permissions on an existing target file
     QFile existingTargetFile(targetFile);
-    QVERIFY(existingTargetFile.open(QIODevice::WriteOnly));
+    QVERIFY2(existingTargetFile.open(QIODevice::WriteOnly), msgCannotOpen(existingTargetFile).constData());
     QCOMPARE(file.write("Target"), qint64(6));
     existingTargetFile.close();
     QVERIFY(existingTargetFile.setPermissions(QFile::ReadOwner));
@@ -333,6 +340,143 @@ void tst_QSaveFile::transactionalWriteErrorRenaming()
     QVERIFY(!QFile::exists(targetFile)); // renaming failed
 #endif
     QCOMPARE(file.error(), QFile::RenameError);
+}
+
+void tst_QSaveFile::symlink()
+{
+#ifdef Q_OS_UNIX
+    QByteArray someData = "some data";
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    const QString targetFile = dir.path() + QLatin1String("/outfile");
+    const QString linkFile = dir.path() + QLatin1String("/linkfile");
+    {
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.write("Hello"), Q_INT64_C(5));
+        file.close();
+    }
+
+    QVERIFY(QFile::link(targetFile, linkFile));
+
+    QString canonical = QFileInfo(linkFile).canonicalFilePath();
+    QCOMPARE(canonical, QFileInfo(targetFile).canonicalFilePath());
+
+    // Try saving into it
+    {
+        QSaveFile saveFile(linkFile);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        //Check that the linkFile is still a link and still has the same canonical path
+        QFileInfo info(linkFile);
+        QVERIFY(info.isSymLink());
+        QCOMPARE(QFileInfo(linkFile).canonicalFilePath(), canonical);
+
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+        file.remove();
+    }
+
+    // Save into a symbolic link that point to a removed file
+    someData = "more stuff";
+    {
+        QSaveFile saveFile(linkFile);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        QFileInfo info(linkFile);
+        QVERIFY(info.isSymLink());
+        QCOMPARE(QFileInfo(linkFile).canonicalFilePath(), canonical);
+
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+
+    // link to a link in another directory
+    QTemporaryDir dir2;
+    QVERIFY(dir2.isValid());
+
+    const QString linkFile2 = dir2.path() + QLatin1String("/linkfile");
+    QVERIFY(QFile::link(linkFile, linkFile2));
+    QCOMPARE(QFileInfo(linkFile2).canonicalFilePath(), canonical);
+
+
+    someData = "hello everyone";
+
+    {
+        QSaveFile saveFile(linkFile2);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+
+    //cyclic link
+    const QString cyclicLink = dir.path() + QLatin1String("/cyclic");
+    QVERIFY(QFile::link(cyclicLink, cyclicLink));
+    {
+        QSaveFile saveFile(cyclicLink);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        QFile file(cyclicLink);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+
+    //cyclic link2
+    QVERIFY(QFile::link(cyclicLink + QLatin1Char('1'), cyclicLink + QLatin1Char('2')));
+    QVERIFY(QFile::link(cyclicLink + QLatin1Char('2'), cyclicLink + QLatin1Char('1')));
+
+    {
+        QSaveFile saveFile(cyclicLink + QLatin1Char('1'));
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        // the explicit file becomes a file instead of a link
+        QVERIFY(!QFileInfo(cyclicLink + QLatin1Char('1')).isSymLink());
+        QVERIFY(QFileInfo(cyclicLink + QLatin1Char('2')).isSymLink());
+
+        QFile file(cyclicLink + QLatin1Char('1'));
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+#endif
+}
+
+void tst_QSaveFile::directory()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    const QString subdir = dir.path() + QLatin1String("/subdir");
+    QVERIFY(QDir(dir.path()).mkdir(QStringLiteral("subdir")));
+    {
+        QFile sf(subdir);
+        QVERIFY(!sf.open(QIODevice::WriteOnly));
+    }
+
+#ifdef Q_OS_UNIX
+    //link to a directory
+    const QString linkToDir = dir.path() + QLatin1String("/linkToDir");
+    QVERIFY(QFile::link(subdir, linkToDir));
+
+    {
+        QFile sf(linkToDir);
+        QVERIFY(!sf.open(QIODevice::WriteOnly));
+    }
+#endif
 }
 
 QTEST_MAIN(tst_QSaveFile)

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -100,16 +92,18 @@ private slots:
     void maxPendingConnections();
     void listenError();
     void waitForConnectionTest();
+#ifndef Q_OS_WINRT
     void setSocketDescriptor();
-    void listenWhileListening();
-#ifndef QT_NO_PROCESS
-    void addressReusable();
 #endif
+    void listenWhileListening();
+    void addressReusable();
     void setNewSocketDescriptorBlocking();
+#ifndef QT_NO_NETWORKPROXY
     void invalidProxy_data();
     void invalidProxy();
     void proxyFactory_data();
     void proxyFactory();
+#endif // !QT_NO_NETWORKPROXY
 
     void qtbug14268_peek();
 
@@ -158,7 +152,9 @@ void tst_QTcpServer::initTestCase_data()
     QTest::addColumn<int>("proxyType");
 
     QTest::newRow("WithoutProxy") << false << 0;
+#ifndef QT_NO_SOCKS5
     QTest::newRow("WithSocks5Proxy") << true << int(QNetworkProxy::Socks5Proxy);
+#endif
 
     crashingServerDir = QFINDTESTDATA("crashingServer");
     QVERIFY2(!crashingServerDir.isEmpty(), qPrintable(
@@ -181,16 +177,22 @@ void tst_QTcpServer::init()
 {
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy) {
             QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080));
         }
+#else // !QT_NO_NETWORKPROXY
+        QSKIP("No proxy support");
+#endif // QT_NO_NETWORKPROXY
     }
 }
 
 void tst_QTcpServer::cleanup()
 {
+#ifndef QT_NO_NETWORKPROXY
     QNetworkProxy::setApplicationProxy(QNetworkProxy::DefaultProxy);
+#endif
 }
 
 //----------------------------------------------------------------------------------
@@ -369,9 +371,13 @@ void tst_QTcpServer::maxPendingConnections()
 {
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy)
             QSKIP("With socks5 only 1 connection is allowed ever");
+#else // !QT_NO_NETWORKPROXY
+        QSKIP("No proxy support");
+#endif // QT_NO_NETWORKPROXY
     }
     //### sees to fail sometimes ... a timing issue with the test on windows
     QTcpServer server;
@@ -407,9 +413,13 @@ void tst_QTcpServer::listenError()
 {
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy)
             QSKIP("With socks5 we can not make hard requirements on the address or port");
+#else // !QT_NO_NETWORKPROXY
+        QSKIP("No proxy support");
+#endif //QT_NO_NETWORKPROXY
     }
     QTcpServer server;
     QVERIFY(!server.listen(QHostAddress("1.2.3.4"), 0));
@@ -453,9 +463,13 @@ void tst_QTcpServer::waitForConnectionTest()
 
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy)
             QSKIP("Localhost servers don't work well with SOCKS5");
+#else // !QT_NO_NETWORKPROXY
+        QSKIP("No proxy support");
+#endif // QT_NO_NETWORKPROXY
     }
 
     QTcpSocket findLocalIpSocket;
@@ -481,6 +495,7 @@ void tst_QTcpServer::waitForConnectionTest()
 }
 
 //----------------------------------------------------------------------------------
+#ifndef Q_OS_WINRT
 void tst_QTcpServer::setSocketDescriptor()
 {
     QTcpServer server;
@@ -510,6 +525,7 @@ void tst_QTcpServer::setSocketDescriptor()
     WSACleanup();
 #endif
 }
+#endif // !Q_OS_WINRT
 
 //----------------------------------------------------------------------------------
 void tst_QTcpServer::listenWhileListening()
@@ -531,6 +547,7 @@ public:
     bool ok;
 
 protected:
+#ifndef Q_OS_WINRT
     void incomingConnection(qintptr socketDescriptor)
     {
         // how a user woulddo it (qabstractsocketengine is not public)
@@ -543,16 +560,26 @@ protected:
         ::close(socketDescriptor);
 #endif
     }
+#endif // !Q_OS_WINRT
 };
 
-#ifndef QT_NO_PROCESS
 void tst_QTcpServer::addressReusable()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
+#ifdef Q_OS_LINUX
+    QSKIP("The addressReusable test is unstable on Linux. See QTBUG-39985.");
+#endif
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy)
             QSKIP("With socks5 this test does not make senans at the momment");
+#else // !QT_NO_NETWORKPROXY
+        QSKIP("No proxy support");
+#endif // QT_NO_NETWORKPROXY
     }
 #if defined(Q_OS_WINCE)
     QString signalName = QString::fromLatin1("/test_signal.txt");
@@ -589,16 +616,20 @@ void tst_QTcpServer::addressReusable()
 
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost, 49199));
-}
 #endif
+}
 
 void tst_QTcpServer::setNewSocketDescriptorBlocking()
 {
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
+#ifndef QT_NO_NETWORKPROXY
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy)
             QSKIP("With socks5 we can not make the socket descripter blocking");
+#else // !QT_NO_NETWORKPROXY
+        QSKIP("No proxy support");
+#endif // QT_NO_NETWORKPROXY
     }
     SeverWithBlockingSockets server;
     QVERIFY(server.listen());
@@ -609,6 +640,7 @@ void tst_QTcpServer::setNewSocketDescriptorBlocking()
     QVERIFY(server.ok);
 }
 
+#ifndef QT_NO_NETWORKPROXY
 void tst_QTcpServer::invalidProxy_data()
 {
     QTest::addColumn<int>("type");
@@ -623,7 +655,7 @@ void tst_QTcpServer::invalidProxy_data()
                                 << int(QAbstractSocket::UnsupportedSocketOperationError);
 
     QTest::newRow("no-such-host") << int(QNetworkProxy::Socks5Proxy)
-                                  << "this-host-will-never-exist.troll.no" << 1080
+                                  << "invalid.test.qt-project.org" << 1080
                                   << int(QAbstractSocket::ProxyNotFoundError);
     QTest::newRow("socks5-on-http") << int(QNetworkProxy::Socks5Proxy) << fluke << 3128
                                     << int(QAbstractSocket::SocketTimeoutError);
@@ -763,6 +795,7 @@ void tst_QTcpServer::proxyFactory()
     // Sometimes, error codes change for the better
     QTEST(int(server.serverError()), "expectedError");
 }
+#endif // !QT_NO_NETWORKPROXY
 
 class Qtbug14268Helper : public QObject
 {
@@ -831,11 +864,12 @@ void tst_QTcpServer::serverAddress_data()
     QTest::newRow("AnyIPv4") << QHostAddress(QHostAddress::AnyIPv4) << QHostAddress(QHostAddress::AnyIPv4);
     if (QtNetworkSettings::hasIPv6())
         QTest::newRow("AnyIPv6") << QHostAddress(QHostAddress::AnyIPv6) << QHostAddress(QHostAddress::AnyIPv6);
-    foreach (const QHostAddress& addr, QNetworkInterface::allAddresses()) {
-        if (addr.isInSubnet(QHostAddress::parseSubnet("fe80::/10"))
-            || addr.isInSubnet(QHostAddress::parseSubnet("169.254/16")))
-            continue; //cannot bind on link local addresses
-        QTest::newRow(qPrintable(addr.toString())) << addr << addr;
+    foreach (const QNetworkInterface &iface, QNetworkInterface::allInterfaces()) {
+        if ((iface.flags() & QNetworkInterface::IsUp) == 0)
+            continue;
+        foreach (const QNetworkAddressEntry &entry, iface.addressEntries()) {
+            QTest::newRow(qPrintable(entry.ip().toString())) << entry.ip() << entry.ip();
+        }
     }
 }
 

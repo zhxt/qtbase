@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -116,14 +108,14 @@ QT_BEGIN_NAMESPACE
 /*!
     \fn bool QTextLength::operator==(const QTextLength &other) const
 
-    Returns true if this text length is the same as the \a other text
+    Returns \c true if this text length is the same as the \a other text
     length.
 */
 
 /*!
     \fn bool QTextLength::operator!=(const QTextLength &other) const
 
-    Returns true if this text length is different from the \a other text
+    Returns \c true if this text length is different from the \a other text
     length.
 */
 
@@ -266,20 +258,6 @@ private:
     friend QDataStream &operator>>(QDataStream &, QTextFormat &);
 };
 
-// this is only safe because sizeof(int) == sizeof(float)
-static inline uint hash(float d)
-{
-#ifdef Q_CC_GNU
-    // this is a GCC extension and isn't guaranteed to work in other compilers
-    // the reinterpret_cast below generates a strict-aliasing warning with GCC
-    union { float f; uint u; } cvt;
-    cvt.f = d;
-    return cvt.u;
-#else
-    return reinterpret_cast<uint&>(d);
-#endif
-}
-
 static inline uint hash(const QColor &color)
 {
     return (color.isValid()) ? color.rgba() : 0x234109;
@@ -287,7 +265,7 @@ static inline uint hash(const QColor &color)
 
 static inline uint hash(const QPen &pen)
 {
-    return hash(pen.color()) + hash(pen.widthF());
+    return hash(pen.color()) + qHash(pen.widthF());
 }
 
 static inline uint hash(const QBrush &brush)
@@ -300,7 +278,7 @@ static inline uint variantHash(const QVariant &variant)
     // simple and fast hash functions to differentiate between type and value
     switch (variant.userType()) { // sorted by occurrence frequency
     case QVariant::String: return qHash(variant.toString());
-    case QVariant::Double: return hash(variant.toDouble());
+    case QVariant::Double: return qHash(variant.toDouble());
     case QVariant::Int: return 0x811890 + variant.toInt();
     case QVariant::Brush:
         return 0x01010101 + hash(qvariant_cast<QBrush>(variant));
@@ -311,7 +289,7 @@ static inline uint variantHash(const QVariant &variant)
     case QVariant::Color: return hash(qvariant_cast<QColor>(variant));
       case QVariant::TextLength:
         return 0x377 + hash(qvariant_cast<QTextLength>(variant).rawValue());
-    case QMetaType::Float: return hash(variant.toFloat());
+    case QMetaType::Float: return qHash(variant.toFloat());
     case QVariant::Invalid: return 0;
     default: break;
     }
@@ -327,7 +305,7 @@ uint QTextFormatPrivate::recalcHash() const
 {
     hashValue = 0;
     for (QVector<Property>::ConstIterator it = props.constBegin(); it != props.constEnd(); ++it)
-        hashValue += (it->key << 16) + variantHash(it->value);
+        hashValue += (static_cast<quint32>(it->key) << 16) + variantHash(it->value);
 
     hashDirty = false;
 
@@ -524,7 +502,7 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextFormat &fmt)
     \value BlockFormat The object formats a text block
     \value CharFormat The object formats a single character
     \value ListFormat The object formats a list
-    \value TableFormat The object formats a table
+    \omitvalue TableFormat Unused Value, a table's FormatType is FrameFormat.
     \value FrameFormat The object formats a frame
 
     \value UserFormat
@@ -701,55 +679,64 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextFormat &fmt)
 /*!
     \fn bool QTextFormat::isValid() const
 
-    Returns true if the format is valid (i.e. is not
-    InvalidFormat); otherwise returns false.
+    Returns \c true if the format is valid (i.e. is not
+    InvalidFormat); otherwise returns \c false.
+*/
+
+/*!
+    \fn bool QTextFormat::isEmpty() const
+    \since 5.3
+
+    Returns true if the format does not store any properties; false otherwise.
+
+    \sa propertyCount(), properties()
 */
 
 /*!
     \fn bool QTextFormat::isCharFormat() const
 
-    Returns true if this text format is a \c CharFormat; otherwise
-    returns false.
+    Returns \c true if this text format is a \c CharFormat; otherwise
+    returns \c false.
 */
 
 
 /*!
     \fn bool QTextFormat::isBlockFormat() const
 
-    Returns true if this text format is a \c BlockFormat; otherwise
-    returns false.
+    Returns \c true if this text format is a \c BlockFormat; otherwise
+    returns \c false.
 */
 
 
 /*!
     \fn bool QTextFormat::isListFormat() const
 
-    Returns true if this text format is a \c ListFormat; otherwise
-    returns false.
+    Returns \c true if this text format is a \c ListFormat; otherwise
+    returns \c false.
 */
 
 
 /*!
     \fn bool QTextFormat::isTableFormat() const
 
-    Returns true if this text format is a \c TableFormat; otherwise
-    returns false.
+    Returns \c true if this text format is a \c TableFormat; otherwise
+    returns \c false.
 */
 
 
 /*!
     \fn bool QTextFormat::isFrameFormat() const
 
-    Returns true if this text format is a \c FrameFormat; otherwise
-    returns false.
+    Returns \c true if this text format is a \c FrameFormat; otherwise
+    returns \c false.
 */
 
 
 /*!
     \fn bool QTextFormat::isImageFormat() const
 
-    Returns true if this text format is an image format; otherwise
-    returns false.
+    Returns \c true if this text format is an image format; otherwise
+    returns \c false.
 */
 
 
@@ -757,8 +744,8 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextFormat &fmt)
     \fn bool QTextFormat::isTableCellFormat() const
     \since 4.4
 
-    Returns true if this text format is a \c TableCellFormat; otherwise
-    returns false.
+    Returns \c true if this text format is a \c TableCellFormat; otherwise
+    returns \c false.
 */
 
 
@@ -1200,8 +1187,8 @@ void QTextFormat::setObjectIndex(int o)
 }
 
 /*!
-    Returns true if the text format has a property with the given \a
-    propertyId; otherwise returns false.
+    Returns \c true if the text format has a property with the given \a
+    propertyId; otherwise returns \c false.
 
     \sa properties(), Property
 */
@@ -1241,7 +1228,7 @@ int QTextFormat::propertyCount() const
 /*!
     \fn bool QTextFormat::operator!=(const QTextFormat &other) const
 
-    Returns true if this text format is different from the \a other text
+    Returns \c true if this text format is different from the \a other text
     format.
 */
 
@@ -1249,7 +1236,7 @@ int QTextFormat::propertyCount() const
 /*!
     \fn bool QTextFormat::operator==(const QTextFormat &other) const
 
-    Returns true if this text format is the same as the \a other text
+    Returns \c true if this text format is the same as the \a other text
     format.
 */
 bool QTextFormat::operator==(const QTextFormat &rhs) const
@@ -1338,7 +1325,7 @@ bool QTextFormat::operator==(const QTextFormat &rhs) const
     \value WaveUnderline        The text is underlined using a wave shaped line.
     \value SpellCheckUnderline  The underline is drawn depending on the QStyle::SH_SpellCeckUnderlineStyle
                                 style hint of the QApplication style. By default this is mapped to
-                                WaveUnderline, on Mac OS X it is mapped to DashDotLine.
+                                WaveUnderline, on OS X it is mapped to DashDotLine.
 
     \sa Qt::PenStyle
 */
@@ -1365,7 +1352,7 @@ QTextCharFormat::QTextCharFormat(const QTextFormat &fmt)
 /*!
     \fn bool QTextCharFormat::isValid() const
 
-    Returns true if this character format is valid; otherwise returns
+    Returns \c true if this character format is valid; otherwise returns
     false.
 */
 
@@ -1437,8 +1424,8 @@ QTextCharFormat::QTextCharFormat(const QTextFormat &fmt)
 /*!
     \fn bool QTextCharFormat::fontItalic() const
 
-    Returns true if the text format's font is italic; otherwise
-    returns false.
+    Returns \c true if the text format's font is italic; otherwise
+    returns \c false.
 
     \sa font()
 */
@@ -1457,8 +1444,8 @@ QTextCharFormat::QTextCharFormat(const QTextFormat &fmt)
 /*!
     \fn bool QTextCharFormat::fontUnderline() const
 
-    Returns true if the text format's font is underlined; otherwise
-    returns false.
+    Returns \c true if the text format's font is underlined; otherwise
+    returns \c false.
 
     \sa font()
 */
@@ -1502,8 +1489,8 @@ void QTextCharFormat::setUnderlineStyle(UnderlineStyle style)
 /*!
     \fn bool QTextCharFormat::fontOverline() const
 
-    Returns true if the text format's font is overlined; otherwise
-    returns false.
+    Returns \c true if the text format's font is overlined; otherwise
+    returns \c false.
 
     \sa font()
 */
@@ -1523,8 +1510,8 @@ void QTextCharFormat::setUnderlineStyle(UnderlineStyle style)
 /*!
     \fn bool QTextCharFormat::fontStrikeOut() const
 
-    Returns true if the text format's font is struck out (has a horizontal line
-    drawn through it); otherwise returns false.
+    Returns \c true if the text format's font is struck out (has a horizontal line
+    drawn through it); otherwise returns \c false.
 
     \sa font()
 */
@@ -1591,7 +1578,7 @@ void QTextCharFormat::setUnderlineStyle(UnderlineStyle style)
 /*!
     \since 4.5
     \fn  bool QTextCharFormat::fontKerning() const
-    Returns true if the font kerning is enabled.
+    Returns \c true if the font kerning is enabled.
 
     \sa setFontKerning()
     \sa font()
@@ -1611,8 +1598,8 @@ void QTextCharFormat::setUnderlineStyle(UnderlineStyle style)
 /*!
     \fn bool QTextCharFormat::fontFixedPitch() const
 
-    Returns true if the text format's font is fixed pitch; otherwise
-    returns false.
+    Returns \c true if the text format's font is fixed pitch; otherwise
+    returns \c false.
 
     \sa font()
 */
@@ -1712,8 +1699,8 @@ void QTextCharFormat::setUnderlineStyle(UnderlineStyle style)
 /*!
     \fn bool QTextCharFormat::isAnchor() const
 
-    Returns true if the text is formatted as an anchor; otherwise
-    returns false.
+    Returns \c true if the text is formatted as an anchor; otherwise
+    returns \c false.
 
     \sa setAnchor(), setAnchorHref(), setAnchorNames()
 */
@@ -1870,36 +1857,93 @@ QStringList QTextCharFormat::anchorNames() const
 */
 
 /*!
+    \enum QTextCharFormat::FontPropertiesInheritanceBehavior
+    \since 5.3
+
+    This enum specifies how the setFont() function should behave with
+    respect to unset font properties.
+
+    \value FontPropertiesSpecifiedOnly  If a property is not explicitly set, do not
+                                        change the text format's property value.
+    \value FontPropertiesAll  If a property is not explicitly set, override the
+                              text format's property with a default value.
+
+    \sa setFont()
+*/
+
+/*!
+    \overload
+
     Sets the text format's \a font.
+
+    \sa font()
 */
 void QTextCharFormat::setFont(const QFont &font)
 {
-    setFontFamily(font.family());
+    setFont(font, FontPropertiesAll);
+}
 
-    const qreal pointSize = font.pointSizeF();
-    if (pointSize > 0) {
-        setFontPointSize(pointSize);
-    } else {
-        const int pixelSize = font.pixelSize();
-        if (pixelSize > 0)
-            setProperty(QTextFormat::FontPixelSize, pixelSize);
+/*!
+    \since 5.3
+
+    Sets the text format's \a font.
+
+    If \a behavior is QTextCharFormat::FontPropertiesAll, the font property that
+    has not been explicitly set is treated like as it were set with default value;
+    If \a behavior is QTextCharFormat::FontPropertiesSpecifiedOnly, the font property that
+    has not been explicitly set is ignored and the respective property value
+    remains unchanged.
+
+    \sa font()
+*/
+void QTextCharFormat::setFont(const QFont &font, FontPropertiesInheritanceBehavior behavior)
+{
+    const uint mask = behavior == FontPropertiesAll ? uint(QFont::AllPropertiesResolved)
+                                                    : font.resolve();
+
+    if (mask & QFont::FamilyResolved)
+        setFontFamily(font.family());
+    if (mask & QFont::SizeResolved) {
+        const qreal pointSize = font.pointSizeF();
+        if (pointSize > 0) {
+            setFontPointSize(pointSize);
+        } else {
+            const int pixelSize = font.pixelSize();
+            if (pixelSize > 0)
+                setProperty(QTextFormat::FontPixelSize, pixelSize);
+        }
     }
 
-    setFontWeight(font.weight());
-    setFontItalic(font.italic());
-    setUnderlineStyle(font.underline() ? SingleUnderline : NoUnderline);
-    setFontOverline(font.overline());
-    setFontStrikeOut(font.strikeOut());
-    setFontFixedPitch(font.fixedPitch());
-    setFontCapitalization(font.capitalization());
-    setFontWordSpacing(font.wordSpacing());
-    setFontLetterSpacingType(font.letterSpacingType());
-    setFontLetterSpacing(font.letterSpacing());
-    setFontStretch(font.stretch());
-    setFontStyleHint(font.styleHint());
-    setFontStyleStrategy(font.styleStrategy());
-    setFontHintingPreference(font.hintingPreference());
-    setFontKerning(font.kerning());
+    if (mask & QFont::WeightResolved)
+        setFontWeight(font.weight());
+    if (mask & QFont::StyleResolved)
+        setFontItalic(font.style() != QFont::StyleNormal);
+    if (mask & QFont::UnderlineResolved)
+        setUnderlineStyle(font.underline() ? SingleUnderline : NoUnderline);
+    if (mask & QFont::OverlineResolved)
+        setFontOverline(font.overline());
+    if (mask & QFont::StrikeOutResolved)
+        setFontStrikeOut(font.strikeOut());
+    if (mask & QFont::FixedPitchResolved)
+        setFontFixedPitch(font.fixedPitch());
+    if (mask & QFont::CapitalizationResolved)
+        setFontCapitalization(font.capitalization());
+    if (mask & QFont::WordSpacingResolved)
+        setFontWordSpacing(font.wordSpacing());
+    if (mask & QFont::LetterSpacingResolved) {
+        setFontLetterSpacingType(font.letterSpacingType());
+        setFontLetterSpacing(font.letterSpacing());
+    }
+    if (mask & QFont::StretchResolved)
+        setFontStretch(font.stretch());
+    if (mask & QFont::StyleHintResolved)
+        setFontStyleHint(font.styleHint());
+    if (mask & QFont::StyleStrategyResolved)
+        setFontStyleStrategy(font.styleStrategy());
+    if (mask & QFont::HintingPreferenceResolved)
+        setFontHintingPreference(font.hintingPreference());
+    if (mask & QFont::KerningResolved)
+        setFontKerning(font.kerning());
 }
 
 /*!
@@ -2031,7 +2075,7 @@ QList<QTextOption::Tab> QTextBlockFormat::tabPositions() const
 /*!
     \fn QTextBlockFormat::isValid() const
 
-    Returns true if this block format is valid; otherwise returns
+    Returns \c true if this block format is valid; otherwise returns
     false.
 */
 
@@ -2249,8 +2293,8 @@ QList<QTextOption::Tab> QTextBlockFormat::tabPositions() const
 /*!
     \fn bool QTextBlockFormat::nonBreakableLines() const
 
-    Returns true if the lines in the paragraph are non-breakable;
-    otherwise returns false.
+    Returns \c true if the lines in the paragraph are non-breakable;
+    otherwise returns \c false.
 
     \sa setNonBreakableLines()
 */
@@ -2350,8 +2394,8 @@ QTextListFormat::QTextListFormat(const QTextFormat &fmt)
 /*!
     \fn bool QTextListFormat::isValid() const
 
-    Returns true if this list format is valid; otherwise
-    returns false.
+    Returns \c true if this list format is valid; otherwise
+    returns \c false.
 */
 
 /*!
@@ -2530,7 +2574,7 @@ QTextFrameFormat::QTextFrameFormat(const QTextFormat &fmt)
 /*!
     \fn QTextFrameFormat::isValid() const
 
-    Returns true if the format description is valid; otherwise returns false.
+    Returns \c true if the format description is valid; otherwise returns \c false.
 */
 
 /*!
@@ -2837,8 +2881,8 @@ QTextTableFormat::QTextTableFormat(const QTextFormat &fmt)
 /*!
     \fn bool QTextTableFormat::isValid() const
 
-    Returns true if this table format is valid; otherwise
-    returns false.
+    Returns \c true if this table format is valid; otherwise
+    returns \c false.
 */
 
 
@@ -2983,8 +3027,8 @@ QTextTableFormat::QTextTableFormat(const QTextFormat &fmt)
     \ingroup richtext-processing
     \ingroup shared
 
-    Inline images are represented by an object replacement character
-    (0xFFFC in Unicode) which has an associated QTextImageFormat. The
+    Inline images are represented by a Unicode value U+FFFC (OBJECT
+    REPLACEMENT CHARACTER) which has an associated QTextImageFormat. The
     image format specifies a name with setName() that is used to
     locate the image. The size of the rectangle that the image will
     occupy is specified using setWidth() and setHeight().
@@ -3018,7 +3062,7 @@ QTextImageFormat::QTextImageFormat(const QTextFormat &fmt)
 /*!
     \fn bool QTextImageFormat::isValid() const
 
-    Returns true if this image format is valid; otherwise returns false.
+    Returns \c true if this image format is valid; otherwise returns \c false.
 */
 
 
@@ -3264,7 +3308,7 @@ QTextImageFormat::QTextImageFormat(const QTextFormat &fmt)
     \fn bool QTextTableCellFormat::isValid() const
     \since 4.4
 
-    Returns true if this table cell format is valid; otherwise returns false.
+    Returns \c true if this table cell format is valid; otherwise returns \c false.
 */
 
 /*!
@@ -3376,19 +3420,6 @@ bool QTextFormatCollection::hasFormatCached(const QTextFormat &format) const
     return false;
 }
 
-QTextFormat QTextFormatCollection::objectFormat(int objectIndex) const
-{
-    if (objectIndex == -1)
-        return QTextFormat();
-    return format(objFormats.at(objectIndex));
-}
-
-void QTextFormatCollection::setObjectFormat(int objectIndex, const QTextFormat &f)
-{
-    const int formatIndex = indexForFormat(f);
-    objFormats[objectIndex] = formatIndex;
-}
-
 int QTextFormatCollection::objectFormatIndex(int objectIndex) const
 {
     if (objectIndex == -1)
@@ -3427,14 +3458,16 @@ void QTextFormatCollection::setDefaultFont(const QFont &f)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QTextLength &l)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QTextLength(QTextLength::Type(" << l.type() << "))";
-    return dbg.space();
+    return dbg;
 }
 
 QDebug operator<<(QDebug dbg, const QTextFormat &f)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QTextFormat(QTextFormat::FormatType(" << f.type() << "))";
-    return dbg.space();
+    return dbg;
 }
 
 #endif

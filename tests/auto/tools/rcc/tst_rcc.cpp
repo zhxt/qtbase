@@ -1,40 +1,32 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Giuseppe D'Angelo <dangelog@gmail.com>
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,8 @@
 #include <QtCore/QLocale>
 #include <QtCore/QtGlobal>
 
+#include <algorithm>
+
 typedef QMap<QString, QString> QStringMap;
 Q_DECLARE_METATYPE(QStringMap)
 
@@ -70,6 +64,9 @@ private slots:
     void binary();
 
     void cleanupTestCase();
+
+private:
+    QString m_rcc;
 };
 
 void tst_rcc::initTestCase()
@@ -77,6 +74,7 @@ void tst_rcc::initTestCase()
     // rcc uses a QHash to store files in the resource system.
     // we must force a certain hash order when testing or tst_rcc will fail, see QTBUG-25078
     QVERIFY(qputenv("QT_RCC_TEST", "1"));
+    m_rcc = QLibraryInfo::location(QLibraryInfo::BinariesPath) + QLatin1String("/rcc");
 }
 
 QString findExpectedFile(const QString &base)
@@ -145,13 +143,12 @@ void tst_rcc::rcc()
     }
 
     // Launch
-    const QString command = QLatin1String("rcc");
     QProcess process;
-    process.start(command, QStringList(qrcfile));
+    process.start(m_rcc, QStringList(qrcfile));
     if (!process.waitForFinished()) {
         const QString path = QString::fromLocal8Bit(qgetenv("PATH"));
         QString message = QString::fromLatin1("'%1' could not be found when run from '%2'. Path: '%3' ").
-                          arg(command, QDir::currentPath(), path);
+                          arg(m_rcc, QDir::currentPath(), path);
         QFAIL(qPrintable(message));
     }
     const QChar cr = QLatin1Char('\r');
@@ -176,13 +173,14 @@ void tst_rcc::rcc()
 
 
 
-static void createRccBinaryData(const QString &baseDir, const QString &qrcFileName, const QString &rccFileName)
+static void createRccBinaryData(const QString &rcc, const QString &baseDir,
+    const QString &qrcFileName, const QString &rccFileName)
 {
     QString currentDir = QDir::currentPath();
     QDir::setCurrent(baseDir);
 
     QProcess rccProcess;
-    rccProcess.start("rcc", QStringList() << "-binary" << "-o" << rccFileName << qrcFileName);
+    rccProcess.start(rcc, QStringList() << "-binary" << "-o" << rccFileName << qrcFileName);
     bool ok = rccProcess.waitForFinished();
     if (!ok) {
         QString errorString = QString::fromLatin1("Could not start rcc (is it in PATH?): %1").arg(rccProcess.errorString());
@@ -262,7 +260,7 @@ void tst_rcc::binary_data()
         QFileInfo qrcFileInfo = iter.fileInfo();
         QString absoluteBaseName = QFileInfo(qrcFileInfo.absolutePath(), qrcFileInfo.baseName()).absoluteFilePath();
         QString rccFileName = absoluteBaseName + QLatin1String(".rcc");
-        createRccBinaryData(dataPath, qrcFileInfo.absoluteFilePath(), rccFileName);
+        createRccBinaryData(m_rcc, dataPath, qrcFileInfo.absoluteFilePath(), rccFileName);
 
         QString localeFileName = absoluteBaseName + QLatin1String(".locale");
         QFile localeFile(localeFileName);
@@ -321,8 +319,8 @@ void tst_rcc::binary()
     }
 
     // check that we have all (and only) the expected files
-    qSort(filesFound);
-    qSort(expectedFileNames);
+    std::sort(filesFound.begin(), filesFound.end());
+    std::sort(expectedFileNames.begin(), expectedFileNames.end());
     QCOMPARE(filesFound, expectedFileNames);
 
     // now actually check the file contents

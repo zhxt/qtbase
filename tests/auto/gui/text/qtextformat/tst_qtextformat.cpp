@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,6 +38,7 @@
 #include <qdebug.h>
 #include <qsettings.h>
 #include <qtextformat.h>
+#include <private/qtextformat_p.h>
 #include <qtextdocument.h>
 #include <qtextcursor.h>
 #include <qtextobject.h>
@@ -68,6 +61,10 @@ private slots:
     void getSetTabs();
     void testTabsUsed();
     void testFontStyleSetters();
+    void setFont_data();
+    void setFont();
+    void setFont_collection_data();
+    void setFont_collection();
 };
 
 /*! \internal
@@ -408,6 +405,244 @@ void tst_QTextFormat::testFontStyleSetters()
     font.setKerning(false);
     format.setFont(font);
     QCOMPARE(format.font().kerning(), false);
+}
+
+Q_DECLARE_METATYPE(QTextCharFormat)
+
+void tst_QTextFormat::setFont_data()
+{
+    QTest::addColumn<QTextCharFormat>("format1");
+    QTest::addColumn<QTextCharFormat>("format2");
+    QTest::addColumn<bool>("overrideAll");
+
+    QTextCharFormat format1;
+    format1.setFontStyleHint(QFont::Serif);
+    format1.setFontStyleStrategy(QFont::PreferOutline);
+    format1.setFontCapitalization(QFont::AllUppercase);
+    format1.setFontKerning(true);
+
+    {
+        QTest::newRow("noop|override") << format1 << format1 << true;
+        QTest::newRow("noop|inherit") << format1 << format1 << false;
+    }
+
+    {
+        QTextCharFormat format2;
+        format2.setFontStyleHint(QFont::SansSerif);
+        format2.setFontStyleStrategy(QFont::PreferAntialias);
+        format2.setFontCapitalization(QFont::MixedCase);
+        format2.setFontKerning(false);
+
+        QTest::newRow("coverage|override") << format1 << format2 << true;
+        QTest::newRow("coverage|inherit") << format1 << format2 << false;
+    }
+
+    {
+        QTextCharFormat format2;
+        format2.setFontStyleHint(QFont::SansSerif);
+        format2.setFontStyleStrategy(QFont::PreferAntialias);
+
+        QTest::newRow("partial|override") << format1 << format2 << true;
+        QTest::newRow("partial|inherit") << format1 << format2 << false;
+    }
+}
+
+void tst_QTextFormat::setFont()
+{
+    QFETCH(QTextCharFormat, format1);
+    QFETCH(QTextCharFormat, format2);
+    QFETCH(bool, overrideAll);
+
+    QTextCharFormat f;
+
+    f.merge(format1);
+    QCOMPARE((int)f.fontStyleHint(), (int)format1.fontStyleHint());
+    QCOMPARE((int)f.fontStyleStrategy(), (int)format1.fontStyleStrategy());
+    QCOMPARE((int)f.fontCapitalization(), (int)format1.fontCapitalization());
+    QCOMPARE(f.fontKerning(), format1.fontKerning());
+
+    QCOMPARE((int)f.font().styleHint(), (int)f.fontStyleHint());
+    QCOMPARE((int)f.font().styleStrategy(), (int)f.fontStyleStrategy());
+    QCOMPARE((int)f.font().capitalization(), (int)f.fontCapitalization());
+    QCOMPARE(f.font().kerning(), f.fontKerning());
+
+    f.merge(format2);
+    QCOMPARE((int)f.font().styleHint(), (int)f.fontStyleHint());
+    QCOMPARE((int)f.font().styleStrategy(), (int)f.fontStyleStrategy());
+    QCOMPARE((int)f.font().capitalization(), (int)f.fontCapitalization());
+    QCOMPARE(f.font().kerning(), f.fontKerning());
+
+    if (format2.hasProperty(QTextFormat::FontStyleHint))
+        QCOMPARE((int)f.font().styleHint(), (int)format2.fontStyleHint());
+    else
+        QCOMPARE((int)f.font().styleHint(), (int)format1.fontStyleHint());
+    if (format2.hasProperty(QTextFormat::FontStyleStrategy))
+        QCOMPARE((int)f.font().styleStrategy(), (int)format2.fontStyleStrategy());
+    else
+        QCOMPARE((int)f.font().styleStrategy(), (int)format1.fontStyleStrategy());
+    if (format2.hasProperty(QTextFormat::FontCapitalization))
+        QCOMPARE((int)f.font().capitalization(), (int)format2.fontCapitalization());
+    else
+        QCOMPARE((int)f.font().capitalization(), (int)format1.fontCapitalization());
+    if (format2.hasProperty(QTextFormat::FontKerning))
+        QCOMPARE(f.font().kerning(), format2.fontKerning());
+    else
+        QCOMPARE(f.font().kerning(), format1.fontKerning());
+
+
+    QFont font1 = format1.font();
+    QFont font2 = format2.font();
+
+    f = QTextCharFormat();
+
+    {
+        QTextCharFormat tmp;
+        tmp.setFont(font1, overrideAll ? QTextCharFormat::FontPropertiesAll
+                                       : QTextCharFormat::FontPropertiesSpecifiedOnly);
+        f.merge(tmp);
+    }
+    QCOMPARE((int)f.fontStyleHint(), (int)format1.fontStyleHint());
+    QCOMPARE((int)f.fontStyleStrategy(), (int)format1.fontStyleStrategy());
+    QCOMPARE((int)f.fontCapitalization(), (int)format1.fontCapitalization());
+    QCOMPARE(f.fontKerning(), format1.fontKerning());
+
+    QCOMPARE((int)f.font().styleHint(), (int)f.fontStyleHint());
+    QCOMPARE((int)f.font().styleStrategy(), (int)f.fontStyleStrategy());
+    QCOMPARE((int)f.font().capitalization(), (int)f.fontCapitalization());
+    QCOMPARE(f.font().kerning(), f.fontKerning());
+
+    {
+        QTextCharFormat tmp;
+        tmp.setFont(font2, overrideAll ? QTextCharFormat::FontPropertiesAll
+                                       : QTextCharFormat::FontPropertiesSpecifiedOnly);
+        f.merge(tmp);
+    }
+    QCOMPARE((int)f.font().styleHint(), (int)f.fontStyleHint());
+    QCOMPARE((int)f.font().styleStrategy(), (int)f.fontStyleStrategy());
+    QCOMPARE((int)f.font().capitalization(), (int)f.fontCapitalization());
+    QCOMPARE(f.font().kerning(), f.fontKerning());
+
+    if (overrideAll || (font2.resolve() & QFont::StyleHintResolved))
+        QCOMPARE((int)f.font().styleHint(), (int)font2.styleHint());
+    else
+        QCOMPARE((int)f.font().styleHint(), (int)font1.styleHint());
+    if (overrideAll || (font2.resolve() & QFont::StyleStrategyResolved))
+        QCOMPARE((int)f.font().styleStrategy(), (int)font2.styleStrategy());
+    else
+        QCOMPARE((int)f.font().styleStrategy(), (int)font1.styleStrategy());
+    if (overrideAll || (font2.resolve() & QFont::CapitalizationResolved))
+        QCOMPARE((int)f.font().capitalization(), (int)font2.capitalization());
+    else
+        QCOMPARE((int)f.font().capitalization(), (int)font1.capitalization());
+    if (overrideAll || (font2.resolve() & QFont::KerningResolved))
+        QCOMPARE(f.font().kerning(), font2.kerning());
+    else
+        QCOMPARE(f.font().kerning(), font1.kerning());
+}
+
+void tst_QTextFormat::setFont_collection_data()
+{
+    setFont_data();
+}
+
+void tst_QTextFormat::setFont_collection()
+{
+    QFETCH(QTextCharFormat, format1);
+    QFETCH(QTextCharFormat, format2);
+    QFETCH(bool, overrideAll);
+
+    QFont font1 = format1.font();
+    QFont font2 = format2.font();
+
+    {
+        QTextFormatCollection collection;
+        collection.setDefaultFont(font1);
+
+        int formatIndex = collection.indexForFormat(format1);
+        QTextCharFormat f = collection.charFormat(formatIndex);
+
+        QCOMPARE((int)f.fontStyleHint(), (int)format1.fontStyleHint());
+        QCOMPARE((int)f.fontStyleStrategy(), (int)format1.fontStyleStrategy());
+        QCOMPARE((int)f.fontCapitalization(), (int)format1.fontCapitalization());
+        QCOMPARE(f.fontKerning(), format1.fontKerning());
+
+        QCOMPARE((int)f.font().styleHint(), (int)f.fontStyleHint());
+        QCOMPARE((int)f.font().styleStrategy(), (int)f.fontStyleStrategy());
+        QCOMPARE((int)f.font().capitalization(), (int)f.fontCapitalization());
+        QCOMPARE(f.font().kerning(), f.fontKerning());
+    }
+    {
+        QTextFormatCollection collection;
+        collection.setDefaultFont(font1);
+
+        int formatIndex = collection.indexForFormat(format2);
+        QTextCharFormat f = collection.charFormat(formatIndex);
+
+        if (format2.hasProperty(QTextFormat::FontStyleHint))
+            QCOMPARE((int)f.font().styleHint(), (int)format2.fontStyleHint());
+        else
+            QCOMPARE((int)f.font().styleHint(), (int)format1.fontStyleHint());
+        if (format2.hasProperty(QTextFormat::FontStyleStrategy))
+            QCOMPARE((int)f.font().styleStrategy(), (int)format2.fontStyleStrategy());
+        else
+            QCOMPARE((int)f.font().styleStrategy(), (int)format1.fontStyleStrategy());
+        if (format2.hasProperty(QTextFormat::FontCapitalization))
+            QCOMPARE((int)f.font().capitalization(), (int)format2.fontCapitalization());
+        else
+            QCOMPARE((int)f.font().capitalization(), (int)format1.fontCapitalization());
+        if (format2.hasProperty(QTextFormat::FontKerning))
+            QCOMPARE(f.font().kerning(), format2.fontKerning());
+        else
+            QCOMPARE(f.font().kerning(), format1.fontKerning());
+    }
+
+    {
+        QTextFormatCollection collection;
+        collection.setDefaultFont(font1);
+
+        QTextCharFormat tmp;
+        tmp.setFont(font1, overrideAll ? QTextCharFormat::FontPropertiesAll
+                                       : QTextCharFormat::FontPropertiesSpecifiedOnly);
+        int formatIndex = collection.indexForFormat(tmp);
+        QTextCharFormat f = collection.charFormat(formatIndex);
+
+        QCOMPARE((int)f.fontStyleHint(), (int)format1.fontStyleHint());
+        QCOMPARE((int)f.fontStyleStrategy(), (int)format1.fontStyleStrategy());
+        QCOMPARE((int)f.fontCapitalization(), (int)format1.fontCapitalization());
+        QCOMPARE(f.fontKerning(), format1.fontKerning());
+
+        QCOMPARE((int)f.font().styleHint(), (int)f.fontStyleHint());
+        QCOMPARE((int)f.font().styleStrategy(), (int)f.fontStyleStrategy());
+        QCOMPARE((int)f.font().capitalization(), (int)f.fontCapitalization());
+        QCOMPARE(f.font().kerning(), f.fontKerning());
+    }
+    {
+        QTextFormatCollection collection;
+        collection.setDefaultFont(font1);
+
+        QTextCharFormat tmp;
+        tmp.setFont(font2, overrideAll ? QTextCharFormat::FontPropertiesAll
+                                       : QTextCharFormat::FontPropertiesSpecifiedOnly);
+        int formatIndex = collection.indexForFormat(tmp);
+        QTextCharFormat f = collection.charFormat(formatIndex);
+
+        if (overrideAll || (font2.resolve() & QFont::StyleHintResolved))
+            QCOMPARE((int)f.font().styleHint(), (int)font2.styleHint());
+        else
+            QCOMPARE((int)f.font().styleHint(), (int)font1.styleHint());
+        if (overrideAll || (font2.resolve() & QFont::StyleStrategyResolved))
+            QCOMPARE((int)f.font().styleStrategy(), (int)font2.styleStrategy());
+        else
+            QCOMPARE((int)f.font().styleStrategy(), (int)font1.styleStrategy());
+        if (overrideAll || (font2.resolve() & QFont::CapitalizationResolved))
+            QCOMPARE((int)f.font().capitalization(), (int)font2.capitalization());
+        else
+            QCOMPARE((int)f.font().capitalization(), (int)font1.capitalization());
+        if (overrideAll || (font2.resolve() & QFont::KerningResolved))
+            QCOMPARE(f.font().kerning(), font2.kerning());
+        else
+            QCOMPARE(f.font().kerning(), font1.kerning());
+    }
 }
 
 QTEST_MAIN(tst_QTextFormat)

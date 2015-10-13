@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -501,17 +501,6 @@
     \sa operator=()
 */
 
-/*!
-    \fn QMutableListIterator::~QMutableListIterator()
-    \fn QMutableLinkedListIterator::~QMutableLinkedListIterator()
-    \fn QMutableVectorIterator::~QMutableVectorIterator()
-    \fn QMutableSetIterator::~QMutableSetIterator()
-
-    Destroys the iterator.
-
-    \sa operator=()
-*/
-
 /*! \fn QMutableListIterator &QMutableListIterator::operator=(QList<T> &list)
     \fn QMutableLinkedListIterator &QMutableLinkedListIterator::operator=(QLinkedList<T> &list)
     \fn QListIterator &QListIterator::operator=(const QList<T> &list)
@@ -580,9 +569,9 @@
     \fn bool QMutableVectorIterator::hasNext() const
     \fn bool QMutableSetIterator::hasNext() const
 
-    Returns true if there is at least one item ahead of the iterator,
+    Returns \c true if there is at least one item ahead of the iterator,
     i.e. the iterator is \e not at the back of the container;
-    otherwise returns false.
+    otherwise returns \c false.
 
     \sa hasPrevious(), next()
 */
@@ -649,9 +638,9 @@
     \fn bool QMutableVectorIterator::hasPrevious() const
     \fn bool QMutableSetIterator::hasPrevious() const
 
-    Returns true if there is at least one item behind the iterator,
+    Returns \c true if there is at least one item behind the iterator,
     i.e. the iterator is \e not at the front of the container;
-    otherwise returns false.
+    otherwise returns \c false.
 
     \sa hasNext(), previous()
 */
@@ -720,7 +709,7 @@
     \fn bool QMutableSetIterator::findNext(const T &value)
 
     Searches for \a value starting from the current iterator position
-    forward. Returns true if \a value is found; otherwise returns false.
+    forward. Returns \c true if \a value is found; otherwise returns \c false.
 
     After the call, if \a value was found, the iterator is positioned
     just after the matching item; otherwise, the iterator is
@@ -739,7 +728,7 @@
     \fn bool QMutableSetIterator::findPrevious(const T &value)
 
     Searches for \a value starting from the current iterator position
-    backward. Returns true if \a value is found; otherwise returns
+    backward. Returns \c true if \a value is found; otherwise returns
     false.
 
     After the call, if \a value was found, the iterator is positioned
@@ -1121,15 +1110,6 @@
     \sa operator=()
 */
 
-/*!
-    \fn QMutableMapIterator::~QMutableMapIterator()
-    \fn QMutableHashIterator::~QMutableHashIterator()
-
-    Destroys the iterator.
-
-    \sa operator=()
-*/
-
 /*! \fn QMapIterator &QMapIterator::operator=(const QMap<Key, T> &map)
     \fn QMutableMapIterator &QMutableMapIterator::operator=(QMap<Key, T> &map)
 
@@ -1175,9 +1155,9 @@
     \fn bool QMutableMapIterator::hasNext() const
     \fn bool QMutableHashIterator::hasNext() const
 
-    Returns true if there is at least one item ahead of the iterator,
+    Returns \c true if there is at least one item ahead of the iterator,
     i.e. the iterator is \e not at the back of the container;
-    otherwise returns false.
+    otherwise returns \c false.
 
     \sa hasPrevious(), next()
 */
@@ -1243,9 +1223,9 @@
     \fn bool QMutableMapIterator::hasPrevious() const
     \fn bool QMutableHashIterator::hasPrevious() const
 
-    Returns true if there is at least one item behind the iterator,
+    Returns \c true if there is at least one item behind the iterator,
     i.e. the iterator is \e not at the front of the container;
-    otherwise returns false.
+    otherwise returns \c false.
 
     \sa hasNext(), previous()
 */
@@ -1369,8 +1349,8 @@
     \fn bool QMutableHashIterator::findNext(const T &value)
 
     Searches for \a value starting from the current iterator position
-    forward. Returns true if a (key, value) pair with value \a value
-    is found; otherwise returns false.
+    forward. Returns \c true if a (key, value) pair with value \a value
+    is found; otherwise returns \c false.
 
     After the call, if \a value was found, the iterator is positioned
     just after the matching item; otherwise, the iterator is
@@ -1385,8 +1365,8 @@
     \fn bool QMutableHashIterator::findPrevious(const T &value)
 
     Searches for \a value starting from the current iterator position
-    backward. Returns true if a (key, value) pair with value \a value
-    is found; otherwise returns false.
+    backward. Returns \c true if a (key, value) pair with value \a value
+    is found; otherwise returns \c false.
 
     After the call, if \a value was found, the iterator is positioned
     just before the matching item; otherwise, the iterator is
