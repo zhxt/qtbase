@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -45,6 +45,9 @@
 #endif
 
 #include "scribblearea.h"
+
+static const qreal MinimumDiameter = 3.0;
+static const qreal MaximumDiameter = 50.0;
 
 //! [0]
 ScribbleArea::ScribbleArea(QWidget *parent)
@@ -179,17 +182,21 @@ bool ScribbleArea::event(QEvent *event)
     case QEvent::TouchUpdate:
     case QEvent::TouchEnd:
     {
+        QTouchEvent *touch = static_cast<QTouchEvent *>(event);
         QList<QTouchEvent::TouchPoint> touchPoints = static_cast<QTouchEvent *>(event)->touchPoints();
         foreach (const QTouchEvent::TouchPoint &touchPoint, touchPoints) {
             switch (touchPoint.state()) {
             case Qt::TouchPointStationary:
-                // don't do anything if this touch point hasn't moved
+            case Qt::TouchPointReleased:
+                // don't do anything if this touch point hasn't moved or has been released
                 continue;
             default:
                 {
                     QRectF rect = touchPoint.rect();
                     if (rect.isEmpty()) {
-                        qreal diameter = qreal(50) * touchPoint.pressure();
+                        qreal diameter = MaximumDiameter;
+                        if (touch->device()->capabilities() & QTouchDevice::Pressure)
+                            diameter = MinimumDiameter + (MaximumDiameter - MinimumDiameter) * touchPoint.pressure();
                         rect.setSize(QSizeF(diameter, diameter));
                     }
 

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -73,24 +65,27 @@ public:
     CppCodeParser();
     ~CppCodeParser();
 
-    virtual void initializeParser(const Config& config);
-    virtual void terminateParser();
-    virtual QString language();
-    virtual QStringList headerFileNameFilter();
-    virtual QStringList sourceFileNameFilter();
-    virtual void parseHeaderFile(const Location& location, const QString& filePath);
-    virtual void parseSourceFile(const Location& location, const QString& filePath);
-    virtual void doneParsingHeaderFiles();
-    virtual void doneParsingSourceFiles();
+    virtual void initializeParser(const Config& config) Q_DECL_OVERRIDE;
+    virtual void terminateParser() Q_DECL_OVERRIDE;
+    virtual QString language() Q_DECL_OVERRIDE;
+    virtual QStringList headerFileNameFilter() Q_DECL_OVERRIDE;
+    virtual QStringList sourceFileNameFilter() Q_DECL_OVERRIDE;
+    virtual void parseHeaderFile(const Location& location, const QString& filePath) Q_DECL_OVERRIDE;
+    virtual void parseSourceFile(const Location& location, const QString& filePath) Q_DECL_OVERRIDE;
+    virtual void doneParsingHeaderFiles() Q_DECL_OVERRIDE;
+    virtual void doneParsingSourceFiles() Q_DECL_OVERRIDE;
 
 protected:
-    virtual QSet<QString> topicCommands();
+    const QSet<QString>& topicCommands();
+    const QSet<QString>& otherMetaCommands();
     virtual Node* processTopicCommand(const Doc& doc,
                                       const QString& command,
                                       const ArgLocPair& arg);
-    virtual Node *processTopicCommandGroup(const Doc& doc,
-                                           const QString& command,
-                                           const ArgList& args);
+    void processQmlProperties(const Doc& doc, NodeList& nodes, DocList& docs, bool jsProps);
+    bool splitQmlPropertyGroupArg(const QString& arg,
+                                  QString& module,
+                                  QString& element,
+                                  QString& name);
     bool splitQmlPropertyArg(const QString& arg,
                              QString& type,
                              QString& module,
@@ -100,7 +95,6 @@ protected:
                            QString& type,
                            QString& module,
                            QString& element);
-    virtual QSet<QString> otherMetaCommands();
     virtual void processOtherMetaCommand(const Doc& doc,
                                          const QString& command,
                                          const ArgLocPair& argLocPair,
@@ -133,7 +127,7 @@ protected:
     bool matchClassDecl(InnerNode *parent,
                         const QString &templateStuff = QString());
     bool matchNamespaceDecl(InnerNode *parent);
-    bool matchUsingDecl();
+    bool matchUsingDecl(InnerNode* parent);
     bool matchEnumItem(InnerNode *parent, EnumNode *enume);
     bool matchEnumDecl(InnerNode *parent);
     bool matchTypedefDecl(InnerNode *parent);
@@ -154,7 +148,7 @@ protected:
     void instantiateIteratorMacro(const QString &container,
                                   const QString &includeFile,
                                   const QString &macroDef);
-    void createExampleFileNodes(DocNode *dn);
+    void createExampleFileNodes(DocumentNode *dn);
 
  protected:
     QMap<QString, Node::Type> nodeTypeMap;
@@ -162,11 +156,10 @@ protected:
     int tok;
     Node::Access access;
     FunctionNode::Metaness metaness;
-    QString moduleName;
+    QString physicalModuleName;
     QStringList lastPath_;
     QRegExp varComment;
     QRegExp sep;
-    QSet<QString> activeNamespaces_;
 
  private:
     QString sequentialIteratorDefinition;
@@ -210,9 +203,9 @@ protected:
 #define COMMAND_TYPEDEF                 Doc::alias("typedef")
 #define COMMAND_VARIABLE                Doc::alias("variable")
 #define COMMAND_QMLABSTRACT             Doc::alias("qmlabstract")
-#define COMMAND_QMLCLASS                Doc::alias("qmlclass")
 #define COMMAND_QMLTYPE                 Doc::alias("qmltype")
 #define COMMAND_QMLPROPERTY             Doc::alias("qmlproperty")
+#define COMMAND_QMLPROPERTYGROUP        Doc::alias("qmlpropertygroup")
 #define COMMAND_QMLATTACHEDPROPERTY     Doc::alias("qmlattachedproperty")
 #define COMMAND_QMLINHERITS             Doc::alias("inherits")
 #define COMMAND_QMLINSTANTIATES         Doc::alias("instantiates")
@@ -239,6 +232,18 @@ protected:
 #define COMMAND_LICENSENAME             Doc::alias("licensename")
 #define COMMAND_LICENSEDESCRIPTION      Doc::alias("licensedescription")
 #define COMMAND_RELEASEDATE             Doc::alias("releasedate")
+#define COMMAND_QTVARIABLE              Doc::alias("qtvariable")
+// Some of these are not used currenmtly, but they are included now for completeness.
+#define COMMAND_JSTYPE                 Doc::alias("jstype")
+#define COMMAND_JSPROPERTY             Doc::alias("jsproperty")
+#define COMMAND_JSPROPERTYGROUP        Doc::alias("jspropertygroup")
+#define COMMAND_JSATTACHEDPROPERTY     Doc::alias("jsattachedproperty")
+#define COMMAND_JSSIGNAL               Doc::alias("jssignal")
+#define COMMAND_JSATTACHEDSIGNAL       Doc::alias("jsattachedsignal")
+#define COMMAND_JSMETHOD               Doc::alias("jsmethod")
+#define COMMAND_JSATTACHEDMETHOD       Doc::alias("jsattachedmethod")
+#define COMMAND_JSBASICTYPE            Doc::alias("jsbasictype")
+#define COMMAND_JSMODULE               Doc::alias("jsmodule")
 
 QT_END_NAMESPACE
 

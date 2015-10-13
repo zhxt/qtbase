@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -82,7 +74,8 @@
     QCompleter::CaseSensitivelySortedModel or
     QCompleter::CaseInsensitivelySortedModel as the argument. On large models,
     this can lead to significant performance improvements, because QCompleter
-    can then use binary search instead of linear search.
+    can then use binary search instead of linear search. The binary search only
+    works when the filterMode is Qt::MatchStartsWith.
 
     The model can be a \l{QAbstractListModel}{list model},
     a \l{QAbstractTableModel}{table model}, or a
@@ -199,16 +192,18 @@ void QCompletionModel::setSourceModel(QAbstractItemModel *source)
 void QCompletionModel::createEngine()
 {
     bool sortedEngine = false;
-    switch (c->sorting) {
-    case QCompleter::UnsortedModel:
-        sortedEngine = false;
-        break;
-    case QCompleter::CaseSensitivelySortedModel:
-        sortedEngine = c->cs == Qt::CaseSensitive;
-        break;
-    case QCompleter::CaseInsensitivelySortedModel:
-        sortedEngine = c->cs == Qt::CaseInsensitive;
-        break;
+    if (c->filterMode == Qt::MatchStartsWith) {
+        switch (c->sorting) {
+        case QCompleter::UnsortedModel:
+            sortedEngine = false;
+            break;
+        case QCompleter::CaseSensitivelySortedModel:
+            sortedEngine = c->cs == Qt::CaseSensitive;
+            break;
+        case QCompleter::CaseInsensitivelySortedModel:
+            sortedEngine = c->cs == Qt::CaseInsensitive;
+            break;
+        }
     }
 
     if (sortedEngine)
@@ -522,6 +517,8 @@ bool QCompletionEngine::lookupCache(QString part, const QModelIndex& parent, QMa
 // When the cache size exceeds 1MB, it clears out about 1/2 of the cache.
 void QCompletionEngine::saveInCache(QString part, const QModelIndex& parent, const QMatchData& m)
 {
+    if (c->filterMode == Qt::MatchEndsWith)
+        return;
     QMatchData old = cache[parent].take(part);
     cost = cost + m.indices.cost() - old.indices.cost();
     if (cost * sizeof(int) > 1024 * 1024) {
@@ -703,9 +700,35 @@ int QUnsortedModelEngine::buildIndices(const QString& str, const QModelIndex& pa
 
     for (i = 0; i < indices.count() && count != n; ++i) {
         QModelIndex idx = model->index(indices[i], c->column, parent);
-        QString data = model->data(idx, c->role).toString();
-        if (!data.startsWith(str, c->cs) || !(model->flags(idx) & Qt::ItemIsSelectable))
+
+        if (!(model->flags(idx) & Qt::ItemIsSelectable))
             continue;
+
+        QString data = model->data(idx, c->role).toString();
+
+        switch (c->filterMode) {
+        case Qt::MatchStartsWith:
+            if (!data.startsWith(str, c->cs))
+                continue;
+            break;
+        case Qt::MatchContains:
+            if (!data.contains(str, c->cs))
+                continue;
+            break;
+        case Qt::MatchEndsWith:
+            if (!data.endsWith(str, c->cs))
+                continue;
+            break;
+        case Qt::MatchExactly:
+        case Qt::MatchFixedString:
+        case Qt::MatchCaseSensitive:
+        case Qt::MatchRegExp:
+        case Qt::MatchWildcard:
+        case Qt::MatchWrap:
+        case Qt::MatchRecursive:
+            Q_UNREACHABLE();
+            break;
+        }
         m->indices.append(indices[i]);
         ++count;
         if (m->exactMatchIndex == -1 && QString::compare(data, str, c->cs) == 0) {
@@ -773,9 +796,9 @@ QMatchData QUnsortedModelEngine::filter(const QString& part, const QModelIndex& 
 
 ///////////////////////////////////////////////////////////////////////////////
 QCompleterPrivate::QCompleterPrivate()
-: widget(0), proxy(0), popup(0), cs(Qt::CaseSensitive), role(Qt::EditRole), column(0),
-  maxVisibleItems(7), sorting(QCompleter::UnsortedModel), wrap(true), eatFocusOut(true),
-  hiddenBecauseNoMatch(false)
+: widget(0), proxy(0), popup(0), filterMode(Qt::MatchStartsWith), cs(Qt::CaseSensitive),
+  role(Qt::EditRole), column(0), maxVisibleItems(7), sorting(QCompleter::UnsortedModel),
+  wrap(true), eatFocusOut(true), hiddenBecauseNoMatch(false)
 {
 }
 
@@ -829,6 +852,7 @@ void QCompleterPrivate::_q_complete(QModelIndex index, bool highlighted)
 
     if (!index.isValid() || (!proxy->showAll && (index.row() >= proxy->engine->matchCount()))) {
         completion = prefix;
+        index = QModelIndex();
     } else {
         if (!(index.flags() & Qt::ItemIsEnabled))
             return;
@@ -1094,6 +1118,48 @@ QCompleter::CompletionMode QCompleter::completionMode() const
 {
     Q_D(const QCompleter);
     return d->mode;
+}
+
+/*!
+    \property QCompleter::filterMode
+    \brief how the filtering is performed
+    \since 5.2
+
+    If filterMode is set to Qt::MatchStartsWith, only those entries that start
+    with the typed characters will be displayed. Qt::MatchContains will display
+    the entries that contain the typed characters, and Qt::MatchEndsWith the
+    ones that end with the typed characters.
+
+    Currently, only these three modes are implemented. Setting filterMode to
+    any other Qt::MatchFlag will issue a warning, and no action will be
+    performed.
+
+    The default mode is Qt::MatchStartsWith.
+*/
+
+void QCompleter::setFilterMode(Qt::MatchFlags filterMode)
+{
+    Q_D(QCompleter);
+
+    if (d->filterMode == filterMode)
+        return;
+
+    if (filterMode != Qt::MatchStartsWith
+            && filterMode != Qt::MatchContains
+            && filterMode != Qt::MatchEndsWith) {
+        qWarning("Unhandled QCompleter::filterMode flag is used.");
+        return;
+    }
+
+    d->filterMode = filterMode;
+    d->proxy->createEngine();
+    d->proxy->invalidate();
+}
+
+Qt::MatchFlags QCompleter::filterMode() const
+{
+    Q_D(const QCompleter);
+    return d->filterMode;
 }
 
 /*!
@@ -1395,8 +1461,8 @@ void QCompleter::complete(const QRect& rect)
 }
 
 /*!
-    Sets the current row to the \a row specified. Returns true if successful;
-    otherwise returns false.
+    Sets the current row to the \a row specified. Returns \c true if successful;
+    otherwise returns \c false.
 
     This function may be used along with currentCompletion() to iterate
     through all the possible completions.

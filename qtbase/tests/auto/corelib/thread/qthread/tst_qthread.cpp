@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -53,11 +45,11 @@
 #ifdef Q_OS_UNIX
 #include <pthread.h>
 #endif
-#if defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
 #include <windows.h>
-#elif defined(Q_OS_WIN)
+#if defined(Q_OS_WIN32)
 #include <process.h>
-#include <windows.h>
+#endif
 #endif
 
 class tst_QThread : public QObject
@@ -105,6 +97,8 @@ private slots:
     void isRunningInFinished();
 
     void customEventDispatcher();
+
+    void requestTermination();
 
 #ifndef Q_OS_WINCE
     void stressTest();
@@ -470,6 +464,9 @@ void tst_QThread::start()
 
 void tst_QThread::terminate()
 {
+#if defined(Q_OS_WINRT)
+    QSKIP("Thread termination is not supported on WinRT.");
+#endif
     Terminate_Thread thread;
     {
         QMutexLocker locker(&thread.mutex);
@@ -533,6 +530,9 @@ void tst_QThread::finished()
 
 void tst_QThread::terminated()
 {
+#if defined(Q_OS_WINRT)
+    QSKIP("Thread termination is not supported on WinRT.");
+#endif
     SignalRecorder recorder;
     Terminate_Thread thread;
     connect(&thread, SIGNAL(finished()), &recorder, SLOT(slot()), Qt::DirectConnection);
@@ -669,7 +669,7 @@ void NativeThreadWrapper::start(FunctionPointer functionPointer, void *data)
 #if defined Q_OS_UNIX
     const int state = pthread_create(&nativeThreadHandle, 0, NativeThreadWrapper::runUnix, this);
     Q_UNUSED(state);
-#elif defined(Q_OS_WINCE)
+#elif defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
         nativeThreadHandle = CreateThread(NULL, 0 , (LPTHREAD_START_ROUTINE)NativeThreadWrapper::runWin , this, 0, NULL);
 #elif defined Q_OS_WIN
     unsigned thrdid = 0;
@@ -689,7 +689,11 @@ void NativeThreadWrapper::join()
 #if defined Q_OS_UNIX
     pthread_join(nativeThreadHandle, 0);
 #elif defined Q_OS_WIN
+#ifndef Q_OS_WINCE
+    WaitForSingleObjectEx(nativeThreadHandle, INFINITE, FALSE);
+#else
     WaitForSingleObject(nativeThreadHandle, INFINITE);
+#endif
     CloseHandle(nativeThreadHandle);
 #endif
 }
@@ -778,7 +782,6 @@ void tst_QThread::adoptedThreadAffinity()
 
 void tst_QThread::adoptedThreadSetPriority()
 {
-
     NativeThreadWrapper nativeThread;
     nativeThread.setWaitForStop();
     nativeThread.startAndWait();
@@ -1343,6 +1346,44 @@ void tst_QThread::quitLock()
     QCOMPARE(job->thread(), &thread);
     loop.exec();
     QVERIFY(exitThreadCalled);
+}
+
+class StopableJob : public QObject
+{
+    Q_OBJECT
+public:
+    StopableJob (QSemaphore &sem) : sem(sem) {}
+    QSemaphore &sem;
+public Q_SLOTS:
+    void run() {
+        sem.release();
+        while (!thread()->isInterruptionRequested())
+            QTest::qSleep(10);
+        sem.release();
+        Q_EMIT finished();
+    }
+Q_SIGNALS:
+    void finished();
+};
+
+void tst_QThread::requestTermination()
+{
+    QThread thread;
+    QVERIFY(!thread.isInterruptionRequested());
+    QSemaphore sem;
+    StopableJob *j  = new StopableJob(sem);
+    j->moveToThread(&thread);
+    connect(&thread, &QThread::started, j, &StopableJob::run);
+    connect(j, &StopableJob::finished, &thread, &QThread::quit, Qt::DirectConnection);
+    connect(&thread, &QThread::finished, j, &QObject::deleteLater);
+    thread.start();
+    QVERIFY(!thread.isInterruptionRequested());
+    sem.acquire();
+    QVERIFY(!thread.wait(1000));
+    thread.requestInterruption();
+    sem.acquire();
+    QVERIFY(thread.wait(1000));
+    QVERIFY(!thread.isInterruptionRequested());
 }
 
 QTEST_MAIN(tst_QThread)

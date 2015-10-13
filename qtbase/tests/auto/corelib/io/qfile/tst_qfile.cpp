@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -59,7 +51,7 @@ extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
 QT_END_NAMESPACE
 #endif
 
-#if !defined(Q_OS_WINCE)
+#if !defined(Q_OS_WINCE) && !defined(QT_NO_NETWORK)
 #include <QHostInfo>
 #endif
 #include <QProcess>
@@ -147,7 +139,7 @@ private slots:
     void readAll_data();
     void readAll();
     void readAllBuffer();
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_PROCESS)
+#if !defined(Q_OS_WINCE)
     void readAllStdin();
     void readLineStdin();
     void readLineStdin_lineByLine();
@@ -181,7 +173,7 @@ private slots:
     void writeTextFile_data();
     void writeTextFile();
     /* void largeFileSupport(); */
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     void largeUncFileSupport();
 #endif
     void flush();
@@ -234,6 +226,8 @@ private slots:
     void mapResource();
     void mapOpenMode_data();
     void mapOpenMode();
+    void mapWrittenFile_data();
+    void mapWrittenFile();
 
 #ifndef Q_OS_WINCE
     void openStandardStreamsFileDescriptors();
@@ -480,7 +474,7 @@ void tst_QFile::exists()
     file.remove();
     QVERIFY(!file.exists());
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     QFile unc("//" + QtNetworkSettings::winServerName() + "/testshare/readme.txt");
     QVERIFY(unc.exists());
 #endif
@@ -527,7 +521,7 @@ void tst_QFile::open_data()
                                   << false << QFile::OpenError;
     QTest::newRow("noreadfile") << QString::fromLatin1(noReadFile) << int(QIODevice::ReadOnly)
                                 << false << QFile::OpenError;
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     //opening devices requires administrative privileges (and elevation).
     HANDLE hTest = CreateFile(_T("\\\\.\\PhysicalDrive0"), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     if (hTest != INVALID_HANDLE_VALUE) {
@@ -605,7 +599,7 @@ void tst_QFile::size_data()
     QTest::addColumn<qint64>("size");
 
     QTest::newRow( "exist01" ) << m_testFile << (qint64)245;
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     // Only test UNC on Windows./
     QTest::newRow("unc") << "//" + QString(QtNetworkSettings::winServerName() + "/testshare/test.pri") << (qint64)34;
 #endif
@@ -874,9 +868,12 @@ void tst_QFile::readAllBuffer()
     QFile::remove(fileName);
 }
 
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_PROCESS)
+#if !defined(Q_OS_WINCE)
 void tst_QFile::readAllStdin()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QByteArray lotsOfData(1024, '@'); // 10 megs
 
     QProcess process;
@@ -893,11 +890,14 @@ void tst_QFile::readAllStdin()
     process.closeWriteChannel();
     process.waitForFinished();
     QCOMPARE(process.readAll().size(), lotsOfData.size() * 5);
+#endif
 }
 
 void tst_QFile::readLineStdin()
 {
-
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QByteArray lotsOfData(1024, '@'); // 10 megs
     for (int i = 0; i < lotsOfData.size(); ++i) {
         if ((i % 32) == 31)
@@ -932,10 +932,14 @@ void tst_QFile::readLineStdin()
                 QCOMPARE(char(array[i]), char('0' + i % 32));
         }
     }
+#endif
 }
 
 void tst_QFile::readLineStdin_lineByLine()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     for (int i = 0; i < 2; ++i) {
         QProcess process;
         process.start(m_stdinProcessDir + QStringLiteral("/stdinprocess"),
@@ -955,6 +959,7 @@ void tst_QFile::readLineStdin_lineByLine()
         process.closeWriteChannel();
         QVERIFY(process.waitForFinished(5000));
     }
+#endif
 }
 #endif
 
@@ -1057,7 +1062,7 @@ void tst_QFile::ungetChar()
     QCOMPARE(buf[2], '4');
 }
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
 QString driveLetters()
 {
     wchar_t volumeName[MAX_PATH];
@@ -1094,7 +1099,7 @@ void tst_QFile::invalidFile_data()
 #if !defined(Q_OS_WIN)
     QTest::newRow( "x11" ) << QString( "qwe//" );
 #else
-#if !defined(Q_OS_WINCE)
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     QTest::newRow( "colon2" ) << invalidDriveLetter() + QString::fromLatin1(":ail:invalid");
 #endif
     QTest::newRow( "colon3" ) << QString( ":failinvalid" );
@@ -1192,6 +1197,13 @@ void tst_QFile::permissions()
 #ifdef Q_OS_WIN
     if (qt_ntfs_permission_lookup)
         QEXPECT_FAIL("readonly", "QTBUG-25630", Abort);
+#endif
+#ifdef Q_OS_UNIX
+    if (strcmp(QTest::currentDataTag(), "readonly") == 0) {
+        // in case accidentally run as root
+        if (::getuid() == 0)
+            QSKIP("Running this test as root doesn't make sense");
+    }
 #endif
     QCOMPARE((memberResult == QFile::Permissions(perms)), expected);
     QCOMPARE((staticResult == QFile::Permissions(perms)), expected);
@@ -1331,10 +1343,12 @@ void tst_QFile::copyFallback()
 
 #ifdef Q_OS_WIN
 #include <objbase.h>
+#ifndef Q_OS_WINPHONE
 #include <shlobj.h>
 #endif
+#endif
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
 static QString getWorkingDirectoryForLink(const QString &linkFileName)
 {
     bool neededCoInit = false;
@@ -1393,7 +1407,7 @@ void tst_QFile::link()
 
     QCOMPARE(QFile::symLinkTarget("myLink.lnk"), referenceTarget);
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     QString wd = getWorkingDirectoryForLink(info2.absoluteFilePath());
     QCOMPARE(QDir::fromNativeSeparators(wd), QDir::cleanPath(info1.absolutePath()));
 #endif
@@ -1530,7 +1544,7 @@ void tst_QFile::writeTextFile()
     QCOMPARE(file.readAll(), out);
 }
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
 void tst_QFile::largeUncFileSupport()
 {
     qint64 size = Q_INT64_C(8589934592);
@@ -2178,7 +2192,7 @@ void tst_QFile::removeOpenFile()
         bool opened = f.open(QIODevice::ReadOnly);
         QVERIFY(opened);
         f.readAll();
-        // this used to only fail on FreeBSD (and Mac OS X)
+        // this used to only fail on FreeBSD (and OS X)
         QVERIFY(f.flush());
         bool removed = f.remove(); // remove should both close and remove the file
         QVERIFY(removed);
@@ -2236,7 +2250,7 @@ void tst_QFile::writeLargeDataBlock_data()
     QTest::newRow("localfile-Fd")     << "./largeblockfile.txt" << (int)OpenFd;
     QTest::newRow("localfile-Stream") << "./largeblockfile.txt" << (int)OpenStream;
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT) && !defined(QT_NO_NETWORK)
     // Some semi-randomness to avoid collisions.
     QTest::newRow("unc file")
         << QString("//" + QtNetworkSettings::winServerName() + "/TESTSHAREWRITABLE/largefile-%1-%2.txt")
@@ -2320,7 +2334,7 @@ void tst_QFile::readFromWriteOnlyFile()
     QFile file("writeonlyfile");
     QVERIFY(file.open(QFile::WriteOnly));
     char c;
-    QTest::ignoreMessage(QtWarningMsg, "QIODevice::read: WriteOnly device");
+    QTest::ignoreMessage(QtWarningMsg, "QIODevice::read (QFile, \"writeonlyfile\"): WriteOnly device");
     QCOMPARE(file.read(&c, 1), qint64(-1));
 }
 
@@ -2329,7 +2343,7 @@ void tst_QFile::writeToReadOnlyFile()
     QFile file("readonlyfile");
     QVERIFY(file.open(QFile::ReadOnly));
     char c = 0;
-    QTest::ignoreMessage(QtWarningMsg, "QIODevice::write: ReadOnly device");
+    QTest::ignoreMessage(QtWarningMsg, "QIODevice::write (QFile, \"readonlyfile\"): ReadOnly device");
     QCOMPARE(file.write(&c, 1), qint64(-1));
 }
 
@@ -2596,7 +2610,7 @@ void tst_QFile::appendAndRead()
 
 void tst_QFile::miscWithUncPathAsCurrentDir()
 {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     QString current = QDir::currentPath();
     QVERIFY(QDir::setCurrent("//" + QtNetworkSettings::winServerName() + "/testshare"));
     QFile file("test.pri");
@@ -2683,8 +2697,12 @@ void tst_QFile::nativeHandleLeaks()
     }
 
 #ifdef Q_OS_WIN
+# ifndef Q_OS_WINRT
     handle1 = ::CreateFileA("qt_file.tmp", GENERIC_READ, 0, NULL,
             OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+# else
+    handle1 = ::CreateFile2(L"qt_file.tmp", GENERIC_READ, 0, OPEN_ALWAYS, NULL);
+# endif
     QVERIFY( INVALID_HANDLE_VALUE != handle1 );
     QVERIFY( ::CloseHandle(handle1) );
 #endif
@@ -2698,8 +2716,12 @@ void tst_QFile::nativeHandleLeaks()
     }
 
 #ifdef Q_OS_WIN
+# ifndef Q_OS_WINRT
     handle2 = ::CreateFileA("qt_file.tmp", GENERIC_READ, 0, NULL,
             OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+# else
+    handle2 = ::CreateFile2(L"qt_file.tmp", GENERIC_READ, 0, OPEN_ALWAYS, NULL);
+# endif
     QVERIFY( INVALID_HANDLE_VALUE != handle2 );
     QVERIFY( ::CloseHandle(handle2) );
 #endif
@@ -3011,17 +3033,21 @@ void tst_QFile::mapResource()
 void tst_QFile::mapOpenMode_data()
 {
     QTest::addColumn<int>("openMode");
+    QTest::addColumn<int>("flags");
 
-    QTest::newRow("ReadOnly") << int(QIODevice::ReadOnly);
+    QTest::newRow("ReadOnly") << int(QIODevice::ReadOnly) << int(QFileDevice::NoOptions);
     //QTest::newRow("WriteOnly") << int(QIODevice::WriteOnly); // this doesn't make sense
-    QTest::newRow("ReadWrite") << int(QIODevice::ReadWrite);
-    QTest::newRow("ReadOnly,Unbuffered") << int(QIODevice::ReadOnly | QIODevice::Unbuffered);
-    QTest::newRow("ReadWrite,Unbuffered") << int(QIODevice::ReadWrite | QIODevice::Unbuffered);
+    QTest::newRow("ReadWrite") << int(QIODevice::ReadWrite) << int(QFileDevice::NoOptions);
+    QTest::newRow("ReadOnly,Unbuffered") << int(QIODevice::ReadOnly | QIODevice::Unbuffered) << int(QFileDevice::NoOptions);
+    QTest::newRow("ReadWrite,Unbuffered") << int(QIODevice::ReadWrite | QIODevice::Unbuffered) << int(QFileDevice::NoOptions);
+    QTest::newRow("ReadOnly + MapPrivate") << int(QIODevice::ReadOnly) << int(QFileDevice::MapPrivateOption);
+    QTest::newRow("ReadWrite + MapPrivate") << int(QIODevice::ReadWrite) << int(QFileDevice::MapPrivateOption);
 }
 
 void tst_QFile::mapOpenMode()
 {
     QFETCH(int, openMode);
+    QFETCH(int, flags);
     static const qint64 fileSize = 4096;
 
     QByteArray pattern(fileSize, 'A');
@@ -3043,11 +3069,15 @@ void tst_QFile::mapOpenMode()
     // open according to our mode
     QVERIFY(file.open(QIODevice::OpenMode(openMode)));
 
-    uchar *memory = file.map(0, fileSize);
+    uchar *memory = file.map(0, fileSize, QFileDevice::MemoryMapFlags(flags));
+#if defined(Q_OS_WINCE)
+    QEXPECT_FAIL("ReadOnly + MapPrivate" , "Windows CE does not support MapPrivateOption.", Abort);
+    QEXPECT_FAIL("ReadWrite + MapPrivate", "Windows CE does not support MapPrivateOption.", Abort);
+#endif
     QVERIFY(memory);
     QVERIFY(memcmp(memory, pattern, fileSize) == 0);
 
-    if (openMode & QIODevice::WriteOnly) {
+    if ((openMode & QIODevice::WriteOnly) || (flags & QFileDevice::MapPrivateOption)) {
         // try to write to the file
         *memory = 'a';
         file.unmap(memory);
@@ -3056,10 +3086,48 @@ void tst_QFile::mapOpenMode()
         file.seek(0);
         char c;
         QVERIFY(file.getChar(&c));
-        QCOMPARE(c, 'a');
+        QCOMPARE(c, (flags & QFileDevice::MapPrivateOption) ? 'A' : 'a');
     }
 
     file.close();
+}
+
+void tst_QFile::mapWrittenFile_data()
+{
+    QTest::addColumn<int>("mode");
+    QTest::newRow("buffered") << 0;
+    QTest::newRow("unbuffered") << int(QIODevice::Unbuffered);
+}
+
+void tst_QFile::mapWrittenFile()
+{
+    static const char data[128] = "Some data padded with nulls\n";
+    QFETCH(int, mode);
+
+    QString fileName = QDir::currentPath() + '/' + "qfile_map_testfile";
+
+#ifdef Q_OS_WINCE
+     fileName = QFileInfo(fileName).absoluteFilePath();
+#endif
+
+    if (QFile::exists(fileName)) {
+        QVERIFY(QFile::setPermissions(fileName,
+            QFile::WriteOwner | QFile::ReadOwner | QFile::WriteUser | QFile::ReadUser));
+        QFile::remove(fileName);
+    }
+    QFile file(fileName);
+    QVERIFY(file.open(QIODevice::ReadWrite | QFile::OpenMode(mode)));
+    QCOMPARE(file.write(data, sizeof data), qint64(sizeof data));
+    if ((mode & QIODevice::Unbuffered) == 0)
+        file.flush();
+
+    // test that we can read the data we've just written, without closing the file
+    uchar *memory = file.map(0, sizeof data);
+    QVERIFY(memory);
+    QVERIFY(memcmp(memory, data, sizeof data) == 0);
+
+    file.close();
+    file.remove();
 }
 
 void tst_QFile::openDirectory()
@@ -3248,11 +3316,14 @@ void tst_QFile::objectConstructors()
 
 void tst_QFile::caseSensitivity()
 {
-#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
+#if defined(Q_OS_WIN)
     const bool caseSensitive = false;
+#elif defined(Q_OS_MAC)
+     const bool caseSensitive = pathconf(QDir::currentPath().toLatin1().constData(), _PC_CASE_SENSITIVE);
 #else
     const bool caseSensitive = true;
 #endif
+
     QByteArray testData("a little test");
     QString filename("File.txt");
     {

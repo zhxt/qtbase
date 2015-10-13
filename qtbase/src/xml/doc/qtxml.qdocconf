@@ -2,7 +2,6 @@ include($QT_INSTALL_DOCS/global/qt-module-defaults.qdocconf)
 
 project                 = QtXml
 description             = Qt XML Reference Documentation
-url                     = http://qt-project.org/doc/qt-$QT_VER/qtxml
 version                 = $QT_VERSION
 
 examplesinstallpath     = xml
@@ -27,16 +26,20 @@ qhp.QtXml.subprojects.classes.sortPages = true
 
 tagfile                 = ../../../doc/qtxml/qtxml.tags
 
-depends                 += qtcore qtnetwork
+depends                 += qtcore qtnetwork qtdoc qtwidgets qmake
 
 headerdirs  += ..
 
-sourcedirs  += .. \
-               ../../../examples/xml/doc/src
+sourcedirs  += ..
 
 exampledirs += ../../../examples/xml \
-               ../ \
                snippets
 
 imagedirs   += images \
                ../../../examples/xml/images
+
+navigation.landingpage = "Qt XML"
+navigation.cppclassespage = "Qt XML C++ Classes"
+
+# Add a thumbnail for examples that do not have images
+manifestmeta.thumbnail.names = "QtXml/XML Stream Lint Example"

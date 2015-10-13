@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -93,7 +85,18 @@
 #include <QtCore/qpair.h>
 #include <QtGui/qmatrix.h>
 
+#include <algorithm>
+
 QT_BEGIN_NAMESPACE
+
+static inline bool check_step_valid(qreal step, const char *method)
+{
+    if (!(step >= 0 && step <= 1)) {
+        qWarning("QGraphicsItemAnimation::%s: invalid step = %f", method, step);
+        return false;
+    }
+    return true;
+}
 
 class QGraphicsItemAnimationPrivate
 {
@@ -167,19 +170,17 @@ qreal QGraphicsItemAnimationPrivate::linearValueForStep(qreal step, QList<Pair> 
 
 void QGraphicsItemAnimationPrivate::insertUniquePair(qreal step, qreal value, QList<Pair> *binList, const char* method)
 {
-    if (step < 0.0 || step > 1.0) {
-        qWarning("QGraphicsItemAnimation::%s: invalid step = %f", method, step);
+    if (!check_step_valid(step, method))
         return;
-    }
 
     Pair pair(step, value);
 
-    QList<Pair>::iterator result = qBinaryFind(binList->begin(), binList->end(), pair);
-    if (result != binList->end())
+    QList<Pair>::iterator result = std::lower_bound(binList->begin(), binList->end(), pair);
+    if ((result != binList->end()) && !(pair < *result))
         result->value = value;
     else {
         *binList << pair;
-        qSort(binList->begin(), binList->end());
+        std::sort(binList->begin(), binList->end());
     }
 }
 
@@ -257,9 +258,7 @@ void QGraphicsItemAnimation::setTimeLine(QTimeLine *timeLine)
 */
 QPointF QGraphicsItemAnimation::posAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::posAt: invalid step = %f", step);
-
+    check_step_valid(step, "posAt");
     return QPointF(d->linearValueForStep(step, &d->xPosition, d->startPos.x()),
                    d->linearValueForStep(step, &d->yPosition, d->startPos.y()));
 }
@@ -296,8 +295,7 @@ QList<QPair<qreal, QPointF> > QGraphicsItemAnimation::posList() const
 */
 QMatrix QGraphicsItemAnimation::matrixAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::matrixAt: invalid step = %f", step);
+    check_step_valid(step, "matrixAt");
 
     QMatrix matrix;
     if (!d->rotation.isEmpty())
@@ -318,9 +316,7 @@ QMatrix QGraphicsItemAnimation::matrixAt(qreal step) const
 */
 qreal QGraphicsItemAnimation::rotationAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::rotationAt: invalid step = %f", step);
-
+    check_step_valid(step, "rotationAt");
     return d->linearValueForStep(step, &d->rotation);
 }
 
@@ -355,9 +351,7 @@ QList<QPair<qreal, qreal> > QGraphicsItemAnimation::rotationList() const
 */
 qreal QGraphicsItemAnimation::xTranslationAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::xTranslationAt: invalid step = %f", step);
-
+    check_step_valid(step, "xTranslationAt");
     return d->linearValueForStep(step, &d->xTranslation);
 }
 
@@ -368,9 +362,7 @@ qreal QGraphicsItemAnimation::xTranslationAt(qreal step) const
 */
 qreal QGraphicsItemAnimation::yTranslationAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::yTranslationAt: invalid step = %f", step);
-
+    check_step_valid(step, "yTranslationAt");
     return d->linearValueForStep(step, &d->yTranslation);
 }
 
@@ -407,8 +399,7 @@ QList<QPair<qreal, QPointF> > QGraphicsItemAnimation::translationList() const
 */
 qreal QGraphicsItemAnimation::verticalScaleAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::verticalScaleAt: invalid step = %f", step);
+    check_step_valid(step, "verticalScaleAt");
 
     return d->linearValueForStep(step, &d->verticalScale, 1);
 }
@@ -420,9 +411,7 @@ qreal QGraphicsItemAnimation::verticalScaleAt(qreal step) const
 */
 qreal QGraphicsItemAnimation::horizontalScaleAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::horizontalScaleAt: invalid step = %f", step);
-
+    check_step_valid(step, "horizontalScaleAt");
     return d->linearValueForStep(step, &d->horizontalScale, 1);
 }
 
@@ -459,9 +448,7 @@ QList<QPair<qreal, QPointF> > QGraphicsItemAnimation::scaleList() const
 */
 qreal QGraphicsItemAnimation::verticalShearAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::verticalShearAt: invalid step = %f", step);
-
+    check_step_valid(step, "verticalShearAt");
     return d->linearValueForStep(step, &d->verticalShear, 0);
 }
 
@@ -472,9 +459,7 @@ qreal QGraphicsItemAnimation::verticalShearAt(qreal step) const
 */
 qreal QGraphicsItemAnimation::horizontalShearAt(qreal step) const
 {
-    if (step < 0.0 || step > 1.0)
-        qWarning("QGraphicsItemAnimation::horizontalShearAt: invalid step = %f", step);
-
+    check_step_valid(step, "horizontalShearAt");
     return d->linearValueForStep(step, &d->horizontalShear, 0);
 }
 
@@ -527,19 +512,17 @@ void QGraphicsItemAnimation::clear()
   Sets the current \a step value for the animation, causing the
   transformations scheduled at this step to be performed.
 */
-void QGraphicsItemAnimation::setStep(qreal x)
+void QGraphicsItemAnimation::setStep(qreal step)
 {
-    if (x < 0.0 || x > 1.0) {
-        qWarning("QGraphicsItemAnimation::setStep: invalid step = %f", x);
+    if (!check_step_valid(step, "setStep"))
         return;
-    }
 
-    beforeAnimationStep(x);
+    beforeAnimationStep(step);
 
-    d->step = x;
+    d->step = step;
     if (d->item) {
         if (!d->xPosition.isEmpty() || !d->yPosition.isEmpty())
-            d->item->setPos(posAt(x));
+            d->item->setPos(posAt(step));
         if (!d->rotation.isEmpty()
             || !d->verticalScale.isEmpty()
             || !d->horizontalScale.isEmpty()
@@ -547,11 +530,11 @@ void QGraphicsItemAnimation::setStep(qreal x)
             || !d->horizontalShear.isEmpty()
             || !d->xTranslation.isEmpty()
             || !d->yTranslation.isEmpty()) {
-            d->item->setMatrix(d->startMatrix * matrixAt(x));
+            d->item->setMatrix(d->startMatrix * matrixAt(step));
         }
     }
 
-    afterAnimationStep(x);
+    afterAnimationStep(step);
 }
 
 /*!

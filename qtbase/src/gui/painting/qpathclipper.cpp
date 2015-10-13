@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +37,7 @@
 #include <private/qdatabuffer_p.h>
 #include <private/qnumeric_p.h>
 #include <qmath.h>
+#include <algorithm>
 
 /**
   The algorithm is as follows:
@@ -824,7 +817,7 @@ void QWingedEdge::intersectAndAdd()
             }
         }
 
-        qSort(intersections.data(), intersections.data() + intersections.size());
+        std::sort(intersections.data(), intersections.data() + intersections.size());
 
         int first = m_segments.segmentAt(i).va;
         int second = m_segments.segmentAt(i).vb;
@@ -1034,16 +1027,6 @@ qreal QWingedEdge::delta(int vertex, int a, int b) const
         return result + 128.;
     else
         return result;
-}
-
-static inline QPointF midPoint(const QWingedEdge &list, int ei)
-{
-    const QPathEdge *ep = list.edge(ei);
-    Q_ASSERT(ep);
-
-    const QPointF a = *list.vertex(ep->first);
-    const QPointF b = *list.vertex(ep->second);
-    return a + 0.5 * (b - a);
 }
 
 QWingedEdge::TraversalStatus QWingedEdge::findInsertStatus(int vi, int ei) const
@@ -1661,7 +1644,7 @@ bool QPathClipper::doClip(QWingedEdge &list, ClipperMode mode)
     for (int i = 0; i < list.vertexCount(); ++i)
         y_coords << list.vertex(i)->y;
 
-    qSort(y_coords.begin(), y_coords.end());
+    std::sort(y_coords.begin(), y_coords.end());
     y_coords.resize(qRemoveDuplicates(y_coords.begin(), y_coords.end(), fuzzyCompare) - y_coords.begin());
 
 #ifdef QDEBUG_CLIPPER
@@ -1837,7 +1820,7 @@ bool QPathClipper::handleCrossingEdges(QWingedEdge &list, qreal y, ClipperMode m
     QVector<QCrossingEdge> crossings = findCrossings(list, y);
 
     Q_ASSERT(!crossings.isEmpty());
-    qSort(crossings.begin(), crossings.end());
+    std::sort(crossings.begin(), crossings.end());
 
     int windingA = 0;
     int windingB = 0;

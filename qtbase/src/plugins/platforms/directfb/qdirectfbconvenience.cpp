@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -281,22 +273,40 @@ QDirectFbKeyMap::QDirectFbKeyMap()
     insert(DIKS_CLEAR                 , Qt::Key_Clear);
     insert(DIKS_MENU                  , Qt::Key_Menu);
     insert(DIKS_HELP                  , Qt::Key_Help);
+    insert(DIKS_INFO                  , Qt::Key_Info);
+    insert(DIKS_EXIT                  , Qt::Key_Exit);
+    insert(DIKS_SETUP                 , Qt::Key_Settings);
 
+    insert(DIKS_CD                    , Qt::Key_CD);
     insert(DIKS_INTERNET              , Qt::Key_HomePage);
     insert(DIKS_MAIL                  , Qt::Key_LaunchMail);
     insert(DIKS_FAVORITES             , Qt::Key_Favorites);
+    insert(DIKS_PHONE                 , Qt::Key_Phone);
+    insert(DIKS_PROGRAM               , Qt::Key_Guide);
+    insert(DIKS_TIME                  , Qt::Key_Time);
+
+    insert(DIKS_RED                   , Qt::Key_Red);
+    insert(DIKS_GREEN                 , Qt::Key_Green);
+    insert(DIKS_YELLOW                , Qt::Key_Yellow);
+    insert(DIKS_BLUE                  , Qt::Key_Blue);
+
+    insert(DIKS_CHANNEL_UP            , Qt::Key_ChannelUp);
+    insert(DIKS_CHANNEL_DOWN          , Qt::Key_ChannelDown);
 
     insert(DIKS_BACK                  , Qt::Key_Back);
     insert(DIKS_FORWARD               , Qt::Key_Forward);
     insert(DIKS_VOLUME_UP             , Qt::Key_VolumeUp);
     insert(DIKS_VOLUME_DOWN           , Qt::Key_VolumeDown);
     insert(DIKS_MUTE                  , Qt::Key_VolumeMute);
-    insert(DIKS_PLAYPAUSE             , Qt::Key_Pause);
+    insert(DIKS_PLAYPAUSE             , Qt::Key_MediaTogglePlayPause);
     insert(DIKS_PLAY                  , Qt::Key_MediaPlay);
     insert(DIKS_STOP                  , Qt::Key_MediaStop);
     insert(DIKS_RECORD                , Qt::Key_MediaRecord);
     insert(DIKS_PREVIOUS              , Qt::Key_MediaPrevious);
     insert(DIKS_NEXT                  , Qt::Key_MediaNext);
+    insert(DIKS_REWIND                , Qt::Key_AudioRewind);
+    insert(DIKS_FASTFORWARD           , Qt::Key_AudioForward);
+    insert(DIKS_SUBTITLE              , Qt::Key_Subtitle);
 
     insert(DIKS_F1                    , Qt::Key_F1);
     insert(DIKS_F2                    , Qt::Key_F2);

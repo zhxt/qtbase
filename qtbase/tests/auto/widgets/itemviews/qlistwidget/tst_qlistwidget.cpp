@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,7 +35,6 @@
 #include <QtTest/QtTest>
 #include <QtGui/QtGui>
 #include <QtWidgets/QtWidgets>
-#include <qeventloop.h>
 #include <qlist.h>
 
 #include <qlistwidget.h>
@@ -132,7 +123,7 @@ private slots:
     void task258949_keypressHangup();
     void QTBUG8086_currentItemChangedOnClick();
     void QTBUG14363_completerWithAnyKeyPressedEditTriggers();
-
+    void mimeData();
 
 protected slots:
     void rowsAboutToBeInserted(const QModelIndex &parent, int first, int last)
@@ -209,14 +200,7 @@ void tst_QListWidget::cleanupTestCase()
 void tst_QListWidget::init()
 {
     testWidget->clear();
-
-    if (testWidget->viewport()->children().count() > 0) {
-        QEventLoop eventLoop;
-        for (int i=0; i < testWidget->viewport()->children().count(); ++i)
-            connect(testWidget->viewport()->children().at(i), SIGNAL(destroyed()), &eventLoop, SLOT(quit()));
-        QTimer::singleShot(100, &eventLoop, SLOT(quit()));
-        eventLoop.exec();
-    }
+    QCoreApplication::sendPostedEvents(0, QEvent::DeferredDelete);
 }
 
 void tst_QListWidget::checkDefaultValues()
@@ -317,12 +301,7 @@ void tst_QListWidget::closePersistentEditor()
     // actual test
     childCount = testWidget->viewport()->children().count();
     testWidget->closePersistentEditor(item);
-    // Spin the event loop and hopefully it will die.
-    QEventLoop eventLoop;
-    for (int i=0; i < childCount; ++i)
-        connect(testWidget->viewport()->children().at(i), SIGNAL(destroyed()), &eventLoop, SLOT(quit()));
-    QTimer::singleShot(100, &eventLoop, SLOT(quit()));
-    eventLoop.exec();
+    QCoreApplication::sendPostedEvents(0, QEvent::DeferredDelete);
     QCOMPARE(testWidget->viewport()->children().count(), childCount - 1);
 }
 
@@ -626,21 +605,21 @@ void tst_QListWidget::insertItems()
 void tst_QListWidget::itemAssignment()
 {
     QListWidgetItem itemInWidget("inWidget", testWidget);
-    itemInWidget.setFlags(itemInWidget.flags() | Qt::ItemIsTristate);
+    itemInWidget.setFlags(itemInWidget.flags() | Qt::ItemIsUserTristate);
     QListWidgetItem itemOutsideWidget("outsideWidget");
 
     QVERIFY(itemInWidget.listWidget());
     QCOMPARE(itemInWidget.text(), QString("inWidget"));
-    QVERIFY(itemInWidget.flags() & Qt::ItemIsTristate);
+    QVERIFY(itemInWidget.flags() & Qt::ItemIsUserTristate);
 
     QVERIFY(!itemOutsideWidget.listWidget());
     QCOMPARE(itemOutsideWidget.text(), QString("outsideWidget"));
-    QVERIFY(!(itemOutsideWidget.flags() & Qt::ItemIsTristate));
+    QVERIFY(!(itemOutsideWidget.flags() & Qt::ItemIsUserTristate));
 
     itemOutsideWidget = itemInWidget;
     QVERIFY(!itemOutsideWidget.listWidget());
     QCOMPARE(itemOutsideWidget.text(), QString("inWidget"));
-    QVERIFY(itemOutsideWidget.flags() & Qt::ItemIsTristate);
+    QVERIFY(itemOutsideWidget.flags() & Qt::ItemIsUserTristate);
 }
 
 void tst_QListWidget::item_data()
@@ -1101,8 +1080,11 @@ public:
 
     bool isEditingState(QListWidgetItem *item) {
         Q_UNUSED(item);
-        return (QListWidget::state() == QListWidget::EditingState ? true : false);
+        return QListWidget::state() == QListWidget::EditingState;
     }
+
+    using QListWidget::mimeData;
+    using QListWidget::indexFromItem;
 };
 
 void tst_QListWidget::closeEditor()
@@ -1588,7 +1570,7 @@ void tst_QListWidget::task217070_scrollbarsAdjusted()
     for(int f=150; f>90 ; f--) {
         v.resize(f,100);
         QTest::qWait(30);
-        QVERIFY(vbar->style()->styleHint(QStyle::SH_ScrollBar_Transient) || vbar->isVisible());
+        QVERIFY(vbar->style()->styleHint(QStyle::SH_ScrollBar_Transient, 0, vbar) || vbar->isVisible());
         //the horizontal scrollbar must not be visible.
         QVERIFY(!hbar->isVisible());
     }
@@ -1646,29 +1628,29 @@ void tst_QListWidget::QTBUG8086_currentItemChangedOnClick()
 class ItemDelegate : public QItemDelegate
 {
 public:
-	ItemDelegate(QObject *parent = 0) : QItemDelegate(parent)
-	{}
-	virtual QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &) const
-	{
-		QLineEdit *lineEdit = new QLineEdit(parent);
-		lineEdit->setFrame(false);
-		QCompleter *completer = new QCompleter(QStringList() << "completer", lineEdit);
-		completer->setCompletionMode(QCompleter::InlineCompletion);
-		lineEdit->setCompleter(completer);
-		return lineEdit;
-	}
+    ItemDelegate(QObject *parent = 0) : QItemDelegate(parent)
+    {}
+    virtual QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &) const
+    {
+        QLineEdit *lineEdit = new QLineEdit(parent);
+        lineEdit->setFrame(false);
+        QCompleter *completer = new QCompleter(QStringList() << "completer", lineEdit);
+        completer->setCompletionMode(QCompleter::InlineCompletion);
+        lineEdit->setCompleter(completer);
+        return lineEdit;
+    }
 };
 
 void tst_QListWidget::QTBUG14363_completerWithAnyKeyPressedEditTriggers()
 {
-	QListWidget listWidget;
-	listWidget.setEditTriggers(QAbstractItemView::AnyKeyPressed);
+    QListWidget listWidget;
+    listWidget.setEditTriggers(QAbstractItemView::AnyKeyPressed);
     listWidget.setItemDelegate(new ItemDelegate);
     QListWidgetItem *item = new QListWidgetItem(QLatin1String("select an item (don't start editing)"), &listWidget);
     item->setFlags(Qt::ItemIsEnabled|Qt::ItemIsSelectable|Qt::ItemIsEditable);
     new QListWidgetItem(QLatin1String("try to type the letter 'c'"), &listWidget);
     new QListWidgetItem(QLatin1String("completer"), &listWidget);
-	listWidget.show();
+    listWidget.show();
     listWidget.setCurrentItem(item);
     qApp->setActiveWindow(&listWidget);
     QVERIFY(QTest::qWaitForWindowActive(&listWidget));
@@ -1683,7 +1665,57 @@ void tst_QListWidget::QTBUG14363_completerWithAnyKeyPressedEditTriggers()
     QCOMPARE(le->completer()->currentCompletion(), QString("completer"));
 }
 
+void tst_QListWidget::mimeData()
+{
+    TestListWidget list;
 
+    for (int x = 0; x < 10; ++x) {
+        QListWidgetItem *item = new QListWidgetItem(QStringLiteral("123"));
+        list.addItem(item);
+    }
+
+    QList<QListWidgetItem *> tableWidgetItemList;
+    QModelIndexList modelIndexList;
+
+    // do these checks more than once to ensure that the "cached indexes" work as expected
+    QVERIFY(!list.mimeData(tableWidgetItemList));
+    QVERIFY(!list.model()->mimeData(modelIndexList));
+    QVERIFY(!list.model()->mimeData(modelIndexList));
+    QVERIFY(!list.mimeData(tableWidgetItemList));
+
+    tableWidgetItemList << list.item(1);
+    modelIndexList << list.indexFromItem(list.item(1));
+
+    QMimeData *data;
+
+    QVERIFY(data = list.mimeData(tableWidgetItemList));
+    delete data;
+
+    QVERIFY(data = list.model()->mimeData(modelIndexList));
+    delete data;
+
+    QVERIFY(data = list.model()->mimeData(modelIndexList));
+    delete data;
+
+    QVERIFY(data = list.mimeData(tableWidgetItemList));
+    delete data;
+
+    // check the saved data is actually the same
+
+    QMimeData *data2;
+
+    data = list.mimeData(tableWidgetItemList);
+    data2 = list.model()->mimeData(modelIndexList);
+
+    const QString format = QStringLiteral("application/x-qabstractitemmodeldatalist");
+
+    QVERIFY(data->hasFormat(format));
+    QVERIFY(data2->hasFormat(format));
+    QVERIFY(data->data(format) == data2->data(format));
+
+    delete data;
+    delete data2;
+}
 
 QTEST_MAIN(tst_QListWidget)
 #include "tst_qlistwidget.moc"

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author James Turner <james.turner@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -50,9 +42,11 @@
 #include <QtGui/QGuiApplication>
 #include <QtCore/QDebug>
 
+QT_BEGIN_NAMESPACE
+
 static QList<QCocoaMenuBar*> static_menubars;
 
-static inline QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *getMenuLoader()
+static inline QCocoaMenuLoader *getMenuLoader()
 {
     return [NSApp QT_MANGLE_NAMESPACE(qt_qcocoamenuLoader)];
 }
@@ -79,6 +73,10 @@ QCocoaMenuBar::~QCocoaMenuBar()
 
     if (m_window && m_window->menubar() == this) {
         m_window->setMenubar(0);
+        // Delete the children first so they do not cause
+        // the native menu items to be hidden after
+        // the menu bar was updated
+        qDeleteAll(children());
         updateMenuBarImmediately();
     }
 }
@@ -96,7 +94,9 @@ void QCocoaMenuBar::insertNativeMenu(QCocoaMenu *menu, QCocoaMenu *beforeMenu)
 
     menu->setMenuBar(this);
     syncMenu(static_cast<QPlatformMenu *>(menu));
-    [m_nativeMenu setSubmenu: menu->nsMenu() forItem: menu->nsMenuItem()];
+    if (menu->isVisible()) {
+        [m_nativeMenu setSubmenu: menu->nsMenu() forItem: menu->nsMenuItem()];
+    }
 }
 
 void QCocoaMenuBar::insertMenu(QPlatformMenu *platformMenu, QPlatformMenu *before)
@@ -120,6 +120,8 @@ void QCocoaMenuBar::insertMenu(QPlatformMenu *platformMenu, QPlatformMenu *befor
     m_menus.insert(beforeMenu ? m_menus.indexOf(beforeMenu) : m_menus.size(), menu);
     if (!menu->menuBar())
         insertNativeMenu(menu, beforeMenu);
+    if (m_window && m_window->window()->isActive())
+        updateMenuBarImmediately();
 }
 
 void QCocoaMenuBar::removeNativeMenu(QCocoaMenu *menu)
@@ -145,19 +147,23 @@ void QCocoaMenuBar::removeMenu(QPlatformMenu *platformMenu)
 
 void QCocoaMenuBar::syncMenu(QPlatformMenu *menu)
 {
+    QCocoaAutoReleasePool pool;
+
     QCocoaMenu *cocoaMenu = static_cast<QCocoaMenu *>(menu);
     Q_FOREACH (QCocoaMenuItem *item, cocoaMenu->items())
         cocoaMenu->syncMenuItem(item);
 
-    // If the NSMenu has no visble items, or only separators, we should hide it
-    // on the menubar. This can happen after syncing the menu items since they
-    // can be moved to other menus.
     BOOL shouldHide = YES;
-    for (NSMenuItem *item in [cocoaMenu->nsMenu() itemArray])
-        if (![item isSeparatorItem] && ![item isHidden]) {
-            shouldHide = NO;
-            break;
-        }
+    if (cocoaMenu->isVisible()) {
+        // If the NSMenu has no visble items, or only separators, we should hide it
+        // on the menubar. This can happen after syncing the menu items since they
+        // can be moved to other menus.
+        for (NSMenuItem *item in [cocoaMenu->nsMenu() itemArray])
+            if (![item isSeparatorItem] && ![item isHidden]) {
+                shouldHide = NO;
+                break;
+            }
+    }
     [cocoaMenu->nsMenuItem() setHidden:shouldHide];
 }
 
@@ -173,6 +179,7 @@ void QCocoaMenuBar::handleReparent(QWindow *newParentWindow)
     if (newParentWindow == NULL) {
         m_window = NULL;
     } else {
+        newParentWindow->create();
         m_window = static_cast<QCocoaWindow*>(newParentWindow->handle());
         m_window->setMenubar(this);
     }
@@ -198,11 +205,69 @@ QCocoaMenuBar *QCocoaMenuBar::findGlobalMenubar()
     return NULL;
 }
 
+void QCocoaMenuBar::redirectKnownMenuItemsToFirstResponder()
+{
+    // QTBUG-17291: http://forums.macrumors.com/showthread.php?t=1249452
+    // When a dialog is opened, shortcuts for actions inside the dialog (cut, paste, ...)
+    // continue to go through the same menu items which claimed those shortcuts.
+    // They are not keystrokes which we can intercept in any other way; the OS intercepts them.
+    // The menu items had to be created by the application.  That's why we need roles
+    // to identify those "special" menu items which can be useful even when non-Qt
+    // native widgets are in focus.  When the native widget is focused it will be the
+    // first responder, so the menu item needs to have its target be the first responder;
+    // this is done by setting it to nil.
+
+    // This function will find all menu items on all menus which have
+    // "special" roles, set the target and also set the standard actions which
+    // apply to those roles.  But afterwards it is necessary to call
+    // resetKnownMenuItemsToQt() to put back the target and action so that
+    // those menu items will go back to invoking their associated QActions.
+    foreach (QCocoaMenuBar *mb, static_menubars)
+        foreach (QCocoaMenu *m, mb->m_menus)
+            foreach (QCocoaMenuItem *i, m->items()) {
+                bool known = true;
+                switch (i->effectiveRole()) {
+                case QPlatformMenuItem::CutRole:
+                    [i->nsItem() setAction:@selector(cut:)];
+                    break;
+                case QPlatformMenuItem::CopyRole:
+                    [i->nsItem() setAction:@selector(copy:)];
+                    break;
+                case QPlatformMenuItem::PasteRole:
+                    [i->nsItem() setAction:@selector(paste:)];
+                    break;
+                case QPlatformMenuItem::SelectAllRole:
+                    [i->nsItem() setAction:@selector(selectAll:)];
+                    break;
+                // We may discover later that there are other roles/actions which
+                // are meaningful to standard native widgets; they can be added.
+                default:
+                    known = false;
+                    break;
+                }
+                if (known)
+                    [i->nsItem() setTarget:nil];
+            }
+}
+
+void QCocoaMenuBar::resetKnownMenuItemsToQt()
+{
+    // Undo the effect of redirectKnownMenuItemsToFirstResponder():
+    // set the menu items' actions to itemFired and their targets to
+    // the QCocoaMenuDelegate.
+    updateMenuBarImmediately();
+}
+
 void QCocoaMenuBar::updateMenuBarImmediately()
 {
     QCocoaAutoReleasePool pool;
     QCocoaMenuBar *mb = findGlobalMenubar();
     QCocoaWindow *cw = findWindowForMenubar();
+
+    QWindow *win = cw ? cw->window() : 0;
+    if (win && (win->flags() & Qt::Popup) == Qt::Popup)
+        return; // context menus, comboboxes, etc. don't need to update the menubar
+
     if (cw && cw->menubar())
         mb = cw->menubar();
 
@@ -233,7 +298,7 @@ void QCocoaMenuBar::updateMenuBarImmediately()
         }
     }
 
-    QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *loader = getMenuLoader();
+    QCocoaMenuLoader *loader = getMenuLoader();
     [loader ensureAppMenuInMenu:mb->nsMenu()];
 
     NSMutableSet *mergedItems = [[NSMutableSet setWithCapacity:0] retain];
@@ -309,3 +374,15 @@ QPlatformMenu *QCocoaMenuBar::menuForTag(quintptr tag) const
 
     return 0;
 }
+
+NSMenuItem *QCocoaMenuBar::itemForRole(QPlatformMenuItem::MenuRole r)
+{
+    foreach (QCocoaMenu *m, m_menus)
+        foreach (QCocoaMenuItem *i, m->items())
+            if (i->effectiveRole() == r)
+                return i->nsItem();
+    return Q_NULLPTR;
+}
+
+QT_END_NAMESPACE
+

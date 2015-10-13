@@ -19,3 +19,4 @@ wince* {
 } else {
     DEFINES += SRCDIR=\\\"$$PWD/\\\"
 }
+

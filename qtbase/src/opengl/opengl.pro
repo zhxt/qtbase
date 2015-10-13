@@ -8,15 +8,10 @@ irix-cc*:QMAKE_CXXFLAGS += -no_prelink -ptused
 
 QMAKE_DOCS = $$PWD/doc/qtopengl.qdocconf
 
-ANDROID_LIB_DEPENDENCY_REPLACEMENTS = \
-    "plugins/platforms/android/libqtforandroid.so:plugins/platforms/android/libqtforandroidGL.so"
-
 load(qt_module)
 
 contains(QT_CONFIG, opengl):CONFIG += opengl
-contains(QT_CONFIG, opengles1):CONFIG += opengles1
 contains(QT_CONFIG, opengles2):CONFIG += opengles2
-contains(QT_CONFIG, egl):CONFIG += egl
 
 HEADERS += qgl.h \
            qgl_p.h \
@@ -58,5 +53,3 @@ SOURCES +=  qglshaderprogram.cpp \
             gl2paintengineex/qpaintengineex_opengl2.cpp \
             gl2paintengineex/qglcustomshaderstage.cpp \
             gl2paintengineex/qtextureglyphcache_gl.cpp
-
-SOURCES +=  qgl_qpa.cpp

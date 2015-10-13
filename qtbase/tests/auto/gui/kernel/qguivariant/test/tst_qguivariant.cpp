@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -114,9 +106,11 @@ private slots:
 
     void writeToReadFromDataStream_data();
     void writeToReadFromDataStream();
+    void writeToReadFromOldDataStream();
 
     void colorInteger();
     void invalidQColor();
+    void validQColor();
 
     void debugStream_data();
     void debugStream();
@@ -124,6 +118,8 @@ private slots:
     void implicitConstruction();
 
     void guiVariantAtExit();
+
+    void iconEquality();
 };
 
 void tst_QGuiVariant::constructor_invalid_data()
@@ -141,18 +137,16 @@ void tst_QGuiVariant::constructor_invalid()
 
     QFETCH(uint, typeId);
     {
-        MessageHandlerInvalidType msg;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Trying to construct an instance of an invalid type, type id:"));
         QVariant variant(static_cast<QVariant::Type>(typeId));
         QVERIFY(!variant.isValid());
         QVERIFY(variant.userType() == QMetaType::UnknownType);
-        QVERIFY(msg.ok);
     }
     {
-        MessageHandlerInvalidType msg;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Trying to construct an instance of an invalid type, type id:"));
         QVariant variant(typeId, /* copy */ 0);
         QVERIFY(!variant.isValid());
         QVERIFY(variant.userType() == QMetaType::UnknownType);
-        QVERIFY(msg.ok);
     }
 }
 
@@ -451,8 +445,8 @@ void tst_QGuiVariant::vector2D()
     QVariant variant;
     QVector2D vector = qvariant_cast<QVector2D>(variant);
     QVERIFY(vector.isNull());
-    variant.setValue(QVector2D(0.1, 0.2));
-    QCOMPARE(QVector2D(0.1, 0.2), qvariant_cast<QVector2D>(variant));
+    variant.setValue(QVector2D(0.1f, 0.2f));
+    QCOMPARE(QVector2D(0.1f, 0.2f), qvariant_cast<QVector2D>(variant));
 
     void *pvector = QMetaType::create(QVariant::Vector2D, 0);
     QVERIFY(pvector);
@@ -464,8 +458,8 @@ void tst_QGuiVariant::vector3D()
     QVariant variant;
     QVector3D vector = qvariant_cast<QVector3D>(variant);
     QVERIFY(vector.isNull());
-    variant.setValue(QVector3D(0.1, 0.2, 0.3));
-    QCOMPARE(QVector3D(0.1, 0.2, 0.3), qvariant_cast<QVector3D>(variant));
+    variant.setValue(QVector3D(0.1f, 0.2f, 0.3f));
+    QCOMPARE(QVector3D(0.1f, 0.2f, 0.3f), qvariant_cast<QVector3D>(variant));
 
     void *pvector = QMetaType::create(QVariant::Vector3D, 0);
     QVERIFY(pvector);
@@ -477,8 +471,8 @@ void tst_QGuiVariant::vector4D()
     QVariant variant;
     QVector4D vector = qvariant_cast<QVector4D>(variant);
     QVERIFY(vector.isNull());
-    variant.setValue(QVector4D(0.1, 0.2, 0.3, 0.4));
-    QCOMPARE(QVector4D(0.1, 0.2, 0.3, 0.4), qvariant_cast<QVector4D>(variant));
+    variant.setValue(QVector4D(0.1f, 0.2f, 0.3f, 0.4f));
+    QCOMPARE(QVector4D(0.1f, 0.2f, 0.3f, 0.4f), qvariant_cast<QVector4D>(variant));
 
     void *pvector = QMetaType::create(QVariant::Vector4D, 0);
     QVERIFY(pvector);
@@ -490,8 +484,8 @@ void tst_QGuiVariant::quaternion()
     QVariant variant;
     QQuaternion quaternion = qvariant_cast<QQuaternion>(variant);
     QVERIFY(quaternion.isIdentity());
-    variant.setValue(QQuaternion(0.1, 0.2, 0.3, 0.4));
-    QCOMPARE(QQuaternion(0.1, 0.2, 0.3, 0.4), qvariant_cast<QQuaternion>(variant));
+    variant.setValue(QQuaternion(0.1f, 0.2f, 0.3f, 0.4f));
+    QCOMPARE(QQuaternion(0.1f, 0.2f, 0.3f, 0.4f), qvariant_cast<QQuaternion>(variant));
 
     void *pquaternion = QMetaType::create(QVariant::Quaternion, 0);
     QVERIFY(pquaternion);
@@ -525,6 +519,8 @@ void tst_QGuiVariant::writeToReadFromDataStream_data()
     QTest::newRow( "pointarray_valid" ) << QVariant::fromValue( QPolygon( QRect( 10, 10, 20, 20 ) ) ) << false;
     QTest::newRow( "region_invalid" ) << QVariant::fromValue( QRegion() ) << true;
     QTest::newRow( "region_valid" ) << QVariant::fromValue( QRegion( 10, 10, 20, 20 ) ) << false;
+    QTest::newRow("polygonf_invalid") << QVariant::fromValue(QPolygonF()) << true;
+    QTest::newRow("polygonf_valid") << QVariant::fromValue(QPolygonF(QRectF(10, 10, 20, 20))) << false;
 }
 
 void tst_QGuiVariant::invalidQColor()
@@ -535,6 +531,21 @@ void tst_QGuiVariant::invalidQColor()
     QVERIFY(!va.convert(QVariant::Color));
 
     QVERIFY(!qvariant_cast<QColor>(va).isValid());
+}
+
+void tst_QGuiVariant::validQColor()
+{
+    QColor col(Qt::red);
+    QVariant va(col.name());
+    QVERIFY(va.canConvert(QVariant::Color));
+
+    QVERIFY(va.convert(QVariant::Color));
+
+    QVERIFY(col.isValid());
+
+    QVERIFY(va.convert(QVariant::String));
+
+    QCOMPARE(qvariant_cast<QString>(va), col.name());
 }
 
 void tst_QGuiVariant::colorInteger()
@@ -609,6 +620,46 @@ void tst_QGuiVariant::writeToReadFromDataStream()
     }
 }
 
+void tst_QGuiVariant::writeToReadFromOldDataStream()
+{
+    QPolygonF polyF(QRectF(10, 10, 50, 50));
+    QVariant testVariant(polyF);
+    {
+        // Read into a variant and compare
+        QFile file(":/data/qpolygonf.bin");
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QDataStream dataFileStream(&file);
+        dataFileStream.setVersion(QDataStream::Qt_4_9);
+        QVariant readVariant;
+        dataFileStream >> readVariant;
+        QVERIFY(readVariant.userType() == QMetaType::QPolygonF);
+        QCOMPARE(testVariant, readVariant);
+        file.close();
+    }
+    {
+        QByteArray variantData;
+        {
+            QDataStream varDataStream(&variantData, QIODevice::WriteOnly);
+            varDataStream << testVariant;
+        }
+        // Read into a bytearray and compare
+        QFile file(":/data/qpolygonf.bin");
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QDataStream dataFileStream(&file);
+        dataFileStream.setVersion(QDataStream::Qt_4_9);
+        int dummy;
+        dataFileStream >> dummy;
+        QByteArray polyData49;
+        dataFileStream >> polyData49;
+        file.close();
+        QByteArray polyData50;
+        QDataStream readVarData(variantData);
+        readVarData >> dummy;
+        readVarData >> polyData50;
+        QVERIFY(polyData49 == polyData50);
+    }
+}
+
 void tst_QGuiVariant::debugStream_data()
 {
     QTest::addColumn<QVariant>("variant");
@@ -636,7 +687,7 @@ void tst_QGuiVariant::implicitConstruction()
     // This is a compile-time test
     QVariant v;
 
-#define FOR_EACH_GUI_CLASS(F) \
+#define FOR_EACH_GUI_CLASS_BASE(F) \
     F(Font) \
     F(Pixmap) \
     F(Brush) \
@@ -647,7 +698,6 @@ void tst_QGuiVariant::implicitConstruction()
     F(Polygon) \
     F(Region) \
     F(Bitmap) \
-    F(Cursor) \
     F(KeySequence) \
     F(Pen) \
     F(TextLength) \
@@ -659,7 +709,16 @@ void tst_QGuiVariant::implicitConstruction()
     F(Vector3D) \
     F(Vector4D) \
     F(Quaternion) \
-    F(PolygonF) \
+    F(PolygonF)
+
+#ifndef QTEST_NO_CURSOR
+#  define FOR_EACH_GUI_CLASS(F) \
+    FOR_EACH_GUI_CLASS_BASE(F) \
+    F(Cursor)
+#else // !QTEST_NO_CURSOR
+#  define FOR_EACH_GUI_CLASS(F) \
+    FOR_EACH_GUI_CLASS_BASE(F)
+#endif // QTEST_NO_CURSOR
 
 #define CONSTRUCT(TYPE) \
     { \
@@ -692,6 +751,33 @@ void tst_QGuiVariant::guiVariantAtExit()
     Q_UNUSED(image);
     Q_UNUSED(palette);
     QVERIFY(true);
+}
+
+void tst_QGuiVariant::iconEquality()
+{
+    QIcon i;
+    QVariant a = i;
+    QVariant b = i;
+    QCOMPARE(a, b);
+
+    i = QIcon(":/black.png");
+    a = i;
+    QVERIFY(a != b);
+
+    b = a;
+    QCOMPARE(a, b);
+
+    i = QIcon(":/black2.png");
+    a = i;
+    QVERIFY(a != b);
+
+    b = i;
+    QCOMPARE(a, b);
+
+    // This is a "different" QIcon
+    // even if the contents are the same
+    b = QIcon(":/black2.png");
+    QVERIFY(a != b);
 }
 
 QTEST_MAIN(tst_QGuiVariant)

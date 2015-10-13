@@ -1,39 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,6 +35,7 @@
 #include "qmetaobject.h"
 #include "qmetatype.h"
 #include "qobject.h"
+#include "qmetaobject_p.h"
 
 #include <qcoreapplication.h>
 #include <qcoreevent.h>
@@ -160,11 +154,6 @@ static inline const QByteArray stringData(const QMetaObject *mo, int index)
 static inline const char *rawStringData(const QMetaObject *mo, int index)
 {
     return stringData(mo, index).data();
-}
-
-static inline int stringSize(const QMetaObject *mo, int index)
-{
-    return stringData(mo, index).size();
 }
 
 static inline QByteArray typeNameFromTypeInfo(const QMetaObject *mo, uint typeInfo)
@@ -307,6 +296,11 @@ int QMetaObject::metacall(QObject *object, Call cl, int idx, void **argv)
         return object->qt_metacall(cl, idx, argv);
 }
 
+static inline const char *objectClassName(const QMetaObject *m)
+{
+    return rawStringData(m, priv(m->d.data)->className);
+}
+
 /*!
     Returns the class name.
 
@@ -314,7 +308,7 @@ int QMetaObject::metacall(QObject *object, Call cl, int idx, void **argv)
 */
 const char *QMetaObject::className() const
 {
-    return rawStringData(this, 0);
+    return objectClassName(this);
 }
 
 /*!
@@ -368,7 +362,7 @@ const QObject *QMetaObject::cast(const QObject *obj) const
 */
 QString QMetaObject::tr(const char *s, const char *c, int n) const
 {
-    return QCoreApplication::translate(rawStringData(this, 0), s, c, n);
+    return QCoreApplication::translate(objectClassName(this), s, c, n);
 }
 #endif // QT_NO_TRANSLATION
 
@@ -547,9 +541,9 @@ int QMetaObject::classInfoCount() const
     return n;
 }
 
-// Returns true if the method defined by the given meta-object&handle
+// Returns \c true if the method defined by the given meta-object&handle
 // matches the given name, argument count and argument types, otherwise
-// returns false.
+// returns \c false.
 static bool methodMatch(const QMetaObject *m, int handle,
                         const QByteArray &name, int argc,
                         const QArgumentType *types)
@@ -676,7 +670,7 @@ QByteArray QMetaObjectPrivate::decodeMethodSignature(
     const char *lparens = strchr(signature, '(');
     if (!lparens)
         return QByteArray();
-    const char *rparens = strchr(lparens + 1, ')');
+    const char *rparens = strrchr(lparens + 1, ')');
     if (!rparens || *(rparens+1))
         return QByteArray();
     int nameLength = lparens - signature;
@@ -727,7 +721,7 @@ int QMetaObjectPrivate::indexOfSignalRelative(const QMetaObject **baseObject,
             QMetaMethod conflictMethod = m->d.superdata->method(conflict);
             qWarning("QMetaObject::indexOfSignal: signal %s from %s redefined in %s",
                      conflictMethod.methodSignature().constData(),
-                     rawStringData(m->d.superdata, 0), rawStringData(m, 0));
+                     objectClassName(m->d.superdata), objectClassName(m));
         }
      }
  #endif
@@ -885,8 +879,8 @@ QMetaMethod QMetaObjectPrivate::signal(const QMetaObject *m, int signal_index)
 /*!
     \internal
 
-    Returns true if the \a signalTypes and \a methodTypes are
-    compatible; otherwise returns false.
+    Returns \c true if the \a signalTypes and \a methodTypes are
+    compatible; otherwise returns \c false.
 */
 bool QMetaObjectPrivate::checkConnectArgs(int signalArgc, const QArgumentType *signalTypes,
                                           int methodArgc, const QArgumentType *methodTypes)
@@ -903,8 +897,8 @@ bool QMetaObjectPrivate::checkConnectArgs(int signalArgc, const QArgumentType *s
 /*!
     \internal
 
-    Returns true if the \a signal and \a method arguments are
-    compatible; otherwise returns false.
+    Returns \c true if the \a signal and \a method arguments are
+    compatible; otherwise returns \c false.
 */
 bool QMetaObjectPrivate::checkConnectArgs(const QMetaMethodPrivate *signal,
                                           const QMetaMethodPrivate *method)
@@ -937,11 +931,11 @@ bool QMetaObjectPrivate::checkConnectArgs(const QMetaMethodPrivate *signal,
 static const QMetaObject *QMetaObject_findMetaObject(const QMetaObject *self, const char *name)
 {
     while (self) {
-        if (strcmp(rawStringData(self, 0), name) == 0)
+        if (strcmp(objectClassName(self), name) == 0)
             return self;
         if (self->d.relatedMetaObjects) {
             Q_ASSERT(priv(self->d.data)->revision >= 2);
-            const QMetaObject **e = self->d.relatedMetaObjects;
+            const QMetaObject * const *e = self->d.relatedMetaObjects;
             if (e) {
                 while (*e) {
                     if (const QMetaObject *m =QMetaObject_findMetaObject((*e), name))
@@ -1116,7 +1110,7 @@ QMetaProperty QMetaObject::property(int index) const
             result.menum = enumerator(indexOfEnumerator(type));
             if (!result.menum.isValid()) {
                 const char *enum_name = type;
-                const char *scope_name = rawStringData(this, 0);
+                const char *scope_name = objectClassName(this);
                 char *scope_buffer = 0;
 
                 const char *colon = strrchr(enum_name, ':');
@@ -1190,8 +1184,8 @@ QMetaClassInfo QMetaObject::classInfo(int index) const
 }
 
 /*!
-    Returns true if the \a signal and \a method arguments are
-    compatible; otherwise returns false.
+    Returns \c true if the \a signal and \a method arguments are
+    compatible; otherwise returns \c false.
 
     Both \a signal and \a method are expected to be normalized.
 
@@ -1216,8 +1210,8 @@ bool QMetaObject::checkConnectArgs(const char *signal, const char *method)
     \since 5.0
     \overload
 
-    Returns true if the \a signal and \a method arguments are
-    compatible; otherwise returns false.
+    Returns \c true if the \a signal and \a method arguments are
+    compatible; otherwise returns \c false.
 */
 bool QMetaObject::checkConnectArgs(const QMetaMethod &signal,
                                    const QMetaMethod &method)
@@ -1338,8 +1332,29 @@ QByteArray QMetaObject::normalizedSignature(const char *method)
 enum { MaximumParamCount = 11 }; // up to 10 arguments + 1 return value
 
 /*!
+    Returns the signatures of all methods whose name matches \a nonExistentMember,
+    or an empty QByteArray if there are no matches.
+*/
+static inline QByteArray findMethodCandidates(const QMetaObject *metaObject, const char *nonExistentMember)
+{
+    QByteArray candidateMessage;
+    // Prevent full string comparison in every iteration.
+    const QByteArray memberByteArray = nonExistentMember;
+    for (int i = 0; i < metaObject->methodCount(); ++i) {
+        const QMetaMethod method = metaObject->method(i);
+        if (method.name() == memberByteArray)
+            candidateMessage.append("    " + method.methodSignature() + '\n');
+    }
+    if (!candidateMessage.isEmpty()) {
+        candidateMessage.prepend("\nCandidates are:\n");
+        candidateMessage.chop(1);
+    }
+    return candidateMessage;
+}
+
+/*!
     Invokes the \a member (a signal or a slot name) on the object \a
-    obj. Returns true if the member could be invoked. Returns false
+    obj. Returns \c true if the member could be invoked. Returns \c false
     if there is no such member or the parameters did not match.
 
     The invocation can be either synchronous or asynchronous,
@@ -1454,8 +1469,9 @@ bool QMetaObject::invokeMethod(QObject *obj,
     }
 
     if (idx < 0 || idx >= meta->methodCount()) {
-        qWarning("QMetaObject::invokeMethod: No such method %s::%s",
-                 meta->className(), sig.constData());
+        // This method doesn't belong to us; print out a nice warning with candidates.
+        qWarning("QMetaObject::invokeMethod: No such method %s::%s%s",
+                 meta->className(), sig.constData(), findMethodCandidates(meta, member).constData());
         return false;
     }
     QMetaMethod method = meta->method(idx);
@@ -1518,6 +1534,30 @@ bool QMetaObject::invokeMethod(QObject *obj,
 */
 
 /*!
+    \fn QMetaObject::Connection::Connection(const Connection &other)
+
+    Constructs a copy of \a other.
+*/
+
+/*!
+    \fn QMetaObject::Connection::Connection &operator=(const Connection &other)
+
+    Assigns \a other to this connection and returns a reference to this connection.
+*/
+
+/*!
+    \fn QMetaObject::Connection &QMetaObject::Connection::operator=(Connection &&other)
+
+    Move-assigns \a other to this object, and returns a reference.
+*/
+/*!
+    \fn QMetaObject::Connection::Connection(Connection &&o)
+
+    Move-constructs a Connection instance, making it point to the same object
+    that \a o was pointing to.
+*/
+
+/*!
     \class QMetaMethod
     \inmodule QtCore
 
@@ -1548,8 +1588,8 @@ bool QMetaObject::invokeMethod(QObject *obj,
     \fn bool QMetaMethod::isValid() const
     \since 5.0
 
-    Returns true if this method is valid (can be introspected and
-    invoked), otherwise returns false.
+    Returns \c true if this method is valid (can be introspected and
+    invoked), otherwise returns \c false.
 */
 
 /*! \fn bool operator==(const QMetaMethod &m1, const QMetaMethod &m2)
@@ -1557,8 +1597,8 @@ bool QMetaObject::invokeMethod(QObject *obj,
     \relates QMetaMethod
     \overload
 
-    Returns true if method \a m1 is equal to method \a m2,
-    otherwise returns false.
+    Returns \c true if method \a m1 is equal to method \a m2,
+    otherwise returns \c false.
 */
 
 /*! \fn bool operator!=(const QMetaMethod &m1, const QMetaMethod &m2)
@@ -1566,8 +1606,8 @@ bool QMetaObject::invokeMethod(QObject *obj,
     \relates QMetaMethod
     \overload
 
-    Returns true if method \a m1 is not equal to method \a m2,
-    otherwise returns false.
+    Returns \c true if method \a m1 is not equal to method \a m2,
+    otherwise returns \c false.
 */
 
 /*!
@@ -1588,6 +1628,14 @@ bool QMetaObject::invokeMethod(QObject *obj,
     \fn QMetaMethod::QMetaMethod()
     \internal
 */
+
+/*!
+    \macro Q_METAMETHOD_INVOKE_MAX_ARGS
+    \relates QMetaMethod
+
+    Equals maximum number of arguments available for
+    execution of the method via QMetaMethod::invoke()
+ */
 
 QByteArray QMetaMethodPrivate::signature() const
 {
@@ -1856,13 +1904,14 @@ const char *QMetaMethod::typeName() const
     way in the function declaration:
 
     \code
+        // In the class MainWindow declaration
         #ifndef Q_MOC_RUN
-        // define the tag text
-        #  define THISISTESTTAG
+        // define the tag text as empty, so the compiler doesn't see it
+        #  define MY_CUSTOM_TAG
         #endif
         ...
         private slots:
-            THISISTESTTAG void testFunc();
+            MY_CUSTOM_TAG void testFunc();
     \endcode
 
     and the information can be accessed by using:
@@ -1872,12 +1921,14 @@ const char *QMetaMethod::typeName() const
         win.show();
 
         int functionIndex = win.metaObject()->indexOfSlot("testFunc()");
-        QMetaMethod mm = metaObject()->method(functionIndex);
-        qDebug() << mm.tag(); // prints THISISTESTTAG
+        QMetaMethod mm = win.metaObject()->method(functionIndex);
+        qDebug() << mm.tag(); // prints MY_CUSTOM_TAG
     \endcode
 
     For the moment, \c moc will extract and record all tags, but it will not
-    handle any of them specially.
+    handle any of them specially. You can use the tags to annotate your methods
+    differently, and treat them according to the specific needs of your
+    application.
 
     \note Since Qt 5.0, \c moc expands preprocessor macros, so it is necessary
     to surround the definition with \c #ifndef \c Q_MOC_RUN, as shown in the
@@ -1937,8 +1988,9 @@ int QMetaMethod::revision() const
     Returns the access specification of this method (private,
     protected, or public).
 
-    Signals are always protected, meaning that you can only emit them
-    from the class or from a subclass.
+    \note Signals are always public, but you should regard that as an
+    implementation detail. It is almost always a bad idea to emit a signal from
+    outside its class.
 
     \sa methodType()
 */
@@ -1998,8 +2050,8 @@ QMetaMethod QMetaMethod::fromSignalImpl(const QMetaObject *metaObject, void **si
 }
 
 /*!
-    Invokes this method on the object \a object. Returns true if the member could be invoked.
-    Returns false if there is no such member or the parameters did not match.
+    Invokes this method on the object \a object. Returns \c true if the member could be invoked.
+    Returns \c false if there is no such member or the parameters did not match.
 
     The invocation can be either synchronous or asynchronous, depending on the
     \a connectionType:
@@ -2090,8 +2142,12 @@ bool QMetaMethod::invoke(QObject *object,
         if (qstrcmp(returnValue.name(), retType) != 0) {
             // normalize the return value as well
             QByteArray normalized = QMetaObject::normalizedType(returnValue.name());
-            if (qstrcmp(normalized.constData(), retType) != 0)
-                return false;
+            if (qstrcmp(normalized.constData(), retType) != 0) {
+                // String comparison failed, try compare the metatype.
+                int t = returnType();
+                if (t == QMetaType::UnknownType || t != QMetaType::type(normalized))
+                    return false;
+            }
         }
     }
 
@@ -2271,6 +2327,112 @@ bool QMetaMethod::invoke(QObject *object,
 */
 
 /*!
+    \since 5.5
+
+    Invokes this method on a Q_GADGET. Returns \c true if the member could be invoked.
+    Returns \c false if there is no such member or the parameters did not match.
+
+    The pointer \a gadget must point to an instance of the gadget class.
+
+    The invocation is always synchronous.
+
+    The return value of this method call is placed in \a
+    returnValue. You can pass up to ten arguments (\a val0, \a val1,
+    \a val2, \a val3, \a val4, \a val5, \a val6, \a val7, \a val8,
+    and \a val9) to this method call.
+
+    \warning this method will not test the validity of the arguments: \a gadget
+    must be an instance of the class of the QMetaObject of which this QMetaMethod
+    has been constructed with.  The arguments must have the same type as the ones
+    expected by the method, else, the behavior is undefined.
+
+    \sa Q_ARG(), Q_RETURN_ARG(), qRegisterMetaType(), QMetaObject::invokeMethod()
+*/
+bool QMetaMethod::invokeOnGadget(void* gadget, QGenericReturnArgument returnValue, QGenericArgument val0, QGenericArgument val1, QGenericArgument val2, QGenericArgument val3, QGenericArgument val4, QGenericArgument val5, QGenericArgument val6, QGenericArgument val7, QGenericArgument val8, QGenericArgument val9) const
+{
+   if (!gadget || !mobj)
+        return false;
+
+    // check return type
+    if (returnValue.data()) {
+        const char *retType = typeName();
+        if (qstrcmp(returnValue.name(), retType) != 0) {
+            // normalize the return value as well
+            QByteArray normalized = QMetaObject::normalizedType(returnValue.name());
+            if (qstrcmp(normalized.constData(), retType) != 0) {
+                // String comparison failed, try compare the metatype.
+                int t = returnType();
+                if (t == QMetaType::UnknownType || t != QMetaType::type(normalized))
+                    return false;
+            }
+        }
+    }
+
+    // check argument count (we don't allow invoking a method if given too few arguments)
+    const char *typeNames[] = {
+        returnValue.name(),
+        val0.name(),
+        val1.name(),
+        val2.name(),
+        val3.name(),
+        val4.name(),
+        val5.name(),
+        val6.name(),
+        val7.name(),
+        val8.name(),
+        val9.name()
+    };
+    int paramCount;
+    for (paramCount = 1; paramCount < MaximumParamCount; ++paramCount) {
+        if (qstrlen(typeNames[paramCount]) <= 0)
+            break;
+    }
+    if (paramCount <= QMetaMethodPrivate::get(this)->parameterCount())
+        return false;
+
+    // invoke!
+    void *param[] = {
+        returnValue.data(),
+        val0.data(),
+        val1.data(),
+        val2.data(),
+        val3.data(),
+        val4.data(),
+        val5.data(),
+        val6.data(),
+        val7.data(),
+        val8.data(),
+        val9.data()
+    };
+    int idx_relative = QMetaMethodPrivate::get(this)->ownMethodIndex();
+    Q_ASSERT(QMetaObjectPrivate::get(mobj)->revision >= 6);
+    QObjectPrivate::StaticMetaCallFunction callFunction = mobj->d.static_metacall;
+    if (!callFunction)
+        return false;
+    callFunction(reinterpret_cast<QObject*>(gadget), QMetaObject::InvokeMetaMethod, idx_relative, param);
+    return true;
+}
+
+/*!
+    \fn bool QMetaMethod::invokeOnGadget(void *gadget,
+            QGenericArgument val0 = QGenericArgument(0),
+            QGenericArgument val1 = QGenericArgument(),
+            QGenericArgument val2 = QGenericArgument(),
+            QGenericArgument val3 = QGenericArgument(),
+            QGenericArgument val4 = QGenericArgument(),
+            QGenericArgument val5 = QGenericArgument(),
+            QGenericArgument val6 = QGenericArgument(),
+            QGenericArgument val7 = QGenericArgument(),
+            QGenericArgument val8 = QGenericArgument(),
+            QGenericArgument val9 = QGenericArgument()) const
+
+    \overload
+    \since 5.5
+
+    This overload invokes this method for a \a gadget and ignores return values.
+*/
+
+/*!
     \class QMetaEnum
     \inmodule QtCore
     \brief The QMetaEnum class provides meta-data about an enumerator.
@@ -2295,7 +2457,7 @@ bool QMetaMethod::invoke(QObject *object,
 /*!
     \fn bool QMetaEnum::isValid() const
 
-    Returns true if this enum is valid (has a name); otherwise returns
+    Returns \c true if this enum is valid (has a name); otherwise returns
     false.
 
     \sa name()
@@ -2375,7 +2537,7 @@ int QMetaEnum::value(int index) const
 
 
 /*!
-    Returns true if this enumerator is used as a flag; otherwise returns
+    Returns \c true if this enumerator is used as a flag; otherwise returns
     false.
 
     When used as flags, enumerators can be combined using the OR
@@ -2399,7 +2561,7 @@ bool QMetaEnum::isFlag() const
 */
 const char *QMetaEnum::scope() const
 {
-    return mobj?rawStringData(mobj, 0) : 0;
+    return mobj ? objectClassName(mobj) : 0;
 }
 
 /*!
@@ -2431,7 +2593,8 @@ int QMetaEnum::keyToValue(const char *key, bool *ok) const
     int count = mobj->d.data[handle + 2];
     int data = mobj->d.data[handle + 3];
     for (int i = 0; i < count; ++i) {
-        if ((!scope || (stringSize(mobj, 0) == int(scope) && strncmp(qualified_key, rawStringData(mobj, 0), scope) == 0))
+        const QByteArray className = stringData(mobj, priv(mobj->d.data)->className);
+        if ((!scope || (className.size() == int(scope) && strncmp(qualified_key, className.constData(), scope) == 0))
              && strcmp(key, rawStringData(mobj, mobj->d.data[data + 2*i])) == 0) {
             if (ok != 0)
                 *ok = true;
@@ -2499,12 +2662,14 @@ int QMetaEnum::keysToValue(const char *keys, bool *ok) const
             key += scope + 2;
         }
         int i;
-        for (i = count-1; i >= 0; --i)
-            if ((!scope || (stringSize(mobj, 0) == int(scope) && strncmp(qualified_key.constData(), rawStringData(mobj, 0), scope) == 0))
+        for (i = count-1; i >= 0; --i) {
+            const QByteArray className = stringData(mobj, priv(mobj->d.data)->className);
+            if ((!scope || (className.size() == int(scope) && strncmp(qualified_key.constData(), className.constData(), scope) == 0))
                  && strcmp(key, rawStringData(mobj, mobj->d.data[data + 2*i])) == 0) {
                 value |= mobj->d.data[data + 2*i + 1];
                 break;
             }
+        }
         if (i < 0) {
             if (ok != 0)
                 *ok = false;
@@ -2528,17 +2693,26 @@ QByteArray QMetaEnum::valueToKeys(int value) const
     int count = mobj->d.data[handle + 2];
     int data = mobj->d.data[handle + 3];
     int v = value;
-    for(int i = 0; i < count; i++) {
+    // reverse iterate to ensure values like Qt::Dialog=0x2|Qt::Window are processed first.
+    for (int i = count - 1; i >= 0; --i) {
         int k = mobj->d.data[data + 2*i + 1];
         if ((k != 0 && (v & k) == k ) ||  (k == value))  {
             v = v & ~k;
             if (!keys.isEmpty())
-                keys += '|';
-            keys += stringData(mobj, mobj->d.data[data + 2*i]);
+                keys.prepend('|');
+            keys.prepend(stringData(mobj, mobj->d.data[data + 2*i]));
         }
     }
     return keys;
 }
+
+/*!
+    \fn QMetaEnum QMetaEnum::fromType()
+    \since 5.5
+
+    Returns the QMetaEnum corresponding to the type in the template parameter.
+    The enum needs to be declared with Q_ENUM.
+*/
 
 static QByteArray qualifiedName(const QMetaEnum &e)
 {
@@ -2562,7 +2736,7 @@ static QByteArray qualifiedName(const QMetaEnum &e)
     attributes that specify its behavior: isReadable(), isWritable(),
     isDesignable(), isScriptable(), revision(), and isStored().
 
-    If the property is an enumeration, isEnumType() returns true; if the
+    If the property is an enumeration, isEnumType() returns \c true; if the
     property is an enumeration that is also a flag (i.e. its values
     can be combined using the OR operator), isEnumType() and
     isFlagType() both return true. The enumerator for these types is
@@ -2584,8 +2758,8 @@ static QByteArray qualifiedName(const QMetaEnum &e)
 /*!
     \fn bool QMetaProperty::isValid() const
 
-    Returns true if this property is valid (readable); otherwise
-    returns false.
+    Returns \c true if this property is valid (readable); otherwise
+    returns \c false.
 
     \sa isReadable()
 */
@@ -2681,19 +2855,18 @@ int QMetaProperty::userType() const
     if (type != QMetaType::UnknownType)
         return type;
     if (isEnumType()) {
-        int enumMetaTypeId = QMetaType::type(qualifiedName(menum));
-        if (enumMetaTypeId == QMetaType::UnknownType)
-            return QVariant::Int; // Match behavior of QMetaType::type()
-        return enumMetaTypeId;
+        type = QMetaType::type(qualifiedName(menum));
+        if (type == QMetaType::UnknownType) {
+            type = registerPropertyType();
+            if (type == QMetaType::UnknownType)
+                return QVariant::Int; // Match behavior of QMetaType::type()
+        }
+        return type;
     }
     type = QMetaType::type(typeName());
     if (type != QMetaType::UnknownType)
         return type;
-    void *argv[] = { &type };
-    mobj->static_metacall(QMetaObject::RegisterPropertyMetaType, idx, argv);
-    if (type != -1)
-        return type;
-    return QMetaType::UnknownType;
+    return registerPropertyType();
 }
 
 /*!
@@ -2709,8 +2882,8 @@ int QMetaProperty::propertyIndex() const
 }
 
 /*!
-    Returns true if the property's type is an enumeration value that
-    is used as a flag; otherwise returns false.
+    Returns \c true if the property's type is an enumeration value that
+    is used as a flag; otherwise returns \c false.
 
     Flags can be combined using the OR operator. A flag type is
     implicitly also an enum type.
@@ -2724,8 +2897,8 @@ bool QMetaProperty::isFlagType() const
 }
 
 /*!
-    Returns true if the property's type is an enumeration value;
-    otherwise returns false.
+    Returns \c true if the property's type is an enumeration value;
+    otherwise returns \c false.
 
     \sa enumerator(), isFlagType()
 */
@@ -2741,7 +2914,7 @@ bool QMetaProperty::isEnumType() const
 /*!
     \internal
 
-    Returns true if the property has a C++ setter function that
+    Returns \c true if the property has a C++ setter function that
     follows Qt's standard "name" / "setName" pattern. Designer and uic
     query hasStdCppSet() in order to avoid expensive
     QObject::setProperty() calls. All properties in Qt [should] follow
@@ -2754,6 +2927,20 @@ bool QMetaProperty::hasStdCppSet() const
     int handle = priv(mobj->d.data)->propertyData + 3*idx;
     int flags = mobj->d.data[handle + 2];
     return (flags & StdCppSet);
+}
+
+/*!
+    \internal
+    Executes metacall with QMetaObject::RegisterPropertyMetaType flag.
+    Returns id of registered type or QMetaType::UnknownType if a type
+    could not be registered for any reason.
+*/
+int QMetaProperty::registerPropertyType() const
+{
+    int registerResult = -1;
+    void *argv[] = { &registerResult };
+    mobj->static_metacall(QMetaObject::RegisterPropertyMetaType, idx, argv);
+    return registerResult == -1 ? QMetaType::UnknownType : registerResult;
 }
 
 /*!
@@ -2801,15 +2988,11 @@ QVariant QMetaProperty::read(const QObject *object) const
         }
         if (t == QMetaType::UnknownType) {
             // Try to register the type and try again before reporting an error.
-            int registerResult = -1;
-            void *argv[] = { &registerResult };
-            QMetaObject::metacall(const_cast<QObject*>(object), QMetaObject::RegisterPropertyMetaType,
-                                  idx + mobj->propertyOffset(), argv);
-            if (registerResult == -1) {
+            t = registerPropertyType();
+            if (t == QMetaType::UnknownType) {
                 qWarning("QMetaProperty::read: Unable to handle unregistered datatype '%s' for property '%s::%s'", typeName, mobj->className(), name());
                 return QVariant();
             }
-            t = registerResult;
         }
     }
 
@@ -2827,8 +3010,12 @@ QVariant QMetaProperty::read(const QObject *object) const
         value = QVariant(t, (void*)0);
         argv[0] = value.data();
     }
-    QMetaObject::metacall(const_cast<QObject*>(object), QMetaObject::ReadProperty,
-                          idx + mobj->propertyOffset(), argv);
+    if (priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall) {
+        mobj->d.static_metacall(const_cast<QObject*>(object), QMetaObject::ReadProperty, idx, argv);
+    } else {
+        QMetaObject::metacall(const_cast<QObject*>(object), QMetaObject::ReadProperty,
+                              idx + mobj->propertyOffset(), argv);
+    }
 
     if (status != -1)
         return value;
@@ -2840,7 +3027,7 @@ QVariant QMetaProperty::read(const QObject *object) const
 
 /*!
     Writes \a value as the property's value to the given \a object. Returns
-    true if the write succeeded; otherwise returns false.
+    true if the write succeeded; otherwise returns \c false.
 
     \sa read(), reset(), isWritable()
 */
@@ -2877,17 +3064,11 @@ bool QMetaProperty::write(QObject *object, const QVariant &value) const
         else {
             typeName = rawStringData(mobj, typeInfo & TypeNameIndexMask);
             t = QMetaType::type(typeName);
+            if (t == QMetaType::UnknownType)
+                t = registerPropertyType();
+            if (t == QMetaType::UnknownType)
+                return false;
         }
-        if (t == QMetaType::UnknownType) {
-            Q_ASSERT(typeName != 0);
-            const char *vtypeName = value.typeName();
-            if (vtypeName && strcmp(typeName, vtypeName) == 0)
-                t = value.userType();
-            else
-                t = QVariant::nameToType(typeName);
-        }
-        if (t == QVariant::Invalid)
-            return false;
         if (t != QMetaType::QVariant && t != (uint)value.userType() && (t < QMetaType::User && !v.convert((QVariant::Type)t)))
             return false;
     }
@@ -2906,13 +3087,17 @@ bool QMetaProperty::write(QObject *object, const QVariant &value) const
         argv[0] = &v;
     else
         argv[0] = v.data();
-    QMetaObject::metacall(object, QMetaObject::WriteProperty, idx + mobj->propertyOffset(), argv);
+    if (priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall)
+        mobj->d.static_metacall(object, QMetaObject::WriteProperty, idx, argv);
+    else
+        QMetaObject::metacall(object, QMetaObject::WriteProperty, idx + mobj->propertyOffset(), argv);
+
     return status;
 }
 
 /*!
     Resets the property for the given \a object with a reset method.
-    Returns true if the reset worked; otherwise returns false.
+    Returns \c true if the reset worked; otherwise returns \c false.
 
     Reset methods are optional; only a few properties support them.
 
@@ -2923,13 +3108,59 @@ bool QMetaProperty::reset(QObject *object) const
     if (!object || !mobj || !isResettable())
         return false;
     void *argv[] = { 0 };
-    QMetaObject::metacall(object, QMetaObject::ResetProperty, idx + mobj->propertyOffset(), argv);
+    if (priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall)
+        mobj->d.static_metacall(object, QMetaObject::ResetProperty, idx, argv);
+    else
+        QMetaObject::metacall(object, QMetaObject::ResetProperty, idx + mobj->propertyOffset(), argv);
     return true;
+}
+/*!
+    \since 5.5
+
+    Reads the property's value from the given \a gadget. Returns the value
+    if it was able to read it; otherwise returns an invalid variant.
+
+    This function should only be used if this is a property of a Q_GADGET
+*/
+QVariant QMetaProperty::readOnGadget(const void *gadget) const
+{
+    Q_ASSERT(priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall);
+    return read(reinterpret_cast<const QObject*>(gadget));
 }
 
 /*!
-    Returns true if this property can be reset to a default value; otherwise
-    returns false.
+    \since 5.5
+
+    Writes \a value as the property's value to the given \a gadget. Returns
+    true if the write succeeded; otherwise returns \c false.
+
+    This function should only be used if this is a property of a Q_GADGET
+*/
+bool QMetaProperty::writeOnGadget(void *gadget, const QVariant &value) const
+{
+    Q_ASSERT(priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall);
+    return write(reinterpret_cast<QObject*>(gadget), value);
+}
+
+/*!
+    \since 5.5
+
+    Resets the property for the given \a gadget with a reset method.
+    Returns \c true if the reset worked; otherwise returns \c false.
+
+    Reset methods are optional; only a few properties support them.
+
+    This function should only be used if this is a property of a Q_GADGET
+*/
+bool QMetaProperty::resetOnGadget(void *gadget) const
+{
+    Q_ASSERT(priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall);
+    return reset(reinterpret_cast<QObject*>(gadget));
+}
+
+/*!
+    Returns \c true if this property can be reset to a default value; otherwise
+    returns \c false.
 
     \sa reset()
 */
@@ -2942,7 +3173,7 @@ bool QMetaProperty::isResettable() const
 }
 
 /*!
-    Returns true if this property is readable; otherwise returns false.
+    Returns \c true if this property is readable; otherwise returns \c false.
 
     \sa isWritable(), read(), isValid()
  */
@@ -2955,8 +3186,8 @@ bool QMetaProperty::isReadable() const
 }
 
 /*!
-    Returns true if this property has a corresponding change notify signal;
-    otherwise returns false.
+    Returns \c true if this property has a corresponding change notify signal;
+    otherwise returns \c false.
 
     \sa notifySignal()
  */
@@ -3035,7 +3266,7 @@ int QMetaProperty::revision() const
 }
 
 /*!
-    Returns true if this property is writable; otherwise returns
+    Returns \c true if this property is writable; otherwise returns
     false.
 
     \sa isReadable(), write()
@@ -3050,12 +3281,12 @@ bool QMetaProperty::isWritable() const
 
 
 /*!
-    Returns true if this property is designable for the given \a object;
-    otherwise returns false.
+    Returns \c true if this property is designable for the given \a object;
+    otherwise returns \c false.
 
-    If no \a object is given, the function returns false if the
+    If no \a object is given, the function returns \c false if the
     \c{Q_PROPERTY()}'s \c DESIGNABLE attribute is false; otherwise
-    returns true (if the attribute is true or is a function or expression).
+    returns \c true (if the attribute is true or is a function or expression).
 
     \sa isScriptable(), isStored()
 */
@@ -3076,10 +3307,10 @@ bool QMetaProperty::isDesignable(const QObject *object) const
 }
 
 /*!
-    Returns true if the property is scriptable for the given \a object;
-    otherwise returns false.
+    Returns \c true if the property is scriptable for the given \a object;
+    otherwise returns \c false.
 
-    If no \a object is given, the function returns false if the
+    If no \a object is given, the function returns \c false if the
     \c{Q_PROPERTY()}'s \c SCRIPTABLE attribute is false; otherwise returns
     true (if the attribute is true or is a function or expression).
 
@@ -3100,10 +3331,10 @@ bool QMetaProperty::isScriptable(const QObject *object) const
 }
 
 /*!
-    Returns true if the property is stored for \a object; otherwise returns
+    Returns \c true if the property is stored for \a object; otherwise returns
     false.
 
-    If no \a object is given, the function returns false if the
+    If no \a object is given, the function returns \c false if the
     \c{Q_PROPERTY()}'s \c STORED attribute is false; otherwise returns
     true (if the attribute is true or is a function or expression).
 
@@ -3124,13 +3355,13 @@ bool QMetaProperty::isStored(const QObject *object) const
 }
 
 /*!
-    Returns true if this property is designated as the \c USER
+    Returns \c true if this property is designated as the \c USER
     property, i.e., the one that the user can edit for \a object or
     that is significant in some other way.  Otherwise it returns
     false. e.g., the \c text property is the \c USER editable property
     of a QLineEdit.
 
-    If \a object is null, the function returns false if the \c
+    If \a object is null, the function returns \c false if the \c
     {Q_PROPERTY()}'s \c USER attribute is false. Otherwise it returns
     true.
 
@@ -3152,7 +3383,7 @@ bool QMetaProperty::isUser(const QObject *object) const
 
 /*!
     \since 4.6
-    Returns true if the property is constant; otherwise returns false.
+    Returns \c true if the property is constant; otherwise returns \c false.
 
     A property is constant if the \c{Q_PROPERTY()}'s \c CONSTANT attribute
     is set.
@@ -3167,7 +3398,7 @@ bool QMetaProperty::isConstant() const
 
 /*!
     \since 4.6
-    Returns true if the property is final; otherwise returns false.
+    Returns \c true if the property is final; otherwise returns \c false.
 
     A property is final if the \c{Q_PROPERTY()}'s \c FINAL attribute
     is set.
@@ -3183,10 +3414,10 @@ bool QMetaProperty::isFinal() const
 /*!
     \obsolete
 
-    Returns true if the property is editable for the given \a object;
-    otherwise returns false.
+    Returns \c true if the property is editable for the given \a object;
+    otherwise returns \c false.
 
-    If no \a object is given, the function returns false if the
+    If no \a object is given, the function returns \c false if the
     \c{Q_PROPERTY()}'s \c EDITABLE attribute is false; otherwise returns
     true (if the attribute is true or is a function or expression).
 

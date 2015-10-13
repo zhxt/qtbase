@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -87,6 +79,7 @@ private slots:
     void html_listIndents4();
     void html_listIndents5();
     void html_listIndents6();
+    void html_listIndents7();
     void blockCharFormat();
     void blockCharFormatCopied();
     void initialBlock();
@@ -266,6 +259,7 @@ private slots:
     void html_metaInBody();
     void html_importImageWithoutAspectRatio();
     void html_fromFirefox();
+    void html_emptyInlineInsideBlock();
 
 private:
     inline void setHtml(const QString &html)
@@ -360,8 +354,8 @@ void tst_QTextDocumentFragment::listCopying2()
     cursor.movePosition(QTextCursor::Start);
     int listItemCount = 0;
     do {
-	if (cursor.currentList())
-	    listItemCount++;
+        if (cursor.currentList())
+            listItemCount++;
     } while (cursor.movePosition(QTextCursor::NextBlock));
 
     QCOMPARE(listItemCount, 4);
@@ -378,35 +372,35 @@ void tst_QTextDocumentFragment::tableCopying()
     // as the pasiveness of the tablemanager.
     QTextDocumentFragment fragment;
     {
-	QTextDocument doc;
-	QTextCursor cursor(&doc);
+        QTextDocument doc;
+        QTextCursor cursor(&doc);
 
-	QTextTableFormat fmt;
-	QTextTable *table = cursor.insertTable(2, 2, fmt);
+        QTextTableFormat fmt;
+        QTextTable *table = cursor.insertTable(2, 2, fmt);
 
-	table->cellAt(0, 0).firstCursorPosition().insertText("First Cell");
-	table->cellAt(0, 1).firstCursorPosition().insertText("Second Cell");
-	table->cellAt(1, 0).firstCursorPosition().insertText("Third Cell");
-	table->cellAt(1, 1).firstCursorPosition().insertText("Fourth Cell");
+        table->cellAt(0, 0).firstCursorPosition().insertText("First Cell");
+        table->cellAt(0, 1).firstCursorPosition().insertText("Second Cell");
+        table->cellAt(1, 0).firstCursorPosition().insertText("Third Cell");
+        table->cellAt(1, 1).firstCursorPosition().insertText("Fourth Cell");
 
-	fragment = QTextDocumentFragment(&doc);
+        fragment = QTextDocumentFragment(&doc);
     }
     {
-	QTextDocument doc;
-	QTextCursor cursor(&doc);
+        QTextDocument doc;
+        QTextCursor cursor(&doc);
 
-	cursor.insertText("FooBar");
-	cursor.insertBlock();
-	cursor.movePosition(QTextCursor::Left);
+        cursor.insertText("FooBar");
+        cursor.insertBlock();
+        cursor.movePosition(QTextCursor::Left);
 
-	cursor.insertFragment(fragment);
-	cursor.movePosition(QTextCursor::Start);
-	cursor.movePosition(QTextCursor::NextBlock);
+        cursor.insertFragment(fragment);
+        cursor.movePosition(QTextCursor::Start);
+        cursor.movePosition(QTextCursor::NextBlock);
 
-	QTextTable *table = cursor.currentTable();
-	QVERIFY(table);
-	QCOMPARE(table->rows(), 2);
-	QCOMPARE(table->columns(), 2);
+        QTextTable *table = cursor.currentTable();
+        QVERIFY(table);
+        QCOMPARE(table->rows(), 2);
+        QCOMPARE(table->columns(), 2);
     }
 }
 
@@ -488,91 +482,91 @@ void tst_QTextDocumentFragment::tableImport()
 void tst_QTextDocumentFragment::tableImport2()
 {
     {
-	const char html[] = ""
-	    "<table>"
-	    "<tr><td>First Cell</td><td>Second Cell</td></tr>"
-	    "<tr><td>Third Cell</td><td>Fourth Cell</td></tr>"
-	    "</table>";
+        const char html[] = ""
+            "<table>"
+            "<tr><td>First Cell</td><td>Second Cell</td></tr>"
+            "<tr><td>Third Cell</td><td>Fourth Cell</td></tr>"
+            "</table>";
 
-	QTextDocument doc;
-	QTextCursor cursor(&doc);
-	cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(html, sizeof(html) / sizeof(html[0]))));
+        QTextDocument doc;
+        QTextCursor cursor(&doc);
+        cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(html, sizeof(html) / sizeof(html[0]))));
 
-	cursor.movePosition(QTextCursor::Start);
-	cursor.movePosition(QTextCursor::NextBlock);
-	QTextTable *table = cursor.currentTable();
-	QVERIFY(table);
-	QCOMPARE(table->columns(), 2);
-	QCOMPARE(table->rows(), 2);
+        cursor.movePosition(QTextCursor::Start);
+        cursor.movePosition(QTextCursor::NextBlock);
+        QTextTable *table = cursor.currentTable();
+        QVERIFY(table);
+        QCOMPARE(table->columns(), 2);
+        QCOMPARE(table->rows(), 2);
     }
     {
-	const char html[] = ""
-	    "<table>"
-	    "<tr><td>First Cell</td><td>Second Cell</td></tr>"
-	    "<tr><td>Third Cell</td><td>"
-	    "                           <table>"
-	    "                           <tr><td>First Nested Cell</td><td>Second Nested Cell</td></tr>"
-	    "                           <tr><td>Third Nested Cell</td><td>Fourth Nested Cell</td></tr>"
-	    "                           <tr><td>Fifth Nested Cell</td><td>Sixth Nested Cell</td></tr>"
-	    "                           </table></td></tr>"
-	    "</table>";
+        const char html[] = ""
+            "<table>"
+            "<tr><td>First Cell</td><td>Second Cell</td></tr>"
+            "<tr><td>Third Cell</td><td>"
+            "                           <table>"
+            "                           <tr><td>First Nested Cell</td><td>Second Nested Cell</td></tr>"
+            "                           <tr><td>Third Nested Cell</td><td>Fourth Nested Cell</td></tr>"
+            "                           <tr><td>Fifth Nested Cell</td><td>Sixth Nested Cell</td></tr>"
+            "                           </table></td></tr>"
+            "</table>";
 
-	QTextDocument doc;
-	QTextCursor cursor(&doc);
-	cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(html, sizeof(html) / sizeof(html[0]))));
+        QTextDocument doc;
+        QTextCursor cursor(&doc);
+        cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(html, sizeof(html) / sizeof(html[0]))));
 
-	cursor.movePosition(QTextCursor::Start);
-	cursor.movePosition(QTextCursor::NextBlock);
-	QTextTable *table = cursor.currentTable();
-	QVERIFY(table);
-	QCOMPARE(table->columns(), 2);
-	QCOMPARE(table->rows(), 2);
+        cursor.movePosition(QTextCursor::Start);
+        cursor.movePosition(QTextCursor::NextBlock);
+        QTextTable *table = cursor.currentTable();
+        QVERIFY(table);
+        QCOMPARE(table->columns(), 2);
+        QCOMPARE(table->rows(), 2);
 
         /*
-	QTextCursor fourthCell = table->cellAt(1, 1).firstCursorPosition();
-	fourthCell.movePosition(QTextCursor::NextBlock);
-	table = fourthCell.currentTable();
-	QVERIFY(table);
-	QVERIFY(table != cursor.currentTable());
-	QCOMPARE(table->columns(), 2);
-	QCOMPARE(table->rows(), 3);
+        QTextCursor fourthCell = table->cellAt(1, 1).firstCursorPosition();
+        fourthCell.movePosition(QTextCursor::NextBlock);
+        table = fourthCell.currentTable();
+        QVERIFY(table);
+        QVERIFY(table != cursor.currentTable());
+        QCOMPARE(table->columns(), 2);
+        QCOMPARE(table->rows(), 3);
         */
     }
     {
-	const char buggyHtml[] = ""
-	    "<table>"
-	    "<tr><td>First Cell<td>Second Cell"
-	    "<tr><td>Third Cell<td>Fourth Cell"
-	    "</table>";
+        const char buggyHtml[] = ""
+            "<table>"
+            "<tr><td>First Cell<td>Second Cell"
+            "<tr><td>Third Cell<td>Fourth Cell"
+            "</table>";
 
-	QTextDocument doc;
-	QTextCursor cursor(&doc);
-	cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(buggyHtml, sizeof(buggyHtml) / sizeof(buggyHtml[0]))));
+        QTextDocument doc;
+        QTextCursor cursor(&doc);
+        cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(buggyHtml, sizeof(buggyHtml) / sizeof(buggyHtml[0]))));
 
-	cursor.movePosition(QTextCursor::Start);
-	cursor.movePosition(QTextCursor::NextBlock);
-	QTextTable *table = cursor.currentTable();
-	QVERIFY(table);
-	QCOMPARE(table->columns(), 2);
-	QCOMPARE(table->rows(), 2);
+        cursor.movePosition(QTextCursor::Start);
+        cursor.movePosition(QTextCursor::NextBlock);
+        QTextTable *table = cursor.currentTable();
+        QVERIFY(table);
+        QCOMPARE(table->columns(), 2);
+        QCOMPARE(table->rows(), 2);
     }
     {
-	const char buggyHtml[] = ""
-	    "<table>"
-	    "<tr><th>First Cell<th>Second Cell"
-	    "<tr><td>Third Cell<td>Fourth Cell"
-	    "</table>";
+        const char buggyHtml[] = ""
+            "<table>"
+            "<tr><th>First Cell<th>Second Cell"
+            "<tr><td>Third Cell<td>Fourth Cell"
+            "</table>";
 
-	QTextDocument doc;
-	QTextCursor cursor(&doc);
-	cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(buggyHtml, sizeof(buggyHtml) / sizeof(buggyHtml[0]))));
+        QTextDocument doc;
+        QTextCursor cursor(&doc);
+        cursor.insertFragment(QTextDocumentFragment::fromHtml(QByteArray::fromRawData(buggyHtml, sizeof(buggyHtml) / sizeof(buggyHtml[0]))));
 
-	cursor.movePosition(QTextCursor::Start);
-	cursor.movePosition(QTextCursor::NextBlock);
-	QTextTable *table = cursor.currentTable();
-	QVERIFY(table);
-	QCOMPARE(table->columns(), 2);
-	QCOMPARE(table->rows(), 2);
+        cursor.movePosition(QTextCursor::Start);
+        cursor.movePosition(QTextCursor::NextBlock);
+        QTextTable *table = cursor.currentTable();
+        QVERIFY(table);
+        QCOMPARE(table->columns(), 2);
+        QCOMPARE(table->rows(), 2);
     }
 
 }
@@ -755,6 +749,18 @@ void tst_QTextDocumentFragment::html_listIndents6()
     QCOMPARE(cursor.blockFormat().indent(), 0);
 }
 
+void tst_QTextDocumentFragment::html_listIndents7()
+{
+    const char html[] = "<ul><li style=\"-qt-block-indent:1;\">Hey</ul>";
+    setHtml(QString::fromLatin1(html));
+    cursor.movePosition(QTextCursor::Start);
+    cursor.movePosition(QTextCursor::NextBlock);
+    QTextList *list = cursor.currentList();
+    QVERIFY(list);
+    QCOMPARE(list->format().indent(), 1);
+    QCOMPARE(cursor.block().blockFormat().indent(), 1);
+}
+
 void tst_QTextDocumentFragment::blockCharFormat()
 {
     const char html[] = "<p style=\"font-style:italic\"><span style=\"font-style:normal\">Test</span></p>";
@@ -835,13 +841,13 @@ void tst_QTextDocumentFragment::unorderedListEnumeration()
     setHtml(QString::fromLatin1(html));
     cursor.movePosition(QTextCursor::End);
     QVERIFY(cursor.currentList());
-    QVERIFY(cursor.currentList()->format().style() == QTextListFormat::ListCircle);
+    QVERIFY(cursor.currentList()->format().style() == QTextListFormat::ListDisc);
 
-    const char html2[] = "<ul><ul><ul type=disc><li>Blah</li></ul></ul>";
+    const char html2[] = "<ul><ul><ul type=circle><li>Blah</li></ul></ul>";
     setHtml(QString::fromLatin1(html2));
     cursor.movePosition(QTextCursor::End);
     QVERIFY(cursor.currentList());
-    QVERIFY(cursor.currentList()->format().style() == QTextListFormat::ListDisc);
+    QVERIFY(cursor.currentList()->format().style() == QTextListFormat::ListCircle);
 
 }
 
@@ -4002,6 +4008,12 @@ void tst_QTextDocumentFragment::html_fromFirefox()
     // result in the following text on the clipboard (for text/html)
     doc->setHtml(QString::fromLatin1("<!--StartFragment-->Test\nText\n\n<!--EndFragment-->"));
     QCOMPARE(doc->toPlainText(), QString::fromLatin1("Test Text "));
+}
+
+void tst_QTextDocumentFragment::html_emptyInlineInsideBlock()
+{
+    doc->setHtml(QString::fromLatin1("<!--StartFragment--><blockquote><span/>Foobar</blockquote><!--EndFragment-->"));
+    QVERIFY(doc->firstBlock().blockFormat().leftMargin() > 0);
 }
 
 QTEST_MAIN(tst_QTextDocumentFragment)

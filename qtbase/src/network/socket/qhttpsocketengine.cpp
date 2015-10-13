@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +36,7 @@
 #include "qhostaddress.h"
 #include "qurl.h"
 #include "private/qhttpnetworkreply_p.h"
+#include "private/qiodevice_p.h"
 #include "qelapsedtimer.h"
 #include "qnetworkinterface.h"
 
@@ -124,7 +117,7 @@ void QHttpSocketEngine::setProxy(const QNetworkProxy &proxy)
 qintptr QHttpSocketEngine::socketDescriptor() const
 {
     Q_D(const QHttpSocketEngine);
-    return d->socket ? d->socket->socketDescriptor() : 0;
+    return d->socket ? d->socket->socketDescriptor() : -1;
 }
 
 bool QHttpSocketEngine::isValid() const
@@ -338,19 +331,6 @@ bool QHttpSocketEngine::setOption(SocketOption option, int value)
     return false;
 }
 
-/*
-   Returns the difference between msecs and elapsed. If msecs is -1,
-   however, -1 is returned.
-*/
-static int qt_timeout_value(int msecs, int elapsed)
-{
-    if (msecs == -1)
-        return -1;
-
-    int timeout = msecs - elapsed;
-    return timeout < 0 ? 0 : timeout;
-}
-
 bool QHttpSocketEngine::waitForRead(int msecs, bool *timedOut)
 {
     Q_D(const QHttpSocketEngine);
@@ -363,7 +343,7 @@ bool QHttpSocketEngine::waitForRead(int msecs, bool *timedOut)
 
     // Wait for more data if nothing is available.
     if (!d->socket->bytesAvailable()) {
-        if (!d->socket->waitForReadyRead(qt_timeout_value(msecs, stopWatch.elapsed()))) {
+        if (!d->socket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
             if (d->socket->state() == QAbstractSocket::UnconnectedState)
                 return true;
             setError(d->socket->error(), d->socket->errorString());
@@ -375,7 +355,7 @@ bool QHttpSocketEngine::waitForRead(int msecs, bool *timedOut)
 
     // If we're not connected yet, wait until we are, or until an error
     // occurs.
-    while (d->state != Connected && d->socket->waitForReadyRead(qt_timeout_value(msecs, stopWatch.elapsed()))) {
+    while (d->state != Connected && d->socket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
         // Loop while the protocol handshake is taking place.
     }
 
@@ -411,7 +391,7 @@ bool QHttpSocketEngine::waitForWrite(int msecs, bool *timedOut)
     // If we're not connected yet, wait until we are, and until bytes have
     // been received (i.e., the socket has connected, we have sent the
     // greeting, and then received the response).
-    while (d->state != Connected && d->socket->waitForReadyRead(qt_timeout_value(msecs, stopWatch.elapsed()))) {
+    while (d->state != Connected && d->socket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
         // Loop while the protocol handshake is taking place.
     }
 
@@ -497,12 +477,13 @@ void QHttpSocketEngine::slotSocketConnected()
     Q_D(QHttpSocketEngine);
 
     // Send the greeting.
-    const char method[] = "CONNECT ";
+    const char method[] = "CONNECT";
     QByteArray peerAddress = d->peerName.isEmpty() ?
                              d->peerAddress.toString().toLatin1() :
                              QUrl::toAce(d->peerName);
     QByteArray path = peerAddress + ':' + QByteArray::number(d->peerPort);
     QByteArray data = method;
+    data += " ";
     data += path;
     data += " HTTP/1.1\r\n";
     data += "Proxy-Connection: keep-alive\r\n";
@@ -544,14 +525,29 @@ void QHttpSocketEngine::slotSocketReadNotification()
         return;
     }
 
-  readResponseContent:
+    if (d->state == ConnectSent) {
+        d->reply->d_func()->state = QHttpNetworkReplyPrivate::NothingDoneState;
+        d->state = ReadResponseHeader;
+    }
+
+    if (d->state == ReadResponseHeader) {
+        bool ok = readHttpHeader();
+        if (!ok) {
+            // protocol error, this isn't HTTP
+            d->socket->close();
+            setState(QAbstractSocket::UnconnectedState);
+            setError(QAbstractSocket::ProxyProtocolError, tr("Did not receive HTTP response from proxy"));
+            emitConnectionNotification();
+            return;
+        }
+        if (d->state == ReadResponseHeader)
+            return; // readHttpHeader() was not done yet, need to wait for more header data
+    }
+
     if (d->state == ReadResponseContent) {
         char dummybuffer[4096];
         while (d->pendingResponseData) {
             int read = d->socket->read(dummybuffer, qMin(sizeof(dummybuffer), (size_t)d->pendingResponseData));
-            if (read >= 0)
-                dummybuffer[read] = 0;
-
             if (read == 0)
                 return;
             if (read == -1) {
@@ -563,31 +559,8 @@ void QHttpSocketEngine::slotSocketReadNotification()
         }
         if (d->pendingResponseData > 0)
             return;
-        d->state = SendAuthentication;
-        slotSocketConnected();
-        return;
-    }
-
-    bool ok = true;
-    if (d->reply->d_func()->state == QHttpNetworkReplyPrivate::NothingDoneState)
-        d->reply->d_func()->state = QHttpNetworkReplyPrivate::ReadingStatusState;
-    if (d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingStatusState) {
-        ok = d->reply->d_func()->readStatus(d->socket) != -1;
-        if (ok && d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingStatusState)
-            return; //Not done parsing headers yet, wait for more data
-    }
-    if (ok && d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingHeaderState) {
-        ok = d->reply->d_func()->readHeader(d->socket) != -1;
-        if (ok && d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingHeaderState)
-            return; //Not done parsing headers yet, wait for more data
-    }
-    if (!ok) {
-        // protocol error, this isn't HTTP
-        d->socket->close();
-        setState(QAbstractSocket::UnconnectedState);
-        setError(QAbstractSocket::ProxyProtocolError, tr("Did not receive HTTP response from proxy"));
-        emitConnectionNotification();
-        return;
+        if (d->reply->d_func()->statusCode == 407)
+            d->state = SendAuthentication;
     }
 
     int statusCode = d->reply->statusCode();
@@ -601,16 +574,18 @@ void QHttpSocketEngine::slotSocketReadNotification()
         priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
         priv->hasFailed = false;
     } else if (statusCode == 407) {
-        if (d->credentialsSent) {
+        if (d->authenticator.isNull())
+            d->authenticator.detach();
+        priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
+
+        if (d->credentialsSent && priv->phase != QAuthenticatorPrivate::Phase2) {
+            // Remember that (e.g.) NTLM is two-phase, so only reset when the authentication is not currently in progress.
             //407 response again means the provided username/password were invalid.
             d->authenticator = QAuthenticator(); //this is needed otherwise parseHttpResponse won't set the state, and then signal isn't emitted.
             d->authenticator.detach();
             priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
             priv->hasFailed = true;
         }
-        else if (d->authenticator.isNull())
-            d->authenticator.detach();
-        priv = QAuthenticatorPrivate::getPrivate(d->authenticator);
 
         priv->parseHttpResponse(d->reply->header(), true);
 
@@ -663,16 +638,8 @@ void QHttpSocketEngine::slotSocketReadNotification()
             if (willClose) {
                 d->socket->connectToHost(d->proxy.hostName(), d->proxy.port());
             } else {
-                bool ok;
-                int contentLength = d->reply->headerField("Content-Length").toInt(&ok);
-                if (ok && contentLength > 0) {
-                    d->state = ReadResponseContent;
-                    d->pendingResponseData = contentLength;
-                    goto readResponseContent;
-                } else {
-                    d->state = SendAuthentication;
-                    slotSocketConnected();
-                }
+                // send the HTTP CONNECT again
+                slotSocketConnected();
             }
             return;
         }
@@ -698,6 +665,39 @@ void QHttpSocketEngine::slotSocketReadNotification()
 
     // The handshake is done; notify that we're connected (or failed to connect)
     emitConnectionNotification();
+}
+
+bool QHttpSocketEngine::readHttpHeader()
+{
+    Q_D(QHttpSocketEngine);
+
+    if (d->state != ReadResponseHeader)
+        return false;
+
+    bool ok = true;
+    if (d->reply->d_func()->state == QHttpNetworkReplyPrivate::NothingDoneState) {
+        // do not keep old content sizes, status etc. around
+        d->reply->d_func()->clearHttpLayerInformation();
+        d->reply->d_func()->state = QHttpNetworkReplyPrivate::ReadingStatusState;
+    }
+    if (d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingStatusState) {
+        ok = d->reply->d_func()->readStatus(d->socket) != -1;
+        if (ok && d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingStatusState)
+            return true; //Not done parsing headers yet, wait for more data
+    }
+    if (ok && d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingHeaderState) {
+        ok = d->reply->d_func()->readHeader(d->socket) != -1;
+        if (ok && d->reply->d_func()->state == QHttpNetworkReplyPrivate::ReadingHeaderState)
+            return true; //Not done parsing headers yet, wait for more data
+    }
+    if (ok) {
+        bool contentLengthOk;
+        int contentLength = d->reply->headerField("Content-Length").toInt(&contentLengthOk);
+        if (contentLengthOk && contentLength > 0)
+            d->pendingResponseData = contentLength;
+        d->state = ReadResponseContent; // we are done reading the header
+    }
+    return ok;
 }
 
 void QHttpSocketEngine::slotSocketBytesWritten()

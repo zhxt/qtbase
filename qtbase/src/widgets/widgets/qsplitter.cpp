@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -158,8 +150,8 @@ Qt::Orientation QSplitterHandle::orientation() const
 
 
 /*!
-    Returns true if widgets are resized dynamically (opaquely), otherwise
-    returns false. This value is controlled by the QSplitter.
+    Returns \c true if widgets are resized dynamically (opaquely), otherwise
+    returns \c false. This value is controlled by the QSplitter.
 
     \sa QSplitter::opaqueResize()
 
@@ -1070,7 +1062,7 @@ void QSplitter::setCollapsible(int index, bool collapse)
 }
 
 /*!
-    Returns true if the widget at \a index is collapsible, otherwise returns false.
+    Returns \c true if the widget at \a index is collapsible, otherwise returns \c false.
 */
 bool QSplitter::isCollapsible(int index) const
 {
@@ -1224,7 +1216,9 @@ void QSplitter::childEvent(QChildEvent *c)
         return;
     }
     QWidget *w = static_cast<QWidget*>(c->child());
-    if (c->added() && !d->blockChildAdd && !w->isWindow() && !d->findWidget(w)) {
+    if (w->isWindow())
+        return;
+    if (c->added() && !d->blockChildAdd && !d->findWidget(w)) {
         d->insertWidget_helper(d->list.count(), w, false);
     } else if (c->polished() && !d->blockChildAdd) {
         if (isVisible() && !(w->isHidden() && w->testAttribute(Qt::WA_WState_ExplicitShowHide)))
@@ -1404,19 +1398,24 @@ int QSplitter::closestLegalPosition(int pos, int index)
     \property QSplitter::opaqueResize
     \brief whether resizing is opaque
 
-    Opaque resizing is on by default.
+    The default resize behavior is style dependent (determined by the
+    SH_Splitter_OpaqueResize style hint). However, you can override it
+    by calling setOpaqueResize()
+
+    \sa QStyle::StyleHint
 */
 
 bool QSplitter::opaqueResize() const
 {
     Q_D(const QSplitter);
-    return d->opaque;
+    return d->opaqueResizeSet ? d->opaque : style()->styleHint(QStyle::SH_Splitter_OpaqueResize, 0, this);
 }
 
 
 void QSplitter::setOpaqueResize(bool on)
 {
     Q_D(QSplitter);
+    d->opaqueResizeSet = true;
     d->opaque = on;
 }
 
@@ -1589,7 +1588,7 @@ static const qint32 SplitterMagic = 0xff;
 QByteArray QSplitter::saveState() const
 {
     Q_D(const QSplitter);
-    int version = 0;
+    int version = 1;
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
 
@@ -1602,15 +1601,16 @@ QByteArray QSplitter::saveState() const
     }
     stream << list;
     stream << childrenCollapsible();
-    stream << qint32(handleWidth());
+    stream << qint32(d->handleWidth);
     stream << opaqueResize();
     stream << qint32(orientation());
+    stream << d->opaqueResizeSet;
     return data;
 }
 
 /*!
     Restores the splitter's layout to the \a state specified.
-    Returns true if the state is restored; otherwise returns false.
+    Returns \c true if the state is restored; otherwise returns \c false.
 
     Typically this is used in conjunction with QSettings to restore the size
     from a past session. Here is an example:
@@ -1627,7 +1627,7 @@ QByteArray QSplitter::saveState() const
 bool QSplitter::restoreState(const QByteArray &state)
 {
     Q_D(QSplitter);
-    int version = 0;
+    int version = 1;
     QByteArray sd = state;
     QDataStream stream(&sd, QIODevice::ReadOnly);
     QList<int> list;
@@ -1638,7 +1638,7 @@ bool QSplitter::restoreState(const QByteArray &state)
 
     stream >> marker;
     stream >> v;
-    if (marker != SplitterMagic || v != version)
+    if (marker != SplitterMagic || v > version)
         return false;
 
     stream >> list;
@@ -1656,6 +1656,9 @@ bool QSplitter::restoreState(const QByteArray &state)
     stream >> i;
     setOrientation(Qt::Orientation(i));
     d->doResize();
+
+    if (v >= 1)
+        stream >> d->opaqueResizeSet;
 
     return true;
 }

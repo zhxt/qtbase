@@ -2,7 +2,6 @@ include($QT_INSTALL_DOCS/global/qt-module-defaults.qdocconf)
 
 project                 = QtGui
 description             = Qt GUI Reference Documentation
-url                     = http://qt-project.org/doc/qt-$QT_VER/qtgui
 version                 = $QT_VERSION
 
 examplesinstallpath     = gui
@@ -16,7 +15,7 @@ qhp.QtGui.indexTitle          = Qt GUI
 qhp.QtGui.indexRoot           =
 
 qhp.QtGui.filterAttributes    = qtgui $QT_VERSION qtrefdoc
-qhp.QtGui.customFilters.Qt.name = Qtgui $QT_VERSION
+qhp.QtGui.customFilters.Qt.name = QtGui $QT_VERSION
 qhp.QtGui.customFilters.Qt.filterAttributes = qtgui $QT_VERSION
 
 qhp.QtGui.subprojects         = classes
@@ -29,13 +28,17 @@ tagfile                 = ../../../doc/qtgui/qtgui.tags
 
 depends += \
     qtcore \
+    qtimageformats \
+    qtmacextras \
+    qtmultimedia \
     qtnetwork \
     qtopengl \
     qtsvg \
     qtqml \
     qtquick \
     qtwidgets \
-    qtdoc
+    qtdoc \
+    qmake
 
 headerdirs  += ..
 
@@ -48,3 +51,6 @@ exampledirs += ../../../examples/gui \
 imagedirs   += images \
                ../../../examples/gui/doc/images \
                ../../../doc/src/images \
+
+navigation.landingpage = "Qt GUI"
+navigation.cppclassespage = "Qt GUI C++ Classes"

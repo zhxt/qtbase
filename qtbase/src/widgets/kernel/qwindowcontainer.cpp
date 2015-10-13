@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,6 +34,10 @@
 #include "qwindowcontainer_p.h"
 #include "qwidget_p.h"
 #include <QtGui/qwindow.h>
+#include <QDebug>
+
+#include <QMdiSubWindow>
+#include <QAbstractScrollArea>
 
 QT_BEGIN_NAMESPACE
 
@@ -50,11 +46,77 @@ class QWindowContainerPrivate : public QWidgetPrivate
 public:
     Q_DECLARE_PUBLIC(QWindowContainer)
 
-    QWindowContainerPrivate() : window(0), oldFocusWindow(0) { }
+    QWindowContainerPrivate()
+        : window(0)
+        , oldFocusWindow(0)
+        , usesNativeWidgets(false)
+    {
+    }
+
     ~QWindowContainerPrivate() { }
+
+    static QWindowContainerPrivate *get(QWidget *w) {
+        QWindowContainer *wc = qobject_cast<QWindowContainer *>(w);
+        if (wc)
+            return wc->d_func();
+        return 0;
+    }
+
+    void updateGeometry() {
+        Q_Q(QWindowContainer);
+        if (!q->isWindow() && (q->geometry().bottom() <= 0 || q->geometry().right() <= 0))
+            /* Qt (e.g. QSplitter) sometimes prefer to hide a widget by *not* calling
+               setVisible(false). This is often done by setting its coordinates to a sufficiently
+               negative value so that its clipped outside the parent. Since a QWindow is not clipped
+               to widgets in general, it needs to be dealt with as a special case.
+            */
+            window->setGeometry(q->geometry());
+        else if (usesNativeWidgets)
+            window->setGeometry(q->rect());
+        else
+            window->setGeometry(QRect(q->mapTo(q->window(), QPoint()), q->size()));
+    }
+
+    void updateUsesNativeWidgets()
+    {
+        if (usesNativeWidgets || window->parent() == 0)
+            return;
+        Q_Q(QWindowContainer);
+        QWidget *p = q->parentWidget();
+        while (p) {
+            if (
+#ifndef QT_NO_MDIAREA
+                qobject_cast<QMdiSubWindow *>(p) != 0 ||
+#endif
+                qobject_cast<QAbstractScrollArea *>(p) != 0) {
+                q->winId();
+                usesNativeWidgets = true;
+                break;
+            }
+            p = p->parentWidget();
+        }
+    }
+
+    void markParentChain() {
+        Q_Q(QWindowContainer);
+        QWidget *p = q;
+        while (p) {
+            QWidgetPrivate *d = static_cast<QWidgetPrivate *>(QWidgetPrivate::get(p));
+            d->createExtra();
+            d->extra->hasWindowContainer = true;
+            p = p->parentWidget();
+        }
+    }
+
+    bool isStillAnOrphan() const {
+        return window->parent() == &fakeParent;
+    }
 
     QPointer<QWindow> window;
     QWindow *oldFocusWindow;
+    QWindow fakeParent;
+
+    uint usesNativeWidgets : 1;
 };
 
 
@@ -78,6 +140,14 @@ public:
     be removed from the window container with a call to
     QWindow::setParent().
 
+    The window container is attached as a native child window to the
+    toplevel window it is a child of. When a window container is used
+    as a child of a QAbstractScrollArea or QMdiArea, it will
+    create a \l {Native Widgets vs Alien Widgets} {native window} for
+    every widget in its parent chain to allow for proper stacking and
+    clipping in this use case. Applications with many native child
+    windows may suffer from performance issues.
+
     The window container has a number of known limitations:
 
     \list
@@ -85,11 +155,6 @@ public:
     \li Stacking order; The embedded window will stack on top of the
     widget hierarchy as an opaque box. The stacking order of multiple
     overlapping window container instances is undefined.
-
-    \li Window Handles; The window container will explicitly invoke
-    winId() which will force the use of native window handles
-    inside the application. See \l {Native Widgets vs Alien Widgets}
-    {QWidget documentation} for more details.
 
     \li Rendering Integration; The window container does not interoperate
     with QGraphicsProxyWidget, QWidget::render() or similar functionality.
@@ -132,18 +197,17 @@ QWindowContainer::QWindowContainer(QWindow *embeddedWindow, QWidget *parent, Qt:
     }
 
     d->window = embeddedWindow;
+    d->window->setParent(&d->fakeParent);
+    setAcceptDrops(true);
 
-    // We force this window to become a native window and reparent the
-    // window directly to it. This is done so that the order in which
-    // the QWindowContainer is added to a QWidget tree and when it
-    // gets a window does not matter.
-    winId();
-    d->window->setParent(windowHandle());
-
-    connect(QGuiApplication::instance(), SIGNAL(focusWindowChanged(QWindow *)), this, SLOT(focusWindowChanged(QWindow *)));
+    connect(QGuiApplication::instance(), SIGNAL(focusWindowChanged(QWindow*)), this, SLOT(focusWindowChanged(QWindow*)));
 }
 
-
+QWindow *QWindowContainer::containedWindow() const
+{
+    Q_D(const QWindowContainer);
+    return d->window;
+}
 
 /*!
     \internal
@@ -165,9 +229,12 @@ void QWindowContainer::focusWindowChanged(QWindow *focusWindow)
 {
     Q_D(QWindowContainer);
     d->oldFocusWindow = focusWindow;
+    if (focusWindow == d->window) {
+        QWidget *widget = QApplication::focusWidget();
+        if (widget)
+            widget->clearFocus();
+    }
 }
-
-
 
 /*!
     \internal
@@ -190,29 +257,127 @@ bool QWindowContainer::event(QEvent *e)
     // The only thing we are interested in is making sure our sizes stay
     // in sync, so do a catch-all case.
     case QEvent::Resize:
+        d->updateGeometry();
+        break;
     case QEvent::Move:
+        d->updateGeometry();
+        break;
     case QEvent::PolishRequest:
-        d->window->setGeometry(0, 0, width(), height());
+        d->updateGeometry();
         break;
     case QEvent::Show:
-        d->window->show();
-        break;
-    case QEvent::Hide:
-        d->window->hide();
-        break;
-    case QEvent::FocusIn:
-        if (d->oldFocusWindow != d->window) {
-            d->window->requestActivate();
-        } else {
-            QWidget *next = nextInFocusChain();
-            next->setFocus();
+        d->updateUsesNativeWidgets();
+        if (d->isStillAnOrphan()) {
+            d->window->setParent(d->usesNativeWidgets
+                                 ? windowHandle()
+                                 : window()->windowHandle());
+        }
+        if (d->window->parent()) {
+            d->markParentChain();
+            d->window->show();
         }
         break;
+    case QEvent::Hide:
+        if (d->window->parent())
+            d->window->hide();
+        break;
+    case QEvent::FocusIn:
+        if (d->window->parent()) {
+            if (d->oldFocusWindow != d->window) {
+                d->window->requestActivate();
+            } else {
+                QWidget *next = nextInFocusChain();
+                next->setFocus();
+            }
+        }
+        break;
+#ifndef QT_NO_DRAGANDDROP
+    case QEvent::Drop:
+    case QEvent::DragMove:
+    case QEvent::DragLeave:
+        QCoreApplication::sendEvent(d->window, e);
+        return e->isAccepted();
+    case QEvent::DragEnter:
+        // Don't reject drag events for the entire widget when one
+        // item rejects the drag enter
+        QCoreApplication::sendEvent(d->window, e);
+        e->accept();
+        return true;
+#endif
     default:
         break;
     }
 
     return QWidget::event(e);
+}
+
+typedef void (*qwindowcontainer_traverse_callback)(QWidget *parent);
+static void qwindowcontainer_traverse(QWidget *parent, qwindowcontainer_traverse_callback callback)
+{
+    const QObjectList &children = parent->children();
+    for (int i=0; i<children.size(); ++i) {
+        QWidget *w = qobject_cast<QWidget *>(children.at(i));
+        if (w) {
+            QWidgetPrivate *wd = static_cast<QWidgetPrivate *>(QWidgetPrivate::get(w));
+            if (wd->extra && wd->extra->hasWindowContainer)
+                callback(w);
+        }
+    }
+}
+
+void QWindowContainer::toplevelAboutToBeDestroyed(QWidget *parent)
+{
+    if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
+        d->window->setParent(&d->fakeParent);
+    }
+    qwindowcontainer_traverse(parent, toplevelAboutToBeDestroyed);
+}
+
+void QWindowContainer::parentWasChanged(QWidget *parent)
+{
+    if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
+        if (d->window->parent()) {
+            d->updateUsesNativeWidgets();
+            d->markParentChain();
+            QWidget *toplevel = d->usesNativeWidgets ? parent : parent->window();
+            if (!toplevel->windowHandle()) {
+                QWidgetPrivate *tld = static_cast<QWidgetPrivate *>(QWidgetPrivate::get(toplevel));
+                tld->createTLExtra();
+                tld->createTLSysExtra();
+                Q_ASSERT(toplevel->windowHandle());
+            }
+            d->window->setParent(toplevel->windowHandle());
+            d->updateGeometry();
+        }
+    }
+    qwindowcontainer_traverse(parent, parentWasChanged);
+}
+
+void QWindowContainer::parentWasMoved(QWidget *parent)
+{
+    if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
+        if (d->window->parent())
+            d->updateGeometry();
+    }
+    qwindowcontainer_traverse(parent, parentWasMoved);
+}
+
+void QWindowContainer::parentWasRaised(QWidget *parent)
+{
+    if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
+        if (d->window->parent())
+            d->window->raise();
+    }
+    qwindowcontainer_traverse(parent, parentWasRaised);
+}
+
+void QWindowContainer::parentWasLowered(QWidget *parent)
+{
+    if (QWindowContainerPrivate *d = QWindowContainerPrivate::get(parent)) {
+        if (d->window->parent())
+            d->window->lower();
+    }
+    qwindowcontainer_traverse(parent, parentWasLowered);
 }
 
 QT_END_NAMESPACE

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -133,14 +125,12 @@ static bool isValidBlockSeparator(QChar ch)
         || ch == QTextEndOfFrame;
 }
 
-#if !defined(QT_NO_DEBUG) || defined(QT_FORCE_ASSERTS)
 static bool noBlockInString(const QString &str)
 {
     return !str.contains(QChar::ParagraphSeparator)
         && !str.contains(QTextBeginningOfFrame)
         && !str.contains(QTextEndOfFrame);
 }
-#endif
 
 bool QTextUndoCommand::tryMerge(const QTextUndoCommand &other)
 {
@@ -632,7 +622,7 @@ void QTextDocumentPrivate::move(int pos, int to, int length, QTextUndoCommand::O
                                 blockRevision);
 
         if (key+1 != blocks.position(b)) {
-//	    qDebug("remove_string from %d length %d", key, X->size_array[0]);
+//          qDebug("remove_string from %d length %d", key, X->size_array[0]);
             Q_ASSERT(noBlockInString(text.mid(X->stringPosition, X->size_array[0])));
             w = remove_string(key, X->size_array[0], op);
 
@@ -641,7 +631,7 @@ void QTextDocumentPrivate::move(int pos, int to, int length, QTextUndoCommand::O
                 dstKey += X->size_array[0];
             }
         } else {
-//	    qDebug("remove_block at %d", key);
+//          qDebug("remove_block at %d", key);
             Q_ASSERT(X->size_array[0] == 1 && isValidBlockSeparator(text.at(X->stringPosition)));
             b = blocks.previous(b);
             B = 0;
@@ -779,7 +769,7 @@ void QTextDocumentPrivate::setCharFormat(int pos, int length, const QTextCharFor
 }
 
 void QTextDocumentPrivate::setBlockFormat(const QTextBlock &from, const QTextBlock &to,
-				     const QTextBlockFormat &newFormat, FormatChangeMode mode)
+                                          const QTextBlockFormat &newFormat, FormatChangeMode mode)
 {
     beginEditBlock();
 
@@ -795,7 +785,7 @@ void QTextDocumentPrivate::setBlockFormat(const QTextBlock &from, const QTextBlo
     QTextBlock it = from;
     QTextBlock end = to;
     if (end.isValid())
-	end = end.next();
+        end = end.next();
 
     for (; it != end; it = it.next()) {
         int oldFormat = block(it)->format;
@@ -820,8 +810,8 @@ void QTextDocumentPrivate::setBlockFormat(const QTextBlock &from, const QTextBlo
             if (group)
                 group->blockInserted(it);
         } else if (group) {
-	    group->blockFormatChanged(it);
-	}
+            group->blockFormatChanged(it);
+        }
     }
 
     documentChange(from.position(), to.position() + to.length() - from.position());
@@ -892,14 +882,14 @@ int QTextDocumentPrivate::undoRedo(bool undo)
         QTextUndoCommand &c = undoStack[undoState];
         int resetBlockRevision = c.pos;
 
-	switch(c.command) {
+        switch (c.command) {
         case QTextUndoCommand::Inserted:
             remove(c.pos, c.length, (QTextUndoCommand::Operation)c.operation);
             PMDEBUG("   erase: from %d, length %d", c.pos, c.length);
             c.command = QTextUndoCommand::Removed;
             editPos = c.pos;
             editLength = 0;
-	    break;
+            break;
         case QTextUndoCommand::Removed:
             PMDEBUG("   insert: format %d (from %d, length %d, strpos=%d)", c.format, c.pos, c.length, c.strPos);
             insert_string(c.pos, c.strPos, c.length, c.format, (QTextUndoCommand::Operation)c.operation);
@@ -908,33 +898,33 @@ int QTextDocumentPrivate::undoRedo(bool undo)
                 editLength = 0;
             editPos = c.pos;
             editLength += c.length;
-	    break;
-	case QTextUndoCommand::BlockInserted:
-	case QTextUndoCommand::BlockAdded:
+            break;
+        case QTextUndoCommand::BlockInserted:
+        case QTextUndoCommand::BlockAdded:
             remove_block(c.pos, &c.blockFormat, c.command, (QTextUndoCommand::Operation)c.operation);
             PMDEBUG("   blockremove: from %d", c.pos);
-	    if (c.command == QTextUndoCommand::BlockInserted)
-		c.command = QTextUndoCommand::BlockRemoved;
-	    else
-		c.command = QTextUndoCommand::BlockDeleted;
+            if (c.command == QTextUndoCommand::BlockInserted)
+                c.command = QTextUndoCommand::BlockRemoved;
+            else
+                c.command = QTextUndoCommand::BlockDeleted;
             editPos = c.pos;
             editLength = 0;
-	    break;
-	case QTextUndoCommand::BlockRemoved:
-	case QTextUndoCommand::BlockDeleted:
+            break;
+        case QTextUndoCommand::BlockRemoved:
+        case QTextUndoCommand::BlockDeleted:
             PMDEBUG("   blockinsert: charformat %d blockformat %d (pos %d, strpos=%d)", c.format, c.blockFormat, c.pos, c.strPos);
             insert_block(c.pos, c.strPos, c.format, c.blockFormat, (QTextUndoCommand::Operation)c.operation, c.command);
             resetBlockRevision += 1;
-	    if (c.command == QTextUndoCommand::BlockRemoved)
-		c.command = QTextUndoCommand::BlockInserted;
-	    else
-		c.command = QTextUndoCommand::BlockAdded;
+            if (c.command == QTextUndoCommand::BlockRemoved)
+                c.command = QTextUndoCommand::BlockInserted;
+            else
+                c.command = QTextUndoCommand::BlockAdded;
             if (editPos != (int)c.pos)
                 editLength = 0;
             editPos = c.pos;
             editLength += 1;
-	    break;
-	case QTextUndoCommand::CharFormatChanged: {
+            break;
+        case QTextUndoCommand::CharFormatChanged: {
             resetBlockRevision = -1; // ## TODO
             PMDEBUG("   charFormat: format %d (from %d, length %d)", c.format, c.pos, c.length);
             FragmentIterator it = find(c.pos);
@@ -947,9 +937,9 @@ int QTextDocumentPrivate::undoRedo(bool undo)
                 editLength = 0;
             editPos = c.pos;
             editLength += c.length;
-	    break;
-	}
-	case QTextUndoCommand::BlockFormatChanged: {
+            break;
+        }
+        case QTextUndoCommand::BlockFormatChanged: {
             resetBlockRevision = -1; // ## TODO
             PMDEBUG("   blockformat: format %d pos %d", c.format, c.pos);
             QTextBlock it = blocksFind(c.pos);
@@ -970,9 +960,9 @@ int QTextDocumentPrivate::undoRedo(bool undo)
             }
             documentChange(it.position(), it.length());
             editPos = -1;
-	    break;
-	}
-	case QTextUndoCommand::GroupFormatChange: {
+            break;
+        }
+        case QTextUndoCommand::GroupFormatChange: {
             resetBlockRevision = -1; // ## TODO
             PMDEBUG("   group format change");
             QTextObject *object = objectForIndex(c.objectIndex);
@@ -980,22 +970,22 @@ int QTextDocumentPrivate::undoRedo(bool undo)
             changeObjectFormat(object, c.format);
             c.format = oldFormat;
             editPos = -1;
-	    break;
-	}
+            break;
+        }
         case QTextUndoCommand::CursorMoved:
             editPos = c.pos;
             editLength = 0;
             break;
-	case QTextUndoCommand::Custom:
+        case QTextUndoCommand::Custom:
             resetBlockRevision = -1; // ## TODO
             if (undo)
                 c.custom->undo();
             else
                 c.custom->redo();
             editPos = -1;
-	    break;
-	default:
-	    Q_ASSERT(false);
+            break;
+        default:
+            Q_ASSERT(false);
         }
 
         if (resetBlockRevision >= 0) {
@@ -1315,9 +1305,9 @@ void QTextDocumentPrivate::adjustDocumentChangesAndCursors(int from, int addedOr
     int removed = qMax(0, -addedOrRemoved);
 
     int diff = 0;
-    if(from + removed < docChangeFrom)
+    if (from + removed < docChangeFrom)
         diff = docChangeFrom - from - removed;
-    else if(from > docChangeFrom + docChangeLength)
+    else if (from > docChangeFrom + docChangeLength)
         diff = from - (docChangeFrom + docChangeLength);
 
     int overlap_start = qMax(from, docChangeFrom);

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -114,6 +106,7 @@ private slots:
     void about();
     void detailsText();
     void detailsButtonText();
+    void expandDetails_QTBUG_32473();
 
 #ifndef Q_OS_MAC
     void shortcut();
@@ -135,6 +128,19 @@ private slots:
 private:
     int keyToSend;
     QTimer keySendTimer;
+};
+
+class tst_ResizingMessageBox : public QMessageBox
+{
+public:
+    tst_ResizingMessageBox() : QMessageBox(), resized(false) { }
+    bool resized;
+
+protected:
+    void resizeEvent ( QResizeEvent * event ) {
+        resized = true;
+        QMessageBox::resizeEvent(event);
+    }
 };
 
 tst_QMessageBox::tst_QMessageBox() : keyToSend(-1)
@@ -357,7 +363,7 @@ void tst_QMessageBox::statics()
     }
 }
 
-// shortcuts are not used on MAC OS X
+// shortcuts are not used on OS X
 #ifndef Q_OS_MAC
 void tst_QMessageBox::shortcut()
 {
@@ -477,7 +483,7 @@ void tst_QMessageBox::instanceSourceCompat()
     QCOMPARE(exec(&mb, Qt::Key_Enter), int(QMessageBox::Yes));
     QCOMPARE(exec(&mb, Qt::Key_Escape), int(QMessageBox::Cancel));
 #ifndef Q_OS_MAC
-    // mnemonics are not used on Mac OS X
+    // mnemonics are not used on OS X
     QCOMPARE(exec(&mb, Qt::ALT + Qt::Key_R), 0);
     QCOMPARE(exec(&mb, Qt::ALT + Qt::Key_Z), 1);
 #endif
@@ -579,6 +585,11 @@ void tst_QMessageBox::detailsText()
     QString text("This is the details text.");
     box.setDetailedText(text);
     QCOMPARE(box.detailedText(), text);
+    box.show();
+    QTest::qWaitForWindowExposed(&box);
+    // QTBUG-39334, the box should now have the default "Ok" button as well as
+    // the "Show Details.." button.
+    QCOMPARE(box.findChildren<QAbstractButton *>().size(), 2);
 }
 
 void tst_QMessageBox::detailsButtonText()
@@ -601,6 +612,37 @@ void tst_QMessageBox::detailsButtonText()
             }
         }
     }
+}
+
+void tst_QMessageBox::expandDetails_QTBUG_32473()
+{
+    tst_ResizingMessageBox box;
+    box.setDetailedText("bla");
+    box.show();
+    QApplication::postEvent(&box, new QEvent(QEvent::LanguageChange));
+    QApplication::processEvents();
+    QDialogButtonBox* bb = box.findChild<QDialogButtonBox*>("qt_msgbox_buttonbox");
+    QVERIFY(bb);
+
+    QList<QAbstractButton *> list = bb->buttons();
+    QAbstractButton* moreButton = NULL;
+    foreach (QAbstractButton* btn, list)
+        if (btn && bb->buttonRole(btn) == QDialogButtonBox::ActionRole)
+            moreButton = btn;
+    QVERIFY(moreButton);
+    QVERIFY(QTest::qWaitForWindowExposed(&box));
+    QRect geom = box.geometry();
+    box.resized = false;
+    moreButton->click();
+    QTRY_VERIFY(box.resized);
+    // After we receive the expose event for a second widget, it's likely
+    // that the window manager is also done manipulating the first QMessageBox.
+    QWidget fleece;
+    fleece.show();
+    QTest::qWaitForWindowExposed(&fleece);
+    if (geom.topLeft() == box.geometry().topLeft())
+        QTest::qWait(500);
+    QCOMPARE(geom.topLeft(), box.geometry().topLeft());
 }
 
 void tst_QMessageBox::incorrectDefaultButton()

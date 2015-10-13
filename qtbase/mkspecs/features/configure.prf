@@ -1,4 +1,7 @@
-equals(MAKEFILE_GENERATOR, UNIX) {
+QMAKE_MAKE = $$(MAKE)
+!isEmpty(QMAKE_MAKE) {
+    # We were called recursively. Use the right make, as MAKEFLAGS may be set as well.
+} else:equals(MAKEFILE_GENERATOR, UNIX) {
     QMAKE_MAKE = make
 } else:equals(MAKEFILE_GENERATOR, MINGW) {
     !equals(QMAKE_HOST.os, Windows): \
@@ -7,9 +10,6 @@ equals(MAKEFILE_GENERATOR, UNIX) {
         QMAKE_MAKE = mingw32-make
 } else:if(equals(MAKEFILE_GENERATOR, MSVC.NET)|equals(MAKEFILE_GENERATOR, MSBUILD)) {
     QMAKE_MAKE = nmake
-} else:ios {
-    # iOS unsets MAKEFILE_GENERATOR in its default_pre.prf
-    QMAKE_MAKE = make
 } else {
     error("Configure tests are not supported with the $$MAKEFILE_GENERATOR Makefile generator.")
 }
@@ -56,12 +56,18 @@ defineTest(qtCompileTest) {
     # Disable qmake features which are typically counterproductive for tests
     qmake_configs = "\"CONFIG -= qt debug_and_release app_bundle lib_bundle\""
 
+    # On WinRT we need to change the entry point as we cannot create windows
+    # applications
+    winrt {
+        qmake_configs += " \"QMAKE_LFLAGS+=/ENTRY:main\""
+    }
+
     # Clean up after previous run
     exists($$test_out_dir/Makefile):qtRunLoggedCommand("$$test_cmd_base $$QMAKE_MAKE distclean")
 
     mkpath($$test_out_dir)|error("Aborting.")
 
-    qtRunLoggedCommand("$$test_cmd_base $$system_quote($$system_path($$QMAKE_QMAKE)) $$qmake_configs $$shell_quote($$test_dir)") {
+    qtRunLoggedCommand("$$test_cmd_base $$system_quote($$system_path($$QMAKE_QMAKE)) -spec $$QMAKESPEC $$qmake_configs $$shell_quote($$test_dir)") {
         qtRunLoggedCommand("$$test_cmd_base $$QMAKE_MAKE") {
             log("yes$$escape_expand(\\n)")
             msg = "test $$1 succeeded"

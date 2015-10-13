@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -144,22 +136,25 @@ WidgetNavigator::~WidgetNavigator()
 
 namespace NativeEvents {
 #ifdef Q_OS_MAC
-   void mouseClick(const QPoint &globalPos, Qt::MouseButtons buttons, MousePosition updateMouse)
+   void mouseClick(const QPoint &globalPos, Qt::MouseButtons buttons)
     {
         CGPoint position;
         position.x = globalPos.x();
         position.y = globalPos.y();
 
-        const bool updateMousePosition = (updateMouse == UpdatePosition);
+        CGEventType mouseDownType = (buttons & Qt::LeftButton) ? kCGEventLeftMouseDown :
+                                    (buttons & Qt::RightButton) ? kCGEventRightMouseDown :
+                                                                  kCGEventOtherMouseDown;
+        CGMouseButton mouseButton = mouseDownType == kCGEventOtherMouseDown ? kCGMouseButtonCenter : kCGEventLeftMouseDown;
+        CGEventRef mouseEvent = CGEventCreateMouseEvent(NULL, mouseDownType, position, mouseButton);
+        CGEventPost(kCGHIDEventTap, mouseEvent);
 
-        // Mouse down.
-        CGPostMouseEvent(position, updateMousePosition, 3,
-                        (buttons & Qt::LeftButton) ? true : false,
-                        (buttons & Qt::MidButton/* Middlebutton! */) ? true : false,
-                        (buttons & Qt::RightButton) ? true : false);
-
-        // Mouse up.
-        CGPostMouseEvent(position, updateMousePosition, 3, false, false, false);
+        CGEventType mouseUpType = (buttons & Qt::LeftButton) ? kCGEventLeftMouseUp :
+                                  (buttons & Qt::RightButton) ? kCGEventRightMouseUp :
+                                                                kCGEventOtherMouseUp;
+        CGEventSetType(mouseEvent, mouseUpType);
+        CGEventPost(kCGHIDEventTap, mouseEvent);
+        CFRelease(mouseEvent);
     }
 #else
 # error Oops, NativeEvents::mouseClick() is not implemented on this platform.

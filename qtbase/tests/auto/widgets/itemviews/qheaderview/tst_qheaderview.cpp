@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Thorbjørn Lund Martsum - tmartsum[at]gmail.com
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,6 +38,7 @@
 #include <QStringListModel>
 #include <QSortFilterProxyModel>
 #include <QTableView>
+#include <QProxyStyle>
 
 #include <qabstractitemmodel.h>
 #include <qapplication.h>
@@ -58,6 +51,20 @@
 typedef QList<int> IntList;
 
 typedef QList<bool> BoolList;
+
+class TestStyle : public QProxyStyle
+{
+public:
+    void drawControl(ControlElement element, const QStyleOption *option, QPainter *painter, const QWidget *widget) const
+    {
+        if (element == CE_HeaderSection) {
+            if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(option))
+                lastPosition = header->position;
+        }
+        QProxyStyle::drawControl(element, option, painter, widget);
+    }
+    mutable QStyleOptionHeader::SectionPosition lastPosition;
+};
 
 class protected_QHeaderView : public QHeaderView
 {
@@ -169,6 +176,7 @@ private slots:
     void moveSectionAndRemove();
     void saveRestore();
     void defaultSectionSizeTest();
+    void defaultSectionSizeTestStyles();
 
     void defaultAlignment_data();
     void defaultAlignment();
@@ -229,6 +237,7 @@ private slots:
     void mixedTests();
     void resizeToContentTest();
     void testStreamWithHide();
+    void testStylePosition();
 
 protected:
     void setupTestData(bool use_reset_model = false);
@@ -341,8 +350,8 @@ void tst_QHeaderView::getSetCheck()
     QVERIFY(obj1.defaultSectionSize() >= 0);
     obj1.setDefaultSectionSize(0);
     QCOMPARE(0, obj1.defaultSectionSize());
-    obj1.setDefaultSectionSize(INT_MAX);
-    QCOMPARE(INT_MAX, obj1.defaultSectionSize());
+    obj1.setDefaultSectionSize(99999);
+    QCOMPARE(99999, obj1.defaultSectionSize());
 
     // int QHeaderView::minimumSectionSize()
     // void QHeaderView::setMinimumSectionSize(int)
@@ -350,8 +359,10 @@ void tst_QHeaderView::getSetCheck()
     QVERIFY(obj1.minimumSectionSize() >= 0);
     obj1.setMinimumSectionSize(0);
     QCOMPARE(0, obj1.minimumSectionSize());
-    obj1.setMinimumSectionSize(INT_MAX);
-    QCOMPARE(INT_MAX, obj1.minimumSectionSize());
+    obj1.setMinimumSectionSize(99999);
+    QCOMPARE(99999, obj1.minimumSectionSize());
+    obj1.setMinimumSectionSize(-1);
+    QVERIFY(obj1.minimumSectionSize() < 100);
 
     // int QHeaderView::offset()
     // void QHeaderView::setOffset(int)
@@ -603,6 +614,9 @@ void tst_QHeaderView::sectionSize_data()
 
 void tst_QHeaderView::sectionSize()
 {
+#if defined Q_OS_QNX
+    QSKIP("The section size is dpi dependent on QNX");
+#endif
     QFETCH(QList<int>, boundsCheck);
     QFETCH(QList<int>, defaultSizes);
     QFETCH(int, initialDefaultSize);
@@ -716,6 +730,9 @@ void tst_QHeaderView::visualIndexAt_data()
 
 void tst_QHeaderView::visualIndexAt()
 {
+#if defined Q_OS_QNX
+    QSKIP("The section size is dpi dependent on QNX");
+#endif
     QFETCH(QList<int>, hidden);
     QFETCH(QList<int>, from);
     QFETCH(QList<int>, to);
@@ -1629,6 +1646,38 @@ void tst_QHeaderView::saveRestore()
     QByteArray s2 = h2.saveState();
 
     QVERIFY(s1 == s2);
+    QVERIFY(!h2.restoreState(QByteArrayLiteral("Garbage")));
+
+    // QTBUG-40462
+    // Setting from Qt4, where information about multiple sections were grouped together in one
+    // sectionItem object
+    QByteArray settings_qt4 =
+      QByteArray::fromHex("000000ff00000000000000010000000100000000010000000000000000000000000000"
+                          "0000000003e80000000a0101000100000000000000000000000064ffffffff00000081"
+                          "0000000000000001000003e80000000a00000000");
+    QVERIFY(h2.restoreState(settings_qt4));
+    int sectionItemsLengthTotal = 0;
+    for (int i = 0; i < h2.count(); ++i)
+        sectionItemsLengthTotal += h2.sectionSize(i);
+    QVERIFY(sectionItemsLengthTotal == h2.length());
+
+    // Buggy setting where sum(sectionItems) != length. Check false is returned and this corrupted
+    // state isn't restored
+    QByteArray settings_buggy_length =
+      QByteArray::fromHex("000000ff000000000000000100000000000000050100000000000000000000000a4000"
+                          "000000010000000600000258000000fb0000000a010100010000000000000000000000"
+                          "0064ffffffff00000081000000000000000a000000d30000000100000000000000c800"
+                          "000001000000000000008000000001000000000000005c00000001000000000000003c"
+                          "0000000100000000000002580000000100000000000000000000000100000000000002"
+                          "580000000100000000000002580000000100000000000003c000000001000000000000"
+                          "03e8");
+    int old_length = h2.length();
+    QByteArray old_state = h2.saveState();
+    // Check setting is correctly recognized as corrupted
+    QVERIFY(!h2.restoreState(settings_buggy_length));
+    // Check nothing has been actually restored
+    QVERIFY(h2.length() == old_length);
+    QVERIFY(h2.saveState() == old_state);
 }
 
 void tst_QHeaderView::defaultSectionSizeTest()
@@ -1662,6 +1711,41 @@ void tst_QHeaderView::defaultSectionSizeTest()
     QVERIFY(hv->sectionSize(2) == 0); // section is hidden. It should not be resized.
 }
 
+class TestHeaderViewStyle : public QProxyStyle
+{
+public:
+    TestHeaderViewStyle() : horizontalSectionSize(100) {}
+    int pixelMetric(PixelMetric metric, const QStyleOption *option = 0, const QWidget *widget = 0) const Q_DECL_OVERRIDE
+    {
+        if (metric == QStyle::PM_HeaderDefaultSectionSizeHorizontal)
+            return horizontalSectionSize;
+        else
+            return QProxyStyle::pixelMetric(metric, option, widget);
+    }
+    int horizontalSectionSize;
+};
+
+void tst_QHeaderView::defaultSectionSizeTestStyles()
+{
+    TestHeaderViewStyle style1;
+    TestHeaderViewStyle style2;
+    style1.horizontalSectionSize = 100;
+    style2.horizontalSectionSize = 200;
+
+    QHeaderView hv(Qt::Horizontal);
+    hv.setStyle(&style1);
+    QCOMPARE(hv.defaultSectionSize(), style1.horizontalSectionSize);
+    hv.setStyle(&style2);
+    QCOMPARE(hv.defaultSectionSize(), style2.horizontalSectionSize);
+    hv.setDefaultSectionSize(70);
+    QCOMPARE(hv.defaultSectionSize(), 70);
+    hv.setStyle(&style1);
+    QCOMPARE(hv.defaultSectionSize(), 70);
+    hv.resetDefaultSectionSize();
+    QCOMPARE(hv.defaultSectionSize(), style1.horizontalSectionSize);
+    hv.setStyle(&style2);
+    QCOMPARE(hv.defaultSectionSize(), style2.horizontalSectionSize);
+}
 
 void tst_QHeaderView::defaultAlignment_data()
 {
@@ -2705,6 +2789,20 @@ void tst_QHeaderView::resizeToContentTest()
     QVERIFY(view->sectionSize(1) > 1);
     QVERIFY(view->sectionSize(2) > 1);
 
+    // Check minimum section size
+    hh->setMinimumSectionSize(150);
+    model->setData(idx, QVariant("i"));
+    hh->resizeSections(QHeaderView::ResizeToContents);
+    QCOMPARE(hh->sectionSize(3), 150);
+    hh->setMinimumSectionSize(-1);
+
+    // Check maximumSection size
+    hh->setMaximumSectionSize(200);
+    model->setData(idx, QVariant("This is a even longer string that is expected to be more than 200 pixels"));
+    hh->resizeSections(QHeaderView::ResizeToContents);
+    QCOMPARE(hh->sectionSize(3), 200);
+    hh->setMaximumSectionSize(-1);
+
     view->setDefaultSectionSize(25); // To make sure our precalced data are correct. We do not know font height etc.
 
     const int precalced_results[] =  { -1523279360, -1523279360, -1347156568, 1, 1719705216, 1719705216, 12500 };
@@ -2730,6 +2828,55 @@ void tst_QHeaderView::testStreamWithHide()
 #else
     QSKIP("Datastream required for testStreamWithHide. Skipping this test.");
 #endif
+}
+
+void tst_QHeaderView::testStylePosition()
+{
+    topLevel->show();
+    QVERIFY(QTest::qWaitForWindowExposed(topLevel));
+
+    protected_QHeaderView *header = static_cast<protected_QHeaderView *>(view);
+
+    TestStyle proxy;
+    header->setStyle(&proxy);
+
+    QImage image(1, 1, QImage::Format_ARGB32);
+    QPainter p(&image);
+
+    // 0, 1, 2, 3
+    header->paintSection(&p, view->rect(), 0);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Beginning);
+    header->paintSection(&p, view->rect(), 1);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Middle);
+    header->paintSection(&p, view->rect(), 2);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Middle);
+    header->paintSection(&p, view->rect(), 3);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::End);
+
+    // (0),2,1,3
+    view->setSectionHidden(0, true);
+    view->swapSections(1, 2);
+    header->paintSection(&p, view->rect(), 1);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Middle);
+    header->paintSection(&p, view->rect(), 2);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Beginning);
+    header->paintSection(&p, view->rect(), 3);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::End);
+
+    // (1),2,0,(3)
+    view->setSectionHidden(3, true);
+    view->setSectionHidden(0, false);
+    view->setSectionHidden(1, true);
+    view->swapSections(0, 1);
+    header->paintSection(&p, view->rect(), 0);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::End);
+    header->paintSection(&p, view->rect(), 2);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::Beginning);
+
+    // (1),2,(0),(3)
+    view->setSectionHidden(0, true);
+    header->paintSection(&p, view->rect(), 2);
+    QCOMPARE(proxy.lastPosition, QStyleOptionHeader::OnlyOneSection);
 }
 
 QTEST_MAIN(tst_QHeaderView)

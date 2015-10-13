@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -88,6 +80,8 @@ public:
     Config(const QString& programName);
     ~Config();
 
+    static bool debug_;
+
     void load(const QString& fileName);
     void setStringList(const QString& var, const QStringList& values);
 
@@ -101,9 +95,7 @@ public:
     QString getString(const QString& var) const;
     QSet<QString> getStringSet(const QString& var) const;
     QStringList getStringList(const QString& var) const;
-    QStringList getCanonicalPathList(const QString& var) const;
-    QStringList getCleanPathList(const QString& var) const;
-    QStringList getPathList(const QString& var) const;
+    QStringList getCanonicalPathList(const QString& var, bool validate = false) const;
     QRegExp getRegExp(const QString& var) const;
     QList<QRegExp> getRegExpList(const QString& var) const;
     QSet<QString> subVars(const QString& var) const;
@@ -112,9 +104,11 @@ public:
                             const QString& dirsVar,
                             const QSet<QString> &excludedDirs = QSet<QString>(),
                             const QSet<QString> &excludedFiles = QSet<QString>());
+    QString getIncludeFilePath(const QString& fileName) const;
     QStringList getExampleQdocFiles(const QSet<QString> &excludedDirs, const QSet<QString> &excludedFiles);
     QStringList getExampleImageFiles(const QSet<QString> &excludedDirs, const QSet<QString> &excludedFiles);
 
+    static QStringList loadMaster(const QString& fileName);
     static QStringList getFilesHere(const QString& dir,
                                     const QString& nameFilter,
                                     const Location &location = Location(),
@@ -140,7 +134,7 @@ public:
     static void pushWorkingDir(const QString& dir);
     static QString popWorkingDir();
 
-    QT_STATIC_CONST QString dot;
+    static const QString dot;
 
     static bool generateExamples;
     static QString installDir;
@@ -160,71 +154,159 @@ private:
     static QMap<QString, QString> extractedDirs;
     static int numInstances;
     static QStack<QString> workingDirs_;
+    static QMap<QString, QStringList> includeFilesMap_;
 };
 
-#define CONFIG_ALIAS                    "alias"
-#define CONFIG_BASE                     "base"
-#define CONFIG_BASEDIR                  "basedir"
-#define CONFIG_CODEINDENT               "codeindent"
-#define CONFIG_DEFINES                  "defines"
-#define CONFIG_DEPENDS                  "depends"
-#define CONFIG_DESCRIPTION              "description"
-#define CONFIG_EDITION                  "edition"
-#define CONFIG_ENDHEADER                "endheader"
-#define CONFIG_EXAMPLEDIRS              "exampledirs"
-#define CONFIG_EXAMPLES                 "examples"
-#define CONFIG_EXAMPLESINSTALLPATH      "examplesinstallpath"
-#define CONFIG_EXCLUDEDIRS              "excludedirs"
-#define CONFIG_EXCLUDEFILES             "excludefiles"
-#define CONFIG_EXTRAIMAGES              "extraimages"
-#define CONFIG_FALSEHOODS               "falsehoods"
-#define CONFIG_FORMATTING               "formatting"
-#define CONFIG_GENERATEINDEX            "generateindex"
-#define CONFIG_HEADERDIRS               "headerdirs"
-#define CONFIG_HEADERS                  "headers"
-#define CONFIG_HEADERSCRIPTS            "headerscripts"
-#define CONFIG_HEADERSTYLES             "headerstyles"
-#define CONFIG_IGNOREDIRECTIVES         "ignoredirectives"
-#define CONFIG_IGNORETOKENS             "ignoretokens"
-#define CONFIG_IMAGEDIRS                "imagedirs"
-#define CONFIG_IMAGES                   "images"
-#define CONFIG_INDEXES                  "indexes"
-#define CONFIG_LANGUAGE                 "language"
-#define CONFIG_MACRO                    "macro"
-#define CONFIG_MANIFESTMETA             "manifestmeta"
-#define CONFIG_NATURALLANGUAGE          "naturallanguage"
-#define CONFIG_NOLINKERRORS             "nolinkerrors"
-#define CONFIG_OBSOLETELINKS            "obsoletelinks"
-#define CONFIG_OUTPUTDIR                "outputdir"
-#define CONFIG_OUTPUTENCODING           "outputencoding"
-#define CONFIG_OUTPUTLANGUAGE           "outputlanguage"
-#define CONFIG_OUTPUTFORMATS            "outputformats"
-#define CONFIG_OUTPUTPREFIXES           "outputprefixes"
-#define CONFIG_PROJECT                  "project"
-#define CONFIG_QHP                      "qhp"
-#define CONFIG_QUOTINGINFORMATION       "quotinginformation"
-#define CONFIG_SCRIPTDIRS               "scriptdirs"
-#define CONFIG_SCRIPTS                  "scripts"
-#define CONFIG_SHOWINTERNAL             "showinternal"
-#define CONFIG_SOURCEDIRS               "sourcedirs"
-#define CONFIG_SOURCEENCODING           "sourceencoding"
-#define CONFIG_SOURCES                  "sources"
-#define CONFIG_SPURIOUS                 "spurious"
-#define CONFIG_STYLEDIRS                "styledirs"
-#define CONFIG_STYLE                    "style"
-#define CONFIG_STYLES                   "styles"
-#define CONFIG_STYLESHEETS              "stylesheets"
-#define CONFIG_SYNTAXHIGHLIGHTING       "syntaxhighlighting"
-#define CONFIG_TEMPLATEDIR              "templatedir"
-#define CONFIG_TABSIZE                  "tabsize"
-#define CONFIG_TAGFILE                  "tagfile"
-#define CONFIG_TRANSLATORS              "translators"
-#define CONFIG_URL                      "url"
-#define CONFIG_VERSION                  "version"
-#define CONFIG_VERSIONSYM               "versionsym"
-#define CONFIG_FILEEXTENSIONS           "fileextensions"
-#define CONFIG_IMAGEEXTENSIONS          "imageextensions"
-#define CONFIG_QMLONLY                  "qmlonly"
+struct ConfigStrings
+{
+    static QString ALIAS;
+    static QString AUTOLINKERRORS;
+    static QString BASE;
+    static QString BASEDIR;
+    static QString BUILDVERSION;
+    static QString CODEINDENT;
+    static QString CPPCLASSESPAGE;
+    static QString DEFINES;
+    static QString DEPENDS;
+    static QString DESCRIPTION;
+    static QString EDITION;
+    static QString ENDHEADER;
+    static QString EXAMPLEDIRS;
+    static QString EXAMPLES;
+    static QString EXAMPLESINSTALLPATH;
+    static QString EXCLUDEDIRS;
+    static QString EXCLUDEFILES;
+    static QString EXTRAIMAGES;
+    static QString FALSEHOODS;
+    static QString FORMATTING;
+    static QString GENERATEINDEX;
+    static QString HEADERDIRS;
+    static QString HEADERS;
+    static QString HEADERSCRIPTS;
+    static QString HEADERSTYLES;
+    static QString HOMEPAGE;
+    static QString IGNOREDIRECTIVES;
+    static QString IGNORETOKENS;
+    static QString IMAGEDIRS;
+    static QString IMAGES;
+    static QString INDEXES;
+    static QString LANDINGPAGE;
+    static QString LANGUAGE;
+    static QString MACRO;
+    static QString MANIFESTMETA;
+    static QString NATURALLANGUAGE;
+    static QString NAVIGATION;
+    static QString NOLINKERRORS;
+    static QString OBSOLETELINKS;
+    static QString OUTPUTDIR;
+    static QString OUTPUTENCODING;
+    static QString OUTPUTLANGUAGE;
+    static QString OUTPUTFORMATS;
+    static QString OUTPUTPREFIXES;
+    static QString PROJECT;
+    static QString REDIRECTDOCUMENTATIONTODEVNULL;
+    static QString QHP;
+    static QString QUOTINGINFORMATION;
+    static QString SCRIPTDIRS;
+    static QString SCRIPTS;
+    static QString SHOWINTERNAL;
+    static QString SINGLEEXEC;
+    static QString SOURCEDIRS;
+    static QString SOURCEENCODING;
+    static QString SOURCES;
+    static QString SPURIOUS;
+    static QString STYLEDIRS;
+    static QString STYLE;
+    static QString STYLES;
+    static QString STYLESHEETS;
+    static QString SYNTAXHIGHLIGHTING;
+    static QString TEMPLATEDIR;
+    static QString TABSIZE;
+    static QString TAGFILE;
+    static QString TRANSLATORS;
+    static QString URL;
+    static QString VERSION;
+    static QString VERSIONSYM;
+    static QString FILEEXTENSIONS;
+    static QString IMAGEEXTENSIONS;
+    static QString QMLONLY;
+    static QString QMLTYPESPAGE;
+    static QString WRITEQAPAGES;
+};
+
+#define CONFIG_ALIAS ConfigStrings::ALIAS
+#define CONFIG_AUTOLINKERRORS ConfigStrings::AUTOLINKERRORS
+#define CONFIG_BASE ConfigStrings::BASE
+#define CONFIG_BASEDIR ConfigStrings::BASEDIR
+#define CONFIG_BUILDVERSION ConfigStrings::BUILDVERSION
+#define CONFIG_CODEINDENT ConfigStrings::CODEINDENT
+#define CONFIG_CPPCLASSESPAGE ConfigStrings::CPPCLASSESPAGE
+#define CONFIG_DEFINES ConfigStrings::DEFINES
+#define CONFIG_DEPENDS ConfigStrings::DEPENDS
+#define CONFIG_DESCRIPTION ConfigStrings::DESCRIPTION
+#define CONFIG_EDITION ConfigStrings::EDITION
+#define CONFIG_ENDHEADER ConfigStrings::ENDHEADER
+#define CONFIG_EXAMPLEDIRS ConfigStrings::EXAMPLEDIRS
+#define CONFIG_EXAMPLES ConfigStrings::EXAMPLES
+#define CONFIG_EXAMPLESINSTALLPATH ConfigStrings::EXAMPLESINSTALLPATH
+#define CONFIG_EXCLUDEDIRS ConfigStrings::EXCLUDEDIRS
+#define CONFIG_EXCLUDEFILES ConfigStrings::EXCLUDEFILES
+#define CONFIG_EXTRAIMAGES ConfigStrings::EXTRAIMAGES
+#define CONFIG_FALSEHOODS ConfigStrings::FALSEHOODS
+#define CONFIG_FORMATTING ConfigStrings::FORMATTING
+#define CONFIG_GENERATEINDEX ConfigStrings::GENERATEINDEX
+#define CONFIG_HEADERDIRS ConfigStrings::HEADERDIRS
+#define CONFIG_HEADERS ConfigStrings::HEADERS
+#define CONFIG_HEADERSCRIPTS ConfigStrings::HEADERSCRIPTS
+#define CONFIG_HEADERSTYLES ConfigStrings::HEADERSTYLES
+#define CONFIG_HOMEPAGE ConfigStrings::HOMEPAGE
+#define CONFIG_IGNOREDIRECTIVES ConfigStrings::IGNOREDIRECTIVES
+#define CONFIG_IGNORETOKENS ConfigStrings::IGNORETOKENS
+#define CONFIG_IMAGEDIRS ConfigStrings::IMAGEDIRS
+#define CONFIG_IMAGES ConfigStrings::IMAGES
+#define CONFIG_INDEXES ConfigStrings::INDEXES
+#define CONFIG_LANDINGPAGE ConfigStrings::LANDINGPAGE
+#define CONFIG_LANGUAGE ConfigStrings::LANGUAGE
+#define CONFIG_MACRO ConfigStrings::MACRO
+#define CONFIG_MANIFESTMETA ConfigStrings::MANIFESTMETA
+#define CONFIG_NATURALLANGUAGE ConfigStrings::NATURALLANGUAGE
+#define CONFIG_NAVIGATION ConfigStrings::NAVIGATION
+#define CONFIG_NOLINKERRORS ConfigStrings::NOLINKERRORS
+#define CONFIG_OBSOLETELINKS ConfigStrings::OBSOLETELINKS
+#define CONFIG_OUTPUTDIR ConfigStrings::OUTPUTDIR
+#define CONFIG_OUTPUTENCODING ConfigStrings::OUTPUTENCODING
+#define CONFIG_OUTPUTLANGUAGE ConfigStrings::OUTPUTLANGUAGE
+#define CONFIG_OUTPUTFORMATS ConfigStrings::OUTPUTFORMATS
+#define CONFIG_OUTPUTPREFIXES ConfigStrings::OUTPUTPREFIXES
+#define CONFIG_PROJECT ConfigStrings::PROJECT
+#define CONFIG_REDIRECTDOCUMENTATIONTODEVNULL ConfigStrings::REDIRECTDOCUMENTATIONTODEVNULL
+#define CONFIG_QHP ConfigStrings::QHP
+#define CONFIG_QUOTINGINFORMATION ConfigStrings::QUOTINGINFORMATION
+#define CONFIG_SCRIPTDIRS ConfigStrings::SCRIPTDIRS
+#define CONFIG_SCRIPTS ConfigStrings::SCRIPTS
+#define CONFIG_SHOWINTERNAL ConfigStrings::SHOWINTERNAL
+#define CONFIG_SINGLEEXEC ConfigStrings::SINGLEEXEC
+#define CONFIG_SOURCEDIRS ConfigStrings::SOURCEDIRS
+#define CONFIG_SOURCEENCODING ConfigStrings::SOURCEENCODING
+#define CONFIG_SOURCES ConfigStrings::SOURCES
+#define CONFIG_SPURIOUS ConfigStrings::SPURIOUS
+#define CONFIG_STYLEDIRS ConfigStrings::STYLEDIRS
+#define CONFIG_STYLE ConfigStrings::STYLE
+#define CONFIG_STYLES ConfigStrings::STYLES
+#define CONFIG_STYLESHEETS ConfigStrings::STYLESHEETS
+#define CONFIG_SYNTAXHIGHLIGHTING ConfigStrings::SYNTAXHIGHLIGHTING
+#define CONFIG_TEMPLATEDIR ConfigStrings::TEMPLATEDIR
+#define CONFIG_TABSIZE ConfigStrings::TABSIZE
+#define CONFIG_TAGFILE ConfigStrings::TAGFILE
+#define CONFIG_TRANSLATORS ConfigStrings::TRANSLATORS
+#define CONFIG_URL ConfigStrings::URL
+#define CONFIG_VERSION ConfigStrings::VERSION
+#define CONFIG_VERSIONSYM ConfigStrings::VERSIONSYM
+#define CONFIG_FILEEXTENSIONS ConfigStrings::FILEEXTENSIONS
+#define CONFIG_IMAGEEXTENSIONS ConfigStrings::IMAGEEXTENSIONS
+#define CONFIG_QMLONLY ConfigStrings::QMLONLY
+#define CONFIG_QMLTYPESPAGE ConfigStrings::QMLTYPESPAGE
+#define CONFIG_WRITEQAPAGES ConfigStrings::WRITEQAPAGES
 
 QT_END_NAMESPACE
 

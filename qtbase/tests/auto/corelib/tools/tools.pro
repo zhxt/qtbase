@@ -1,13 +1,18 @@
 TEMPLATE=subdirs
 SUBDIRS=\
+    collections \
     qalgorithms \
     qarraydata \
+    qarraydata_strictiterators \
     qbitarray \
     qbytearray \
+    qbytearraylist \
     qbytearraymatcher \
     qbytedatabuffer \
     qcache \
     qchar \
+    qcollator \
+    qcommandlineparser \
     qcontiguouscache \
     qcryptographichash \
     qdate \
@@ -17,10 +22,15 @@ SUBDIRS=\
     qexplicitlyshareddatapointer \
     qfreelist \
     qhash \
+    qhash_strictiterators \
+    qhashfunctions \
     qline \
+    qlinkedlist \
     qlist \
+    qlist_strictiterators \
     qlocale \
     qmap \
+    qmap_strictiterators \
     qmargins \
     qmessageauthenticationcode \
     qpair \
@@ -41,11 +51,16 @@ SUBDIRS=\
     qstring \
     qstring_no_cast_from_bytearray \
     qstringbuilder \
+    qstringiterator \
     qstringlist \
     qstringmatcher \
     qstringref \
     qtextboundaryfinder \
     qtime \
+    qtimezone \
     qtimeline \
     qvarlengtharray \
-    qvector
+    qvector \
+    qvector_strictiterators \
+    qversionnumber
+

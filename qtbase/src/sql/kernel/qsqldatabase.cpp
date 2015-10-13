@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -107,7 +99,11 @@ Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
                            QLatin1String("/sqldrivers")))
 #endif
 
-QT_STATIC_CONST_IMPL char *QSqlDatabase::defaultConnection = "qt_sql_default_connection";
+#if !defined(Q_CC_MSVC) || _MSC_VER >= 1900
+// ### Qt6: remove the #ifdef
+const
+#endif
+char *QSqlDatabase::defaultConnection = const_cast<char *>("qt_sql_default_connection");
 
 typedef QHash<QString, QSqlDriverCreatorBase*> DriverDict;
 
@@ -454,7 +450,7 @@ void QSqlDatabasePrivate::disable()
     The database connection is referred to by \a connectionName. The
     newly added database connection is returned.
 
-    If \a type is not available or could not be loaded, isValid() returns false.
+    If \a type is not available or could not be loaded, isValid() returns \c false.
 
     If \a connectionName is not specified, the new connection becomes
     the default connection for the application, and subsequent calls
@@ -620,8 +616,8 @@ void QSqlDatabase::registerSqlDriver(const QString& name, QSqlDriverCreatorBase 
 /*!
     \threadsafe
 
-    Returns true if the list of database connections contains \a
-    connectionName; otherwise returns false.
+    Returns \c true if the list of database connections contains \a
+    connectionName; otherwise returns \c false.
 
     \sa connectionNames(), database(), {Threads and the SQL Module}
 */
@@ -826,7 +822,7 @@ QSqlQuery QSqlDatabase::exec(const QString & query) const
 
 /*!
     Opens the database connection using the current connection
-    values. Returns true on success; otherwise returns false. Error
+    values. Returns \c true on success; otherwise returns \c false. Error
     information can be retrieved using lastError().
 
     \sa lastError(), setDatabaseName(), setUserName(), setPassword(),
@@ -843,7 +839,7 @@ bool QSqlDatabase::open()
     \overload
 
     Opens the database connection using the given \a user name and \a
-    password. Returns true on success; otherwise returns false. Error
+    password. Returns \c true on success; otherwise returns \c false. Error
     information can be retrieved using the lastError() function.
 
     This function does not store the password it is given. Instead,
@@ -876,8 +872,8 @@ void QSqlDatabase::close()
 }
 
 /*!
-    Returns true if the database connection is currently open;
-    otherwise returns false.
+    Returns \c true if the database connection is currently open;
+    otherwise returns \c false.
 */
 
 bool QSqlDatabase::isOpen() const
@@ -886,8 +882,8 @@ bool QSqlDatabase::isOpen() const
 }
 
 /*!
-    Returns true if there was an error opening the database
-    connection; otherwise returns false. Error information can be
+    Returns \c true if there was an error opening the database
+    connection; otherwise returns \c false. Error information can be
     retrieved using the lastError() function.
 */
 
@@ -1228,6 +1224,9 @@ QSqlRecord QSqlDatabase::record(const QString& tablename) const
     \li CLIENT_INTERACTIVE
     \li UNIX_SOCKET
     \li MYSQL_OPT_RECONNECT
+    \li MYSQL_OPT_CONNECT_TIMEOUT
+    \li MYSQL_OPT_READ_TIMEOUT
+    \li MYSQL_OPT_WRITE_TIMEOUT
     \endlist
 
     \li
@@ -1264,6 +1263,7 @@ QSqlRecord QSqlDatabase::record(const QString& tablename) const
     \list
     \li QSQLITE_BUSY_TIMEOUT
     \li QSQLITE_OPEN_READONLY
+    \li QSQLITE_OPEN_URI
     \li QSQLITE_ENABLE_SHARED_CACHE
     \endlist
 
@@ -1302,8 +1302,8 @@ QString QSqlDatabase::connectOptions() const
 }
 
 /*!
-    Returns true if a driver called \a name is available; otherwise
-    returns false.
+    Returns \c true if a driver called \a name is available; otherwise
+    returns \c false.
 
     \sa drivers()
 */
@@ -1418,7 +1418,7 @@ QSqlDatabase QSqlDatabase::addDatabase(QSqlDriver* driver, const QString& connec
 }
 
 /*!
-    Returns true if the QSqlDatabase has a valid driver.
+    Returns \c true if the QSqlDatabase has a valid driver.
 
     Example:
     \snippet code/src_sql_kernel_qsqldatabase.cpp 8
@@ -1506,15 +1506,18 @@ QSql::NumericalPrecisionPolicy QSqlDatabase::numericalPrecisionPolicy() const
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QSqlDatabase &d)
 {
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    dbg.noquote();
     if (!d.isValid()) {
-        dbg.nospace() << "QSqlDatabase(invalid)";
-        return dbg.space();
+        dbg << "QSqlDatabase(invalid)";
+        return dbg;
     }
 
-    dbg.nospace() << "QSqlDatabase(driver=\"" << d.driverName() << "\", database=\""
-                  << d.databaseName() << "\", host=\"" << d.hostName() << "\", port=" << d.port()
-                  << ", user=\"" << d.userName() << "\", open=" << d.isOpen() << ")";
-    return dbg.space();
+    dbg << "QSqlDatabase(driver=\"" << d.driverName() << "\", database=\""
+        << d.databaseName() << "\", host=\"" << d.hostName() << "\", port=" << d.port()
+        << ", user=\"" << d.userName() << "\", open=" << d.isOpen() << ')';
+    return dbg;
 }
 #endif
 

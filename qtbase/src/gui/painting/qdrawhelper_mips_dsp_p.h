@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 MIPS Technologies, www.mips.com, author Damir Tatalovic <dtatalovic@mips.com>
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2013 Imagination Technologies Limited, www.imgtec.com
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -101,9 +93,19 @@ extern "C" void qt_blend_argb32_on_argb32_mips_dsp_asm_x2(uint *dest, const uint
 
 extern "C" void qt_blend_argb32_on_argb32_const_alpha_256_mips_dsp_asm(uint *dest, const uint *src, int length);
 
+extern "C" void qt_blend_rgb16_on_rgb16_const_alpha_256_mips_dsp_asm(quint16 *dest, const quint16 *src, int length);
+
+extern "C" void qt_blend_rgb16_on_rgb16_mips_dsp_asm(quint16 *dest, const quint16 *src, int length, uint const_alpha);
+
 extern "C" uint * destfetchARGB32_asm_mips_dsp(uint *buffer, const uint *data, int length);
 
 extern "C" uint * qt_destStoreARGB32_asm_mips_dsp(uint *buffer, const uint *data, int length);
+
+extern "C" uint * fetchUntransformed_888_asm_mips_dsp(uint *buffer, const uchar *line, int length);
+
+extern "C" uint * fetchUntransformed_444_asm_mips_dsp(uint *buffer, const uchar *line, int length);
+
+extern "C" uint * fetchUntransformed_argb8565_premultiplied_asm_mips_dsp(uint *buffer, const uchar *line, int length);
 
 void qt_blend_argb32_on_argb32_mips_dsp(uchar *destPixels, int dbpl,
                                       const uchar *srcPixels, int sbpl,
@@ -111,9 +113,14 @@ void qt_blend_argb32_on_argb32_mips_dsp(uchar *destPixels, int dbpl,
                                       int const_alpha);
 
 void qt_blend_rgb32_on_rgb32_mips_dsp(uchar *destPixels, int dbpl,
-                                    const uchar *srcPixels, int sbpl,
-                                    int w, int h,
-                                    int const_alpha);
+                                      const uchar *srcPixels, int sbpl,
+                                      int w, int h,
+                                      int const_alpha);
+
+void qt_blend_rgb16_on_rgb16_mips_dsp(uchar *destPixels, int dbpl,
+                                      const uchar *srcPixels, int sbpl,
+                                      int w, int h,
+                                      int const_alpha);
 
 void comp_func_Source_mips_dsp(uint *dest, const uint *src, int length, uint const_alpha);
 
@@ -164,12 +171,34 @@ void QT_FASTCALL comp_func_SourceOut_mips_dsp(uint *dest, const uint *src, int l
 
 void QT_FASTCALL comp_func_XOR_mips_dsp(uint *dest, const uint *src, int length, uint const_alpha);
 
+const uint * QT_FASTCALL qt_fetchUntransformed_888_mips_dsp (uint *buffer,
+                                                             const Operator *,
+                                                             const QSpanData *data,
+                                                             int y, int x, int length);
+
+const uint * QT_FASTCALL qt_fetchUntransformed_444_mips_dsp (uint *buffer,
+                                                             const Operator *,
+                                                             const QSpanData *data,
+                                                             int y, int x, int length);
+
+const uint * QT_FASTCALL qt_fetchUntransformed_argb8565_premultiplied_mips_dsp (uint *buffer,
+                                                                                const Operator *,
+                                                                                const QSpanData *data,
+                                                                                int y, int x, int length);
+
 #endif // QT_COMPILER_SUPPORTS_MIPS_DSP
 
 
 #ifdef QT_COMPILER_SUPPORTS_MIPS_DSPR2
 
 extern "C" void  qConvertRgb16To32_asm_mips_dspr2(quint32 *dest, const quint16 *src, int length);
+
+extern "C" void qt_blend_rgb16_on_rgb16_mips_dspr2_asm(quint16 *dest, const quint16 *src, int length, uint const_alpha);
+
+void qt_blend_rgb16_on_rgb16_mips_dspr2(uchar *destPixels, int dbpl,
+                                        const uchar *srcPixels, int sbpl,
+                                        int w, int h,
+                                        int const_alpha);
 
 #endif // QT_COMPILER_SUPPORTS_MIPS_DSPR2
 

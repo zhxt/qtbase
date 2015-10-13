@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -70,6 +62,7 @@ QT_BEGIN_NAMESPACE
 #define COMMAND_QMLTYPE                 Doc::alias("qmltype")
 #define COMMAND_QMLMODULE               Doc::alias("qmlmodule")
 #define COMMAND_QMLPROPERTY             Doc::alias("qmlproperty")
+#define COMMAND_QMLPROPERTYGROUP        Doc::alias("qmlpropertygroup")
 #define COMMAND_QMLATTACHEDPROPERTY     Doc::alias("qmlattachedproperty")
 #define COMMAND_QMLINHERITS             Doc::alias("inherits")
 #define COMMAND_QMLINSTANTIATES         Doc::alias("instantiates")
@@ -82,6 +75,19 @@ QT_BEGIN_NAMESPACE
 #define COMMAND_QMLREADONLY             Doc::alias("readonly")
 #define COMMAND_QMLBASICTYPE            Doc::alias("qmlbasictype")
 #define COMMAND_QMLMODULE               Doc::alias("qmlmodule")
+
+#define COMMAND_JSTYPE                 Doc::alias("jstype")
+#define COMMAND_JSMODULE               Doc::alias("jsmodule")
+#define COMMAND_JSPROPERTY             Doc::alias("jsproperty")
+#define COMMAND_JSPROPERTYGROUP        Doc::alias("jspropertygroup")
+#define COMMAND_JSATTACHEDPROPERTY     Doc::alias("jsattachedproperty")
+#define COMMAND_INJSMODULE             Doc::alias("injsmodule")
+#define COMMAND_JSSIGNAL               Doc::alias("jssignal")
+#define COMMAND_JSATTACHEDSIGNAL       Doc::alias("jsattachedsignal")
+#define COMMAND_JSMETHOD               Doc::alias("jsmethod")
+#define COMMAND_JSATTACHEDMETHOD       Doc::alias("jsattachedmethod")
+#define COMMAND_JSBASICTYPE            Doc::alias("jsbasictype")
+#define COMMAND_JSMODULE               Doc::alias("jsmodule")
 
 /*!
   Constructs the QML code parser.
@@ -166,9 +172,9 @@ void QmlCodeParser::parseSourceFile(const Location& location, const QString& fil
     extractPragmas(newCode);
     lexer->setCode(newCode, 1);
 
-    QSet<QString> topicCommandsAllowed = topicCommands();
-    QSet<QString> otherMetacommandsAllowed = otherMetaCommands();
-    QSet<QString> metacommandsAllowed = topicCommandsAllowed + otherMetacommandsAllowed;
+    const QSet<QString>& topicCommandsAllowed = topicCommands();
+    const QSet<QString>& otherMetacommandsAllowed = otherMetaCommands();
+    const QSet<QString>& metacommandsAllowed = topicCommandsAllowed + otherMetacommandsAllowed;
 
     if (parser->parse()) {
         QQmlJS::AST::UiProgram *ast = parser->ast();
@@ -195,42 +201,62 @@ void QmlCodeParser::doneParsingSourceFiles()
 {
 }
 
+static QSet<QString> topicCommands_;
 /*!
   Returns the set of strings representing the topic commands.
  */
-QSet<QString> QmlCodeParser::topicCommands()
+const QSet<QString>& QmlCodeParser::topicCommands()
 {
-    return QSet<QString>() << COMMAND_VARIABLE
-                           << COMMAND_QMLCLASS
-                           << COMMAND_QMLTYPE
-                           << COMMAND_QMLPROPERTY
-                           << COMMAND_QMLATTACHEDPROPERTY
-                           << COMMAND_QMLSIGNAL
-                           << COMMAND_QMLATTACHEDSIGNAL
-                           << COMMAND_QMLMETHOD
-                           << COMMAND_QMLATTACHEDMETHOD
-                           << COMMAND_QMLBASICTYPE;
+    if (topicCommands_.isEmpty()) {
+        topicCommands_ << COMMAND_VARIABLE
+                       << COMMAND_QMLCLASS
+                       << COMMAND_QMLTYPE
+                       << COMMAND_QMLPROPERTY
+                       << COMMAND_QMLPROPERTYGROUP
+                       << COMMAND_QMLATTACHEDPROPERTY
+                       << COMMAND_QMLSIGNAL
+                       << COMMAND_QMLATTACHEDSIGNAL
+                       << COMMAND_QMLMETHOD
+                       << COMMAND_QMLATTACHEDMETHOD
+                       << COMMAND_QMLBASICTYPE
+                       << COMMAND_JSTYPE
+                       << COMMAND_JSPROPERTY
+                       << COMMAND_JSPROPERTYGROUP
+                       << COMMAND_JSATTACHEDPROPERTY
+                       << COMMAND_JSSIGNAL
+                       << COMMAND_JSATTACHEDSIGNAL
+                       << COMMAND_JSMETHOD
+                       << COMMAND_JSATTACHEDMETHOD
+                       << COMMAND_JSBASICTYPE;
+    }
+    return topicCommands_;
 }
 
+static QSet<QString> otherMetaCommands_;
 /*!
   Returns the set of strings representing the common metacommands
   plus some other metacommands.
  */
-QSet<QString> QmlCodeParser::otherMetaCommands()
+const QSet<QString>& QmlCodeParser::otherMetaCommands()
 {
-    return commonMetaCommands() << COMMAND_STARTPAGE
-                                << COMMAND_QMLINHERITS
-                                << COMMAND_QMLDEFAULT
-                                << COMMAND_QMLREADONLY
-                                << COMMAND_DEPRECATED
-                                << COMMAND_INGROUP
-                                << COMMAND_INTERNAL
-                                << COMMAND_OBSOLETE
-                                << COMMAND_PRELIMINARY
-                                << COMMAND_SINCE
-                                << COMMAND_QMLABSTRACT
-                                << COMMAND_INQMLMODULE
-                                << COMMAND_WRAPPER;
+    if (otherMetaCommands_.isEmpty()) {
+        otherMetaCommands_ = commonMetaCommands();
+        otherMetaCommands_ << COMMAND_STARTPAGE
+                           << COMMAND_QMLINHERITS
+                           << COMMAND_QMLDEFAULT
+                           << COMMAND_QMLREADONLY
+                           << COMMAND_DEPRECATED
+                           << COMMAND_INGROUP
+                           << COMMAND_INTERNAL
+                           << COMMAND_OBSOLETE
+                           << COMMAND_PRELIMINARY
+                           << COMMAND_SINCE
+                           << COMMAND_QMLABSTRACT
+                           << COMMAND_INQMLMODULE
+                           << COMMAND_INJSMODULE
+                           << COMMAND_WRAPPER;
+    }
+    return otherMetaCommands_;
 }
 
 /*!

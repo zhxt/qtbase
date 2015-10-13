@@ -1,7 +1,4 @@
-TEMPLATE = lib
 CONFIG += static
-TARGET = $$qtLibraryTarget(preprocessor)
-
 include(../../config.pri)
 
 INCLUDEPATH = $$ANGLE_DIR/src/compiler/preprocessor
@@ -21,6 +18,7 @@ HEADERS += \
     $$ANGLE_DIR/src/compiler/preprocessor/DirectiveParser.h \
     $$ANGLE_DIR/src/compiler/preprocessor/ExpressionParser.h \
     $$ANGLE_DIR/src/compiler/preprocessor/Input.h \
+    $$ANGLE_DIR/src/compiler/preprocessor/length_limits.h \
     $$ANGLE_DIR/src/compiler/preprocessor/Lexer.h \
     $$ANGLE_DIR/src/compiler/preprocessor/Macro.h \
     $$ANGLE_DIR/src/compiler/preprocessor/MacroExpander.h \
@@ -42,8 +40,8 @@ SOURCES += \
     $$ANGLE_DIR/src/compiler/preprocessor/Preprocessor.cpp \
     $$ANGLE_DIR/src/compiler/preprocessor/Token.cpp
 
-# NOTE: 'win_flex' and 'bison' can be found in qt5/gnuwin32/bin
-flex.commands = $$addGnuPath(win_flex) --noline --nounistd --outfile=${QMAKE_FILE_BASE}.cpp ${QMAKE_FILE_NAME}
+# NOTE: 'flex' and 'bison' can be found in qt5/gnuwin32/bin
+flex.commands = $$addGnuPath(flex) --noline --nounistd --outfile=${QMAKE_FILE_BASE}.cpp ${QMAKE_FILE_NAME}
 flex.output = ${QMAKE_FILE_BASE}.cpp
 flex.input = FLEX_SOURCES
 flex.dependency_type = TYPE_C

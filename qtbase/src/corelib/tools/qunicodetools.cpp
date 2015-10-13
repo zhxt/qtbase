@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -57,7 +49,7 @@ namespace QUnicodeTools {
 // -----------------------------------------------------------------------------------------------------
 //
 // The text boundaries determination algorithm.
-// See http://www.unicode.org/reports/tr29/tr29-21.html
+// See http://www.unicode.org/reports/tr29/tr29-25.html
 //
 // -----------------------------------------------------------------------------------------------------
 
@@ -112,26 +104,30 @@ static void getGraphemeBreaks(const ushort *string, quint32 len, QCharAttributes
 namespace WB {
 
 enum Action {
-    NoBreak = 0,
-    Break = 1,
-    Lookup = 2
+    NoBreak,
+    Break,
+    Lookup,
+    LookupW
 };
 
 static const uchar breakTable[QUnicodeTables::WordBreak_ExtendNumLet + 1][QUnicodeTables::WordBreak_ExtendNumLet + 1] = {
-//    Other      CR       LF    Newline   Extend    RI    Katakana ALetter MidNumLet MidLetter MidNum  Numeric  ExtendNumLet
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // Other
-    { Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // CR
-    { Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // LF
-    { Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // Newline
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // Extend
-    { Break  , Break  , Break  , Break  , NoBreak, NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // RegionalIndicator
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , NoBreak }, // Katakana
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , NoBreak, Lookup , Lookup , Break  , NoBreak, NoBreak }, // ALetter
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // MidNumLet
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // MidLetter
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // MidNum
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , NoBreak, Lookup , Break  , Lookup , NoBreak, NoBreak }, // Numeric
-    { Break  , Break  , Break  , Break  , NoBreak, Break  , NoBreak, NoBreak, Break  , Break  , Break  , NoBreak, NoBreak }, // ExtendNumLet
+//    Other      CR       LF    Newline   Extend    RI    Katakana HLetter  ALetter  SQuote   DQuote  MidNumLet MidLetter MidNum  Numeric  ExtendNumLet
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // Other
+    { Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // CR
+    { Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // LF
+    { Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // Newline
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // Extend
+    { Break  , Break  , Break  , Break  , NoBreak, NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // RegionalIndicator
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , NoBreak }, // Katakana
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , NoBreak, NoBreak, LookupW, Lookup , LookupW, LookupW, Break  , NoBreak, NoBreak }, // HebrewLetter
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , NoBreak, NoBreak, LookupW, Break  , LookupW, LookupW, Break  , NoBreak, NoBreak }, // ALetter
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // SingleQuote
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // DoubleQuote
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // MidNumLet
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // MidLetter
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break  , Break   }, // MidNum
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , Break  , NoBreak, NoBreak, Lookup , Break  , Lookup , Break  , Lookup , NoBreak, NoBreak }, // Numeric
+    { Break  , Break  , Break  , Break  , NoBreak, Break  , NoBreak, NoBreak, NoBreak, Break  , Break  , Break  , Break  , Break  , NoBreak, NoBreak }, // ExtendNumLet
 };
 
 } // namespace WB
@@ -160,8 +156,8 @@ static void getWordBreaks(const ushort *string, quint32 len, QCharAttributes *at
         if (qt_initcharattributes_default_algorithm_only) {
             // as of Unicode 5.1, some punctuation marks were mapped to MidLetter and MidNumLet
             // which caused "hi.there" to be treated like if it were just a single word;
-            // by remapping those characters in the Unicode tables generator.
-            // this code is needed to pass the coverage tests; remove once the issue is fixed.
+            // we keep the pre-5.1 behavior by remapping these characters in the Unicode tables generator
+            // and this code is needed to pass the coverage tests; remove once the issue is fixed.
             if (ucs4 == 0x002E) // FULL STOP
                 ncls = QUnicodeTables::WordBreak_MidNumLet;
             else if (ucs4 == 0x003A) // COLON
@@ -170,8 +166,17 @@ static void getWordBreaks(const ushort *string, quint32 len, QCharAttributes *at
 #endif
 
         uchar action = WB::breakTable[cls][ncls];
-        if (Q_UNLIKELY(action == WB::Lookup)) {
-            action = WB::Break;
+        switch (action) {
+        case WB::Break:
+            break;
+        case WB::NoBreak:
+            if (Q_UNLIKELY(ncls == QUnicodeTables::WordBreak_Extend)) {
+                // WB4: X(Extend|Format)* -> X
+                continue;
+            }
+            break;
+        case WB::Lookup:
+        case WB::LookupW:
             for (quint32 lookahead = i + 1; lookahead < len; ++lookahead) {
                 ucs4 = string[lookahead];
                 if (QChar::isHighSurrogate(ucs4) && lookahead + 1 != len) {
@@ -184,20 +189,28 @@ static void getWordBreaks(const ushort *string, quint32 len, QCharAttributes *at
 
                 prop = QUnicodeTables::properties(ucs4);
                 QUnicodeTables::WordBreakClass tcls = (QUnicodeTables::WordBreakClass) prop->wordBreakClass;
-                if (Q_UNLIKELY(tcls == QUnicodeTables::WordBreak_Extend))
+
+                if (Q_UNLIKELY(tcls == QUnicodeTables::WordBreak_Extend)) {
+                    // WB4: X(Extend|Format)* -> X
                     continue;
-                if (Q_LIKELY(tcls == cls)) {
+                }
+
+                if (Q_LIKELY(tcls == cls || (action == WB::LookupW && (tcls == QUnicodeTables::WordBreak_HebrewLetter
+                                                                       || tcls == QUnicodeTables::WordBreak_ALetter)))) {
                     i = lookahead;
                     ncls = tcls;
                     action = WB::NoBreak;
                 }
                 break;
             }
-        } else if (Q_UNLIKELY(ncls == QUnicodeTables::WordBreak_Extend)) {
-            // WB4: X(Extend|Format)* -> X
-            if (Q_LIKELY(action != WB::Break))
-                continue;
+            if (action != WB::NoBreak) {
+                action = WB::Break;
+                if (Q_UNLIKELY(ncls == QUnicodeTables::WordBreak_SingleQuote && cls == QUnicodeTables::WordBreak_HebrewLetter))
+                    action = WB::NoBreak; // WB7a
+            }
+            break;
         }
+
         cls = ncls;
         if (action == WB::Break) {
             attributes[pos].wordBreak = true;
@@ -208,6 +221,7 @@ static void getWordBreaks(const ushort *string, quint32 len, QCharAttributes *at
                 currentWordType = WordTypeHiraganaKatakana;
                 attributes[pos].wordStart = true;
                 break;
+            case QUnicodeTables::WordBreak_HebrewLetter:
             case QUnicodeTables::WordBreak_ALetter:
             case QUnicodeTables::WordBreak_Numeric:
                 currentWordType = WordTypeAlphaNumeric;
@@ -327,7 +341,7 @@ static void getSentenceBreaks(const ushort *string, quint32 len, QCharAttributes
 // -----------------------------------------------------------------------------------------------------
 //
 // The line breaking algorithm.
-// See http://www.unicode.org/reports/tr14/tr14-30.html
+// See http://www.unicode.org/reports/tr14/tr14-33.html
 //
 // -----------------------------------------------------------------------------------------------------
 
@@ -603,28 +617,35 @@ Q_CORE_EXPORT void initCharAttributes(const ushort *string, int length,
     if (options & WhiteSpaces)
         getWhiteSpaces(string, length, attributes);
 
-    if (!items || numItems <= 0)
-        return;
     if (!qt_initcharattributes_default_algorithm_only) {
+        if (!items || numItems <= 0)
+            return;
+
         QVarLengthArray<HB_ScriptItem, 64> scriptItems;
         scriptItems.reserve(numItems);
         int start = 0;
+        HB_Script startScript = script_to_hbscript(items[start].script);
+        if (Q_UNLIKELY(startScript == HB_Script_Inherited))
+            startScript = HB_Script_Common;
         for (int i = start + 1; i < numItems; ++i) {
-            if (script_to_hbscript(items[i].script) == script_to_hbscript(items[start].script))
+            HB_Script script = script_to_hbscript(items[i].script);
+            if (Q_LIKELY(script == startScript || script == HB_Script_Inherited))
                 continue;
+            Q_ASSERT(items[i].position > items[start].position);
             HB_ScriptItem item;
             item.pos = items[start].position;
             item.length = items[i].position - items[start].position;
-            item.script = script_to_hbscript(items[start].script);
+            item.script = startScript;
             item.bidiLevel = 0; // unused
             scriptItems.append(item);
             start = i;
+            startScript = script;
         }
         if (items[start].position + 1 < length) {
             HB_ScriptItem item;
             item.pos = items[start].position;
             item.length = length - items[start].position;
-            item.script = script_to_hbscript(items[start].script);
+            item.script = startScript;
             item.bidiLevel = 0; // unused
             scriptItems.append(item);
         }
@@ -638,7 +659,7 @@ Q_CORE_EXPORT void initCharAttributes(const ushort *string, int length,
 
 // ----------------------------------------------------------------------------
 //
-// The Unicode script property. See http://www.unicode.org/reports/tr24/ (some very old version)
+// The Unicode script property. See http://www.unicode.org/reports/tr24/tr24-22.html
 //
 // ----------------------------------------------------------------------------
 
@@ -660,15 +681,38 @@ Q_CORE_EXPORT void initScripts(const ushort *string, int length, uchar *scripts)
 
         const QUnicodeTables::Properties *prop = QUnicodeTables::properties(ucs4);
 
-        if (Q_LIKELY(prop->script == script || prop->script == QChar::Script_Inherited))
+        if (Q_LIKELY(prop->script == script || prop->script <= QChar::Script_Inherited))
             continue;
 
         // Never break between a combining mark (gc= Mc, Mn or Me) and its base character.
         // Thus, a combining mark — whatever its script property value is — should inherit
         // the script property value of its base character.
         static const int test = (FLAG(QChar::Mark_NonSpacing) | FLAG(QChar::Mark_SpacingCombining) | FLAG(QChar::Mark_Enclosing));
-        if (Q_UNLIKELY(FLAG(prop->category) & test))
-            continue;
+        if (Q_UNLIKELY(FLAG(prop->category) & test)) {
+            // In cases where the base character itself has the Common script property value,
+            // and it is followed by one or more combining marks with a specific script property value,
+            // it may be even better for processing to let the base acquire the script property value
+            // from the first mark. This approach can be generalized by treating all the characters
+            // of a combining character sequence as having the script property value
+            // of the first non-Inherited, non-Common character in the sequence if there is one,
+            // and otherwise treating all the characters as having the Common script property value.
+            if (Q_LIKELY(script > QChar::Script_Common || prop->script <= QChar::Script_Common))
+                continue;
+
+            script = QChar::Script(prop->script);
+        }
+
+#if 0 // ### Disabled due to regressions. The font selection algorithm is not prepared for this change.
+        if (Q_LIKELY(script != QChar::Script_Common)) {
+            // override preceding Common-s
+            while (sor > 0 && scripts[sor - 1] == QChar::Script_Common)
+                --sor;
+        } else {
+            // see if we are inheriting preceding run
+            if (sor > 0)
+                script = scripts[sor - 1];
+        }
+#endif
 
         while (sor < eor)
             scripts[sor++] = script;
@@ -676,6 +720,19 @@ Q_CORE_EXPORT void initScripts(const ushort *string, int length, uchar *scripts)
         script = prop->script;
     }
     eor = length;
+
+#if 0 // ### Disabled due to regressions. The font selection algorithm is not prepared for this change.
+    if (Q_LIKELY(script != QChar::Script_Common)) {
+        // override preceding Common-s
+        while (sor > 0 && scripts[sor - 1] == QChar::Script_Common)
+            --sor;
+    } else {
+        // see if we are inheriting preceding run
+        if (sor > 0)
+            script = scripts[sor - 1];
+    }
+#endif
+
     while (sor < eor)
         scripts[sor++] = script;
 }

@@ -2,6 +2,7 @@ TARGET = qkms
 
 PLUGIN_TYPE = platforms
 PLUGIN_CLASS_NAME = QKmsIntegrationPlugin
+!equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
 load(qt_plugin)
 
 QT += core-private gui-private platformsupport-private
@@ -21,11 +22,8 @@ SOURCES =   main.cpp \
             qkmscursor.cpp \
             qkmsdevice.cpp \
             qkmsbackingstore.cpp \
-            qkmsnativeinterface.cpp \
-            qkmsudevlistener.cpp \
-            qkmsudevhandler.cpp \
-            qkmsudevdrmhandler.cpp \
-            qkmsvthandler.cpp
+            qkmsnativeinterface.cpp
+
 HEADERS =   qkmsintegration.h \
             qkmsscreen.h \
             qkmscontext.h \
@@ -33,11 +31,7 @@ HEADERS =   qkmsintegration.h \
             qkmscursor.h \
             qkmsdevice.h \
             qkmsbackingstore.h \
-            qkmsnativeinterface.h \
-            qkmsudevlistener.h \
-            qkmsudevhandler.h \
-            qkmsudevdrmhandler.h \
-            qkmsvthandler.h
+            qkmsnativeinterface.h
 
 OTHER_FILES += \
     kms.json

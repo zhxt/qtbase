@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -240,7 +232,7 @@ static ISC_TIMESTAMP toTimeStamp(const QDateTime &dt)
 static QDateTime fromTimeStamp(char *buffer)
 {
     static const QDate bd(1858, 11, 17);
-    QTime t;
+    QTime t(0, 0);
     QDate d;
 
     // have to demangle the structure ourselves because isc_decode_time
@@ -259,7 +251,7 @@ static ISC_TIME toTime(const QTime &t)
 
 static QTime fromTime(char *buffer)
 {
-    QTime t;
+    QTime t(0, 0);
     // have to demangle the structure ourselves because isc_decode_time
     // strips the msecs
     t = t.addMSecs(int((*(ISC_TIME*)buffer) / 10));
@@ -314,7 +306,7 @@ class QIBaseDriverPrivate : public QSqlDriverPrivate
 {
     Q_DECLARE_PUBLIC(QIBaseDriver)
 public:
-    QIBaseDriverPrivate() : QSqlDriverPrivate(), ibase(0), trans(0), tc(0) { dbmsType = Interbase; }
+    QIBaseDriverPrivate() : QSqlDriverPrivate(), ibase(0), trans(0), tc(0) { dbmsType = QSqlDriver::Interbase; }
 
     bool isError(const char *msg, QSqlError::ErrorType typ = QSqlError::UnknownError)
     {
@@ -1030,11 +1022,15 @@ bool QIBaseResult::exec()
                     *((qint64*)d->inda->sqlvar[para].sqldata) = val.toLongLong();
                 break;
             case SQL_LONG:
-                if (d->inda->sqlvar[para].sqlscale < 0)
-                    *((long*)d->inda->sqlvar[para].sqldata) =
-                        (long)floor(0.5 + val.toDouble() * pow(10.0, d->inda->sqlvar[para].sqlscale * -1));
-                else
-                    *((long*)d->inda->sqlvar[para].sqldata) = (long)val.toLongLong();
+                if (d->inda->sqlvar[para].sqllen == 4) {
+                    if (d->inda->sqlvar[para].sqlscale < 0)
+                        *((qint32*)d->inda->sqlvar[para].sqldata) =
+                            (qint32)floor(0.5 + val.toDouble() * pow(10.0, d->inda->sqlvar[para].sqlscale * -1));
+                    else
+                        *((qint32*)d->inda->sqlvar[para].sqldata) = (qint32)val.toInt();
+                } else {
+                    *((qint64*)d->inda->sqlvar[para].sqldata) = val.toLongLong();
+                }
                 break;
             case SQL_SHORT:
                 if (d->inda->sqlvar[para].sqlscale < 0)
@@ -1161,6 +1157,9 @@ bool QIBaseResult::gotoNext(QSqlCachedResult::ValueCache& row, int rowIdx)
                     break;
                 case QSql::HighPrecision:
                     v.convert(QVariant::String);
+                    break;
+                case QSql::LowPrecisionDouble:
+                    // no conversion
                     break;
                 }
             }
@@ -1310,6 +1309,7 @@ int QIBaseResult::numRowsAffected()
 {
     static char acCountInfo[] = {isc_info_sql_records};
     char cCountType;
+    bool bIsProcedure = false;
 
     switch (d->queryType) {
     case isc_info_sql_stmt_select:
@@ -1323,6 +1323,9 @@ int QIBaseResult::numRowsAffected()
         break;
     case isc_info_sql_stmt_insert:
         cCountType = isc_info_req_insert_count;
+        break;
+    case isc_info_sql_stmt_exec_procedure:
+        bIsProcedure = true; // will sum all changes
         break;
     default:
         qWarning() << "numRowsAffected: Unknown statement type (" << d->queryType << ")";
@@ -1341,8 +1344,14 @@ int QIBaseResult::numRowsAffected()
         pcBuf += 2;
         int iValue = isc_vax_integer (pcBuf, sLength);
         pcBuf += sLength;
-
-        if (cType == cCountType) {
+        if (bIsProcedure) {
+            if (cType == isc_info_req_insert_count || cType == isc_info_req_update_count
+                || cType == isc_info_req_delete_count) {
+                if (iResult == -1)
+                    iResult = 0;
+                iResult += iValue;
+            }
+        } else if (cType == cCountType) {
             iResult = iValue;
             break;
         }
@@ -1424,6 +1433,7 @@ bool QIBaseDriver::hasFeature(DriverFeature f) const
     case SimpleLocking:
     case FinishQuery:
     case MultipleResultSets:
+    case CancelQuery:
         return false;
     case Transactions:
     case PreparedQueries:
@@ -1441,7 +1451,7 @@ bool QIBaseDriver::open(const QString & db,
           const QString & user,
           const QString & password,
           const QString & host,
-          int /*port*/,
+          int port,
           const QString & connOpts)
 {
     Q_D(QIBaseDriver);
@@ -1486,35 +1496,34 @@ bool QIBaseDriver::open(const QString & db,
     pass.truncate(255);
 
     QByteArray ba;
-    ba.resize(usr.length() + pass.length() + enc.length() + role.length() + 6);
-    int i = -1;
-    ba[++i] = isc_dpb_version1;
-    ba[++i] = isc_dpb_user_name;
-    ba[++i] = usr.length();
-    memcpy(ba.data() + ++i, usr.data(), usr.length());
-    i += usr.length();
-    ba[i] = isc_dpb_password;
-    ba[++i] = pass.length();
-    memcpy(ba.data() + ++i, pass.data(), pass.length());
-    i += pass.length();
-    ba[i] = isc_dpb_lc_ctype;
-    ba[++i] = enc.length();
-    memcpy(ba.data() + ++i, enc.data(), enc.length());
-    i += enc.length();
+    ba.reserve(usr.length() + pass.length() + enc.length() + role.length() + 9);
+    ba.append(char(isc_dpb_version1));
+    ba.append(char(isc_dpb_user_name));
+    ba.append(char(usr.length()));
+    ba.append(usr.data(), usr.length());
+    ba.append(char(isc_dpb_password));
+    ba.append(char(pass.length()));
+    ba.append(pass.data(), pass.length());
+    ba.append(char(isc_dpb_lc_ctype));
+    ba.append(char(enc.length()));
+    ba.append(enc.data(), enc.length());
 
     if (!role.isEmpty()) {
-        ba[i] = isc_dpb_sql_role_name;
-        ba[++i] = role.length();
-        memcpy(ba.data() + ++i, role.data(), role.length());
-        i += role.length();
+        ba.append(char(isc_dpb_sql_role_name));
+        ba.append(char(role.length()));
+        ba.append(role.data(), role.length());
     }
+
+    QString portString;
+    if (port != -1)
+        portString = QStringLiteral("/%1").arg(port);
 
     QString ldb;
     if (!host.isEmpty())
-        ldb += host + QLatin1Char(':');
+        ldb += host + portString + QLatin1Char(':');
     ldb += db;
     isc_attach_database(d->status, 0, const_cast<char *>(ldb.toLocal8Bit().constData()),
-                        &d->ibase, i, ba.data());
+                        &d->ibase, ba.size(), ba.data());
     if (d->isError(QT_TRANSLATE_NOOP("QIBaseDriver", "Error opening database"),
                    QSqlError::ConnectionError)) {
         setOpenError(true);
@@ -1522,6 +1531,7 @@ bool QIBaseDriver::open(const QString & db,
     }
 
     setOpen(true);
+    setOpenError(false);
     return true;
 }
 
@@ -1669,7 +1679,7 @@ QSqlRecord QIBaseDriver::record(const QString& tablename) const
             f.setLength(q.value(2).toInt());
             f.setPrecision(0);
         }
-        f.setRequired(q.value(5).toInt() > 0 ? true : false);
+        f.setRequired(q.value(5).toInt() > 0);
         f.setSqlType(type);
 
         rec.append(f);
@@ -1723,7 +1733,7 @@ QString QIBaseDriver::formatValue(const QSqlField &field, bool trimStrings) cons
                 QString::number(datetime.time().minute()) + QLatin1Char(':') +
                 QString::number(datetime.time().second()) + QLatin1Char('.') +
                 QString::number(datetime.time().msec()).rightJustified(3, QLatin1Char('0'), true) +
-		QLatin1Char('\'');
+                QLatin1Char('\'');
         else
             return QLatin1String("NULL");
     }

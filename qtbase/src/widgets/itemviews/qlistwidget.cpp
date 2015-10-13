@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -304,7 +296,7 @@ void QListModel::sort(int column, Qt::SortOrder order)
     }
 
     LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    qSort(sorting.begin(), sorting.end(), compare);
+    std::sort(sorting.begin(), sorting.end(), compare);
     QModelIndexList fromIndexes;
     QModelIndexList toIndexes;
     for (int r = 0; r < sorting.count(); ++r) {
@@ -338,7 +330,7 @@ void QListModel::ensureSorted(int column, Qt::SortOrder order, int start, int en
     }
 
     LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    qSort(sorting.begin(), sorting.end(), compare);
+    std::sort(sorting.begin(), sorting.end(), compare);
 
     QModelIndexList oldPersistentIndexes = persistentIndexList();
     QModelIndexList newPersistentIndexes = oldPersistentIndexes;
@@ -347,7 +339,11 @@ void QListModel::ensureSorted(int column, Qt::SortOrder order, int start, int en
     bool changed = false;
     for (int i = 0; i < count; ++i) {
         int oldRow = sorting.at(i).second;
+        int tmpitepos = lit - tmp.begin();
         QListWidgetItem *item = tmp.takeAt(oldRow);
+        if (tmpitepos > tmp.size())
+            --tmpitepos;
+        lit = tmp.begin() + tmpitepos;
         lit = sortedInsertionIterator(lit, tmp.end(), order, item);
         int newRow = qMax(lit - tmp.begin(), 0);
         lit = tmp.insert(lit, item);
@@ -551,7 +547,7 @@ Qt::DropActions QListModel::supportedDropActions() const
     \fn bool QListWidgetItem::isSelected() const
     \since 4.2
 
-    Returns true if the item is selected; otherwise returns false.
+    Returns \c true if the item is selected; otherwise returns \c false.
 
     \sa setSelected()
 */
@@ -569,7 +565,7 @@ Qt::DropActions QListModel::supportedDropActions() const
     \fn bool QListWidgetItem::isHidden() const
     \since 4.2
 
-    Returns true if the item is hidden; otherwise returns false.
+    Returns \c true if the item is hidden; otherwise returns \c false.
 
     \sa setHidden()
 */
@@ -721,8 +717,8 @@ QVariant QListWidgetItem::data(int role) const
 }
 
 /*!
-    Returns true if this item's text is less then \a other item's text;
-    otherwise returns false.
+    Returns \c true if this item's text is less then \a other item's text;
+    otherwise returns \c false.
 */
 bool QListWidgetItem::operator<(const QListWidgetItem &other) const
 {
@@ -1321,6 +1317,11 @@ void QListWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
     \fn void QListWidget::removeItemWidget(QListWidgetItem *item)
 
     Removes the widget set on the given \a item.
+
+    To remove an item (row) from the list entirely, either delete the item or
+    use takeItem().
+
+    \sa itemWidget(), setItemWidget()
 */
 
 /*!
@@ -1452,7 +1453,7 @@ QListWidgetItem *QListWidget::currentItem() const
     Sets the current item to \a item.
 
     Unless the selection mode is \l{QAbstractItemView::}{NoSelection},
-    the item is also be selected.
+    the item is also selected.
 */
 void QListWidget::setCurrentItem(QListWidgetItem *item)
 {
@@ -1551,7 +1552,7 @@ void QListWidget::sortItems(Qt::SortOrder order)
     \property QListWidget::sortingEnabled
     \brief whether sorting is enabled
 
-    If this property is true, sorting is enabled for the list; if the property
+    If this property is \c true, sorting is enabled for the list; if the property
     is false, sorting is not enabled.
 
     The default value is false.
@@ -1616,6 +1617,8 @@ void QListWidget::closePersistentEditor(QListWidgetItem *item)
     \since 4.1
 
     Returns the widget displayed in the given \a item.
+
+    \sa setItemWidget(), removeItemWidget()
 */
 QWidget *QListWidget::itemWidget(QListWidgetItem *item) const
 {
@@ -1627,14 +1630,14 @@ QWidget *QListWidget::itemWidget(QListWidgetItem *item) const
 /*!
     \since 4.1
 
-    Sets the \a widget to be displayed in the give \a item.
+    Sets the \a widget to be displayed in the given \a item.
 
     This function should only be used to display static content in the place of
     a list widget item. If you want to display custom dynamic content or
     implement a custom editor widget, use QListView and subclass QItemDelegate
     instead.
 
-    \sa {Delegate Classes}
+    \sa itemWidget(), removeItemWidget(), {Delegate Classes}
 */
 void QListWidget::setItemWidget(QListWidgetItem *item, QWidget *widget)
 {
@@ -1644,7 +1647,7 @@ void QListWidget::setItemWidget(QListWidgetItem *item, QWidget *widget)
 }
 
 /*!
-    Returns true if \a item is selected; otherwise returns false.
+    Returns \c true if \a item is selected; otherwise returns \c false.
 
     \obsolete
 
@@ -1713,7 +1716,7 @@ QList<QListWidgetItem*> QListWidget::findItems(const QString &text, Qt::MatchFla
 }
 
 /*!
-    Returns true if the \a item is explicitly hidden; otherwise returns false.
+    Returns \c true if the \a item is explicitly hidden; otherwise returns \c false.
 
     \obsolete
 
@@ -1780,16 +1783,35 @@ QStringList QListWidget::mimeTypes() const
     If the list of items is empty, 0 is returned instead of a serialized empty
     list.
 */
-QMimeData *QListWidget::mimeData(const QList<QListWidgetItem*>) const
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+QMimeData *QListWidget::mimeData(const QList<QListWidgetItem *> &items) const
+#else
+QMimeData *QListWidget::mimeData(const QList<QListWidgetItem*> items) const
+#endif
 {
-    return d_func()->listModel()->internalMimeData();
+    Q_D(const QListWidget);
+
+    QModelIndexList &cachedIndexes = d->listModel()->cachedIndexes;
+
+    // if non empty, it's called from the model's own mimeData
+    if (cachedIndexes.isEmpty()) {
+        foreach (QListWidgetItem *item, items)
+            cachedIndexes << indexFromItem(item);
+
+        QMimeData *result = d->listModel()->internalMimeData();
+
+        cachedIndexes.clear();
+        return result;
+    }
+
+    return d->listModel()->internalMimeData();
 }
 
 #ifndef QT_NO_DRAGANDDROP
 /*!
     Handles \a data supplied by an external drag and drop operation that ended
-    with the given \a action in the given \a index. Returns true if \a data and
-    \a action can be handled by the model; otherwise returns false.
+    with the given \a action in the given \a index. Returns \c true if \a data and
+    \a action can be handled by the model; otherwise returns \c false.
 
     \sa supportedDropActions()
 */
@@ -1828,7 +1850,7 @@ void QListWidget::dropEvent(QDropEvent *event) {
 
             if (persIndexes.contains(topIndex))
                 return;
-            qSort(persIndexes); // The dropped items will remain in the same visual order.
+            std::sort(persIndexes.begin(), persIndexes.end()); // The dropped items will remain in the same visual order.
 
             QPersistentModelIndex dropRow = model()->index(row, col, topIndex);
 

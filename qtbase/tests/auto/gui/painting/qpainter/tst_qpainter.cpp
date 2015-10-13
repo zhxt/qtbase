@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -79,6 +71,8 @@
 
 Q_DECLARE_METATYPE(QGradientStops)
 Q_DECLARE_METATYPE(QPainterPath)
+Q_DECLARE_METATYPE(QImage::Format)
+Q_DECLARE_METATYPE(QPainter::CompositionMode)
 
 class tst_QPainter : public QObject
 {
@@ -117,15 +111,21 @@ private slots:
     void drawLine_task190634();
     void drawLine_task229459();
     void drawLine_task234891();
+    void drawLineEndPoints();
 
     void drawRect_data() { fillData(); }
     void drawRect();
     void drawRect2();
 
+    void fillRect_data();
     void fillRect();
+    void fillRect2_data();
     void fillRect2();
+    void fillRect3_data() { fillRect2_data(); }
     void fillRect3();
+    void fillRect4_data() { fillRect2_data(); }
     void fillRect4();
+    void fillRectNonPremul();
 
     void drawEllipse_data();
     void drawEllipse();
@@ -194,6 +194,9 @@ private slots:
     void linearGradientSymmetry_data();
     void linearGradientSymmetry();
     void gradientInterpolation();
+
+    void gradientPixelFormat_data();
+    void gradientPixelFormat();
 
     void fpe_pixmapTransform();
     void fpe_zeroLengthLines();
@@ -272,6 +275,8 @@ private slots:
 
     void QTBUG17053_zeroDashPattern();
 
+    void QTBUG38781_NoBrushAndQBitmap();
+
     void drawTextOutsideGuiThread();
 
     void drawTextWithComplexBrush();
@@ -280,6 +285,15 @@ private slots:
 
     void cosmeticStrokerClipping_data();
     void cosmeticStrokerClipping();
+
+    void blendARGBonRGB_data();
+    void blendARGBonRGB();
+
+    void RasterOp_NotDestination();
+    void drawTextNoHinting();
+
+    void drawPolyline_data();
+    void drawPolyline();
 
 private:
     void fillData();
@@ -492,7 +506,7 @@ void tst_QPainter::drawPixmap_comp()
     destPm.fill(c1);
     srcPm.fill(c2);
 
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     if (!destPm.x11PictureHandle())
         QSKIP("Requires XRender support");
 #endif
@@ -505,7 +519,7 @@ void tst_QPainter::drawPixmap_comp()
     bool different = false;
     for (int y=0; y<result.height(); ++y)
         for (int x=0; x<result.width(); ++x) {
-	    bool diff;
+            bool diff;
             if (qAlpha(expected) == 0) {
                 diff = qAlpha(result.pixel(x, y)) != 0;
             } else {
@@ -517,12 +531,12 @@ void tst_QPainter::drawPixmap_comp()
                              || (qAbs(qBlue(pix) - qBlue(expected)) > off)
                              || (qAbs(qAlpha(pix) - qAlpha(expected)) > off);
             }
-	    if (diff && !different)
-		qDebug( "Different at %d,%d pixel [%d,%d,%d,%d] expected [%d,%d,%d,%d]", x, y,
+            if (diff && !different)
+                qDebug( "Different at %d,%d pixel [%d,%d,%d,%d] expected [%d,%d,%d,%d]", x, y,
                         qRed(result.pixel(x, y)), qGreen(result.pixel(x, y)),
                         qBlue(result.pixel(x, y)), qAlpha(result.pixel(x, y)),
                         qRed(expected), qGreen(expected), qBlue(expected), qAlpha(expected));
-	    different |= diff;
+            different |= diff;
         }
 
     QVERIFY(!different);
@@ -554,24 +568,24 @@ void tst_QPainter::saveAndRestore_data()
     QRect viewport = p.viewport();
 
     QTest::newRow("Original") << font << pen << brush << backgroundColor << int(backgroundMode)
-	    << brushOrigin << clipRegion << window << viewport;
+            << brushOrigin << clipRegion << window << viewport;
 
     QFont font2 = font;
     font2.setPointSize( 24 );
     QTest::newRow("Modified font.pointSize, brush, backgroundColor, backgroundMode")
             << font2 << pen << QBrush(Qt::red) << QColor(Qt::blue) << int(Qt::TransparentMode)
-	    << brushOrigin << clipRegion << window << viewport;
+            << brushOrigin << clipRegion << window << viewport;
 
     font2 = font;
     font2.setPixelSize( 20 );
     QTest::newRow("Modified font.pixelSize, brushOrigin, pos")
             << font2 << pen << brush << backgroundColor << int(backgroundMode)
-	    << QPoint( 50, 32 ) << clipRegion << window << viewport;
+            << QPoint( 50, 32 ) << clipRegion << window << viewport;
 
     QTest::newRow("Modified clipRegion, window, viewport")
             << font << pen << brush << backgroundColor << int(backgroundMode)
-	    << brushOrigin << clipRegion.subtracted(QRect(10,10,50,30))
-	    << QRect(-500, -500, 500, 500 ) << QRect( 0, 0, 50, 50 );
+            << brushOrigin << clipRegion.subtracted(QRect(10,10,50,30))
+            << QRect(-500, -500, 500, 500 ) << QRect( 0, 0, 50, 50 );
 }
 
 void tst_QPainter::saveAndRestore()
@@ -656,13 +670,13 @@ QBitmap tst_QPainter::getBitmap( const QString &dir, const QString &filename, bo
         return QBitmap();
     }
     if ( mask ) {
-	QBitmap mask;
-	QString maskFilename = dir + QString( "/%1-mask.xbm" ).arg( filename );
-	if ( !mask.load( maskFilename ) ) {
-        QWARN(QString("Could not load mask '%1'").arg(maskFilename).toLatin1());
-        return QBitmap();
-	}
-	bm.setMask( mask );
+        QBitmap mask;
+        QString maskFilename = dir + QString( "/%1-mask.xbm" ).arg( filename );
+        if (!mask.load(maskFilename)) {
+            QWARN(QString("Could not load mask '%1'").arg(maskFilename).toLatin1());
+            return QBitmap();
+        }
+        bm.setMask( mask );
     }
     return bm;
 }
@@ -692,17 +706,17 @@ static QRect getPaintedSize(const QImage &image, const QColor &background)
     uint color = background.rgba();
 
     for ( int y = 0; y < image.height(); ++y ) {
-	for ( int x = 0; x < image.width(); ++x ) {
+        for (int x = 0; x < image.width(); ++x) {
             QRgb pixel = image.pixel( x, y );
-	    if ( pixel != color && x < xmin )
-		xmin = x;
-	    if ( pixel != color && x > xmax )
-		xmax = x;
-	    if ( pixel != color && y < ymin )
-		ymin = y;
-	    if ( pixel != color && y > ymax )
-		ymax = y;
-	}
+            if (pixel != color && x < xmin)
+                xmin = x;
+            if (pixel != color && x > xmax)
+                xmax = x;
+            if (pixel != color && y < ymin)
+                ymin = y;
+            if (pixel != color && y > ymax)
+                ymax = y;
+        }
     }
 
     return QRect(xmin, ymin, xmax - xmin + 1, ymax - ymin + 1);
@@ -721,6 +735,7 @@ void tst_QPainter::initFrom()
     pal.setColor(QPalette::Foreground, QColor(255, 0, 0));
     pal.setBrush(QPalette::Background, QColor(0, 255, 0));
     widget->setPalette(pal);
+    widget->show();
 
     QFont font = widget->font();
     font.setPointSize(26);
@@ -1026,6 +1041,50 @@ void tst_QPainter::drawLine_task216948()
         QCOMPARE(img.pixel(0, i), QColor(Qt::black).rgba());
 }
 
+void tst_QPainter::drawLineEndPoints()
+{
+    QImage img(256, 256, QImage::Format_ARGB32_Premultiplied);
+    img.fill(0x0);
+
+    QPainter p;
+    for (int x = 0; x < img.width(); ++x) {
+        QRgb color = qRgb(x, 0, 0);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(x, 0, 255 - x, 255);
+        p.end();
+        QCOMPARE(img.pixel(x, 0), color);
+        QCOMPARE(img.pixel(255 - x, 255), color);
+    }
+    for (int y = 0; y < img.height(); ++y) {
+        QRgb color = qRgb(0, y, 0);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(0, y, 255, 255 - y);
+        p.end();
+        QCOMPARE(img.pixel(0, y), color);
+        QCOMPARE(img.pixel(255, 255 - y), color);
+    }
+    for (int x = 0; x < img.width(); ++x) {
+        QRgb color = qRgb(x, 0, x);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(x, 255, 255 - x, 0);
+        p.end();
+        QCOMPARE(img.pixel(x, 255), color);
+        QCOMPARE(img.pixel(255 - x, 0), color);
+    }
+    for (int y = 0; y < img.height(); ++y) {
+        QRgb color = qRgb(0, y, y);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(255, y, 0, 255 - y);
+        p.end();
+        QCOMPARE(img.pixel(255, y), color);
+        QCOMPARE(img.pixel(0, 255 - y), color);
+    }
+}
+
 void tst_QPainter::drawRect()
 {
     QFETCH(QRect, rect);
@@ -1079,9 +1138,19 @@ void tst_QPainter::drawRect2()
     }
 }
 
+void tst_QPainter::fillRect_data()
+{
+    QTest::addColumn<QImage::Format>("format");
+
+    QTest::newRow("argb32pm") << QImage::Format_ARGB32_Premultiplied;
+    QTest::newRow("rgba8888pm") << QImage::Format_RGBA8888_Premultiplied;
+}
+
 void tst_QPainter::fillRect()
 {
-    QImage image(100, 100, QImage::Format_ARGB32_Premultiplied);
+    QFETCH(QImage::Format, format);
+
+    QImage image(100, 100, format);
     image.fill(QColor(0, 0, 0, 0).rgba());
 
     QPainter p(&image);
@@ -1103,17 +1172,31 @@ void tst_QPainter::fillRect()
              QRect(0, 0, 50, 100));
 }
 
+void tst_QPainter::fillRect2_data()
+{
+    QTest::addColumn<QImage::Format>("format");
+
+    QTest::newRow("argb32") << QImage::Format_ARGB32;
+    QTest::newRow("argb32pm") << QImage::Format_ARGB32_Premultiplied;
+    QTest::newRow("rgba8888") << QImage::Format_RGBA8888;
+    QTest::newRow("rgba8888pm") << QImage::Format_RGBA8888_Premultiplied;
+    QTest::newRow("a2rgb30pm") << QImage::Format_A2RGB30_Premultiplied;
+    QTest::newRow("a2bgr30pm") << QImage::Format_A2BGR30_Premultiplied;
+}
+
 void tst_QPainter::fillRect2()
 {
+    QFETCH(QImage::Format, format);
+
     QRgb background = 0x0;
 
-    QImage img(1, 20, QImage::Format_ARGB32_Premultiplied);
+    QImage img(1, 20, format);
     img.fill(background);
 
     QPainter p(&img);
 
     QRectF rect(0, 1, 1.2, 18);
-    p.fillRect(rect, Qt::black);
+    p.fillRect(rect, Qt::yellow);
 
     p.end();
 
@@ -1122,11 +1205,14 @@ void tst_QPainter::fillRect2()
 
     QCOMPARE(img.pixel(0, 1), img.pixel(0, 2));
     QCOMPARE(img.pixel(0, img.height() - 2), img.pixel(0, img.height() - 3));
+    QCOMPARE(img.pixel(0, 1), QColor(Qt::yellow).rgba());
 }
 
 void tst_QPainter::fillRect3()
 {
-    QImage img(1, 1, QImage::Format_ARGB32_Premultiplied);
+    QFETCH(QImage::Format, format);
+
+    QImage img(1, 1, format);
     img.fill(QColor(Qt::black).rgba());
 
     QPainter p(&img);
@@ -1139,7 +1225,9 @@ void tst_QPainter::fillRect3()
 
 void tst_QPainter::fillRect4()
 {
-    QImage image(100, 1, QImage::Format_ARGB32_Premultiplied);
+    QFETCH(QImage::Format, format);
+
+    QImage image(100, 1, format);
     image.fill(0x0);
 
     QImage expected = image;
@@ -1155,6 +1243,24 @@ void tst_QPainter::fillRect4()
     p.end();
 
     QCOMPARE(image, expected);
+}
+
+void tst_QPainter::fillRectNonPremul()
+{
+    QImage img1(1, 1, QImage::Format_ARGB32);
+    QImage img2(1, 1, QImage::Format_RGBA8888);
+
+    QPainter p1(&img1);
+    QPainter p2(&img2);
+
+    QRectF rect(0, 0, 1, 1);
+    p1.fillRect(rect, qRgba(31, 63, 127, 127));
+    p2.fillRect(rect, qRgba(31, 63, 127, 127));
+
+    p1.end();
+    p2.end();
+
+    QCOMPARE(img1.pixel(0, 0), img2.pixel(0,0));
 }
 
 void tst_QPainter::drawPath_data()
@@ -1456,8 +1562,6 @@ void tst_QPainter::drawRoundRect()
     }
 }
 
-Q_DECLARE_METATYPE(QImage::Format)
-
 void tst_QPainter::qimageFormats_data()
 {
     QTest::addColumn<QImage::Format>("format");
@@ -1470,6 +1574,8 @@ void tst_QPainter::qimageFormats_data()
     QTest::newRow("Qimage::Format_RGB555") << QImage::Format_RGB555;
     QTest::newRow("Qimage::Format_ARGB8555_Premultiplied") << QImage::Format_ARGB8555_Premultiplied;
     QTest::newRow("Qimage::Format_RGB888") << QImage::Format_RGB888;
+    QTest::newRow("Qimage::Format_A2RGB30_Premultiplied") << QImage::Format_A2RGB30_Premultiplied;
+    QTest::newRow("Qimage::Format_RGB30") << QImage::Format_RGB30;
 }
 
 /*
@@ -2265,6 +2371,47 @@ void tst_QPainter::setOpacity_data()
 
     QTest::newRow("RGB444 on RGB444") << QImage::Format_RGB444
                                       << QImage::Format_RGB444;
+
+    QTest::newRow("RGBA8888P on RGBA8888P") << QImage::Format_RGBA8888_Premultiplied
+                                            << QImage::Format_RGBA8888_Premultiplied;
+
+    QTest::newRow("RGBA8888 on RGBA8888") << QImage::Format_RGBA8888
+                                          << QImage::Format_RGBA8888;
+
+    QTest::newRow("RGBx8888 on RGBx8888") << QImage::Format_RGBX8888
+                                          << QImage::Format_RGBX8888;
+
+    QTest::newRow("RGBA8888P on ARGB32P") << QImage::Format_RGBA8888_Premultiplied
+                                          << QImage::Format_ARGB32_Premultiplied;
+
+    QTest::newRow("RGBx8888 on ARGB32P") << QImage::Format_RGBX8888
+                                         << QImage::Format_ARGB32_Premultiplied;
+
+    QTest::newRow("ARGB32P on RGBA8888P") << QImage::Format_ARGB32_Premultiplied
+                                          << QImage::Format_RGBA8888_Premultiplied;
+
+    QTest::newRow("RGB32 on RGBx8888") << QImage::Format_RGB32
+                                       << QImage::Format_RGBX8888;
+
+    QTest::newRow("A2RGB30P on A2RGB30P") << QImage::Format_A2RGB30_Premultiplied
+                                          << QImage::Format_A2RGB30_Premultiplied;
+
+    QTest::newRow("ARGB32P on A2RGB30P") << QImage::Format_ARGB32_Premultiplied
+                                         << QImage::Format_A2RGB30_Premultiplied;
+
+
+    QTest::newRow("RGB32 on A2BGR30P") << QImage::Format_ARGB32_Premultiplied
+                                       << QImage::Format_A2BGR30_Premultiplied;
+
+    QTest::newRow("A2RGB30P on A2BGR30P") << QImage::Format_A2RGB30_Premultiplied
+                                          << QImage::Format_A2BGR30_Premultiplied;
+
+    QTest::newRow("ARGB32P on BGR30") << QImage::Format_ARGB32_Premultiplied
+                                      << QImage::Format_BGR30;
+
+    QTest::newRow("ARGB32P on RGB30") << QImage::Format_A2RGB30_Premultiplied
+                                      << QImage::Format_RGB30;
+
 }
 
 void tst_QPainter::setOpacity()
@@ -2353,7 +2500,9 @@ void tst_QPainter::drawhelper_blend_untransformed()
                              dest.bytesPerLine(), dest.format());
 
         if (dest.format() == QImage::Format_ARGB8565_Premultiplied ||
-            dest.format() == QImage::Format_ARGB8555_Premultiplied) {
+            dest.format() == QImage::Format_ARGB8555_Premultiplied ||
+            dest.format() == QImage::Format_A2BGR30_Premultiplied ||
+            dest.format() == QImage::Format_A2RGB30_Premultiplied ) {
             // Test skipped due to rounding errors...
             continue;
         }
@@ -2490,7 +2639,7 @@ public:
     }
 
     uchar data[3];
-} Q_PACKED;
+};
 
 void tst_QPainter::drawhelper_blend_color()
 {
@@ -3343,7 +3492,8 @@ void tst_QPainter::drawImage_data()
 
     for (int srcFormat = QImage::Format_Mono; srcFormat < QImage::NImageFormats; ++srcFormat) {
         for (int dstFormat = QImage::Format_Mono; dstFormat < QImage::NImageFormats; ++dstFormat) {
-            if (dstFormat == QImage::Format_Indexed8)
+            // Indexed8 can't be painted to, and Alpha8 can't hold a color.
+            if (dstFormat == QImage::Format_Indexed8 || dstFormat == QImage::Format_Alpha8)
                 continue;
             for (int odd_x = 0; odd_x <= 1; ++odd_x) {
                 for (int odd_width = 0; odd_width <= 1; ++odd_width) {
@@ -3651,6 +3801,49 @@ void tst_QPainter::linearGradientSymmetry()
 
     b = b.mirrored(true);
     QCOMPARE(a, b);
+}
+
+void tst_QPainter::gradientPixelFormat_data()
+{
+    QTest::addColumn<QImage::Format>("format");
+
+    QTest::newRow("argb32") << QImage::Format_ARGB32;
+    QTest::newRow("rgb32") << QImage::Format_RGB32;
+    QTest::newRow("rgb888") << QImage::Format_RGB888;
+    QTest::newRow("rgbx8888") << QImage::Format_RGBX8888;
+    QTest::newRow("rgba8888") << QImage::Format_RGBA8888;
+    QTest::newRow("rgba8888_pm") << QImage::Format_RGBA8888_Premultiplied;
+}
+
+void tst_QPainter::gradientPixelFormat()
+{
+    QFETCH(QImage::Format, format);
+
+    QImage a(8, 64, QImage::Format_ARGB32_Premultiplied);
+    QImage b(8, 64, format);
+
+
+    QGradientStops stops;
+    stops << qMakePair(qreal(0.0), QColor(Qt::blue));
+    stops << qMakePair(qreal(0.3), QColor(Qt::red));
+    stops << qMakePair(qreal(0.6), QColor(Qt::green));
+    stops << qMakePair(qreal(1.0), QColor(Qt::black));
+
+    a.fill(0);
+    b.fill(0);
+
+    QLinearGradient gradient(QRectF(b.rect()).topLeft(), QRectF(b.rect()).bottomLeft());
+    gradient.setStops(stops);
+
+    QPainter pa(&a);
+    pa.fillRect(a.rect(), gradient);
+    pa.end();
+
+    QPainter pb(&b);
+    pb.fillRect(b.rect(), gradient);
+    pb.end();
+
+    QCOMPARE(a, b.convertToFormat(QImage::Format_ARGB32_Premultiplied));
 }
 
 void tst_QPainter::gradientInterpolation()
@@ -4353,6 +4546,26 @@ void tst_QPainter::QTBUG17053_zeroDashPattern()
     QCOMPARE(image, original);
 }
 
+void tst_QPainter::QTBUG38781_NoBrushAndQBitmap()
+{
+    QBitmap bitmap(10, 10);
+    bitmap.fill(Qt::color0);
+    QPainter p(&bitmap);
+    p.setPen(Qt::color1);
+    p.drawLine(0, 1, 9, 1); // at horizontal line at y=1
+    p.setBrush(Qt::NoBrush);
+    p.drawRect(0, 0, 9, 9); // a rect all around
+
+    QRgb white = qRgb(0xff, 0xff, 0xff);
+    QRgb black = qRgb(0, 0, 0);
+    QImage image = bitmap.toImage();
+    QCOMPARE(image.pixel(0, 0), black);
+    QCOMPARE(image.pixel(5, 5), white);
+
+    // Check that the rect didn't overwrite the line
+    QCOMPARE(image.pixel(5, 1), black);
+}
+
 class TextDrawerThread : public QThread
 {
 public:
@@ -4373,9 +4586,6 @@ void TextDrawerThread::run()
 
 void tst_QPainter::drawTextOutsideGuiThread()
 {
-    if (!QFontDatabase::supportsThreadedFontRendering())
-        QSKIP("No threaded font rendering");
-
     QImage referenceRendering(100, 100, QImage::Format_ARGB32_Premultiplied);
     referenceRendering.fill(0);
     QPainter p(&referenceRendering);
@@ -4461,6 +4671,112 @@ void tst_QPainter::QTBUG25153_drawLine()
     }
 }
 
+void tst_QPainter::blendARGBonRGB_data()
+{
+    QTest::addColumn<QImage::Format>("dst_format");
+    QTest::addColumn<QImage::Format>("src_format");
+    QTest::addColumn<QPainter::CompositionMode>("compositionMode");
+    QTest::addColumn<QRgb>("color");
+    QTest::addColumn<int>("expected_red");
+
+    QTest::newRow("ARGB over ARGB32") << QImage::Format_ARGB32 << QImage::Format_ARGB32
+                                      << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 127 ;
+    QTest::newRow("ARGB_PM over ARGB32") << QImage::Format_ARGB32 << QImage::Format_ARGB32_Premultiplied
+                                         << QPainter::CompositionMode_SourceOver<< qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source ARGB32") << QImage::Format_ARGB32 << QImage::Format_ARGB32
+                                        << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 127) << 255;
+    QTest::newRow("ARGB_PM source ARGB32") << QImage::Format_ARGB32 << QImage::Format_ARGB32_Premultiplied
+                                           << QPainter::CompositionMode_Source << qRgba(127, 0, 0, 127) << 255;
+    QTest::newRow("ARGB source-in ARGB32") << QImage::Format_ARGB32 << QImage::Format_ARGB32
+                                           << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 255 ;
+    QTest::newRow("ARGB_PM source-in ARGB32") << QImage::Format_ARGB32 << QImage::Format_ARGB32_Premultiplied
+                                              << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 255;
+    // Only ARGB does inverse premultiply, on the rest over and source gives similar results:
+    QTest::newRow("ARGB over RGB32") << QImage::Format_RGB32 << QImage::Format_ARGB32
+                                     << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM over RGB32") << QImage::Format_RGB32 << QImage::Format_ARGB32_Premultiplied
+                                        << QPainter::CompositionMode_SourceOver << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source RGB32") << QImage::Format_RGB32 << QImage::Format_ARGB32
+                                       << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM source RGB32") << QImage::Format_RGB32 << QImage::Format_ARGB32_Premultiplied
+                                          << QPainter::CompositionMode_Source << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source-in RGB32") << QImage::Format_RGB32 << QImage::Format_ARGB32
+                                          << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM source-in RGB32") << QImage::Format_RGB32 << QImage::Format_ARGB32_Premultiplied
+                                             << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB over RGB888") << QImage::Format_RGB888 << QImage::Format_ARGB32
+                                      << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM over RGB888") << QImage::Format_RGB888 << QImage::Format_ARGB32_Premultiplied
+                                         << QPainter::CompositionMode_SourceOver << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source RGB888") << QImage::Format_RGB888 << QImage::Format_ARGB32
+                                        << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM source RGB888") << QImage::Format_RGB888 << QImage::Format_ARGB32_Premultiplied
+                                           << QPainter::CompositionMode_Source << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source-in RGB888") << QImage::Format_RGB888 << QImage::Format_ARGB32
+                                           << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM source-in RGB888") << QImage::Format_RGB888 << QImage::Format_ARGB32_Premultiplied
+                                              << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB over RGBx8888") << QImage::Format_RGBX8888 << QImage::Format_ARGB32
+                                        << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM over RGBx8888") << QImage::Format_RGBX8888 << QImage::Format_ARGB32_Premultiplied
+                                           << QPainter::CompositionMode_SourceOver << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source RGBx8888") << QImage::Format_RGBX8888 << QImage::Format_ARGB32
+                                          << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM source RGBx8888") << QImage::Format_RGBX8888 << QImage::Format_ARGB32_Premultiplied
+                                             << QPainter::CompositionMode_Source << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB source-in RGBx8888") << QImage::Format_RGBX8888 << QImage::Format_ARGB32
+                                             << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 127;
+    QTest::newRow("ARGB_PM source-in RGBx8888") << QImage::Format_RGBX8888 << QImage::Format_ARGB32_Premultiplied
+                                                << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 127;
+    QTest::newRow("ARGB over RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32
+                                     << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 123;
+    QTest::newRow("ARGB_PM over RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32_Premultiplied
+                                        << QPainter::CompositionMode_SourceOver << qRgba(127, 0, 0, 127) << 123;
+    QTest::newRow("ARGB source RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32
+                                       << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 127) << 123;
+    QTest::newRow("ARGB_PM source RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32_Premultiplied
+                                          << QPainter::CompositionMode_Source << qRgba(127, 0, 0, 127) << 123;
+    QTest::newRow("ARGB source-in RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32
+                                          << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 123;
+    QTest::newRow("ARGB_PM source-in RGB16") << QImage::Format_RGB16 << QImage::Format_ARGB32_Premultiplied
+                                             << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 123;
+    QTest::newRow("ARGB over RGB666") << QImage::Format_RGB666 << QImage::Format_ARGB32
+                                      << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 127) << 125;
+    QTest::newRow("ARGB_PM over RGB666") << QImage::Format_RGB666 << QImage::Format_ARGB32_Premultiplied
+                                         << QPainter::CompositionMode_SourceOver << qRgba(127, 0, 0, 127) << 125;
+    QTest::newRow("ARGB source RGB666") << QImage::Format_RGB666 << QImage::Format_ARGB32
+                                        << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 127) << 125;
+    QTest::newRow("ARGB_PM source RGB666") << QImage::Format_RGB666 << QImage::Format_ARGB32_Premultiplied
+                                           << QPainter::CompositionMode_Source << qRgba(127, 0, 0, 127) << 125;
+    QTest::newRow("ARGB source-in RGB666") << QImage::Format_RGB666 << QImage::Format_ARGB32
+                                           << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 125;
+    QTest::newRow("ARGB_PM source-in RGB666") << QImage::Format_RGB666 << QImage::Format_ARGB32_Premultiplied
+                                              << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 125;
+}
+
+void tst_QPainter::blendARGBonRGB()
+{
+    QFETCH(QImage::Format, dst_format);
+    QFETCH(QImage::Format, src_format);
+    QFETCH(QPainter::CompositionMode, compositionMode);
+    QFETCH(QRgb, color);
+    QFETCH(int, expected_red);
+
+    QImage imageRgb(16,16, dst_format);
+    QImage imageArgb(16,16, src_format);
+    QPainter painter;
+
+    imageArgb.fill(color);
+
+    imageRgb.fill(Qt::black);
+    painter.begin(&imageRgb);
+    painter.setCompositionMode(compositionMode);
+    painter.drawImage(0, 0, imageArgb);
+    painter.end();
+
+    QCOMPARE(qRed(imageRgb.pixel(0,0)), expected_red);
+}
+
 enum CosmeticStrokerPaint
 {
     Antialiasing,
@@ -4530,6 +4846,70 @@ void tst_QPainter::cosmeticStrokerClipping()
 
     // ditto for regular clips
     QCOMPARE(old, image);
+}
+
+void tst_QPainter::RasterOp_NotDestination()
+{
+    QImage image(3, 3, QImage::Format_RGB32);
+    image.fill(Qt::red);
+
+    {
+        QPainter p(&image);
+        p.setCompositionMode(QPainter::RasterOp_NotDestination);
+        p.fillRect(image.rect(), Qt::black);
+    }
+
+    uint pixel = image.pixel(1, 1);
+    QCOMPARE(pixel, 0xff00ffff);
+}
+
+void tst_QPainter::drawTextNoHinting()
+{
+    {
+        QImage image(250, 250, QImage::Format_RGB32);
+        QPainter p(&image);
+        QFont font("Arial", 8);
+        font.setHintingPreference(QFont::PreferNoHinting);
+        font.setStyleStrategy(QFont::PreferAntialias);
+        p.setFont(font);
+        p.drawText(image.rect(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz");
+    }
+    // Testing for a crash when DirectWrite is used on Windows
+    QVERIFY(true);
+}
+
+void tst_QPainter::drawPolyline_data()
+{
+    QTest::addColumn< QVector<QPointF> >("points");
+
+    QTest::newRow("basic") << (QVector<QPointF>() << QPointF(10, 10) << QPointF(20, 10) << QPointF(20, 20) << QPointF(10, 20));
+    QTest::newRow("clipped") << (QVector<QPointF>() << QPoint(-10, 100) << QPoint(-1, 100) << QPoint(-1,  -2) << QPoint(100, -2) << QPoint(100, 40)); // QTBUG-31579
+    QTest::newRow("shortsegment") << (QVector<QPointF>() << QPoint(20, 100) << QPoint(20, 99) << QPoint(21, 99) << QPoint(21, 104)); // QTBUG-42398
+    QTest::newRow("edge") << (QVector<QPointF>() << QPointF(4.5, 121.6) << QPointF(9.4, 150.9) << QPointF(14.2, 184.8) << QPointF(19.1, 130.4));
+}
+
+void tst_QPainter::drawPolyline()
+{
+    QFETCH(QVector<QPointF>, points);
+    QImage images[2];
+
+    for (int r = 0; r < 2; r++) {
+        images[r] = QImage(150, 150, QImage::Format_ARGB32);
+        images[r].fill(Qt::white);
+        QPainter p(images + r);
+        QPen pen(Qt::red, 0, Qt::SolidLine, Qt::FlatCap);
+        p.setPen(pen);
+        QVERIFY(p.pen().isCosmetic());
+        if (r) {
+            for (int i = 0; i < points.count()-1; i++) {
+                p.drawLine(points.at(i), points.at(i+1));
+            }
+        } else {
+            p.drawPolyline(points);
+        }
+    }
+
+    QCOMPARE(images[0], images[1]);
 }
 
 QTEST_MAIN(tst_QPainter)

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDeclarative module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,6 +34,7 @@
 #include "qdistancefield_p.h"
 #include <qmath.h>
 #include <private/qdatabuffer_p.h>
+#include <private/qimage_p.h>
 #include <private/qpathsimplifier_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -487,14 +480,18 @@ static void drawPolygons(qint32 *bits, int width, int height, const QPoint *vert
     }
 }
 
-static QImage makeDistanceField(int imgWidth, int imgHeight, const QPainterPath &path, int dfScale, int offs)
+static void makeDistanceField(QDistanceFieldData *data, const QPainterPath &path, int dfScale, int offs)
 {
-    QImage image(imgWidth, imgHeight, QImage::Format_Indexed8);
+    if (!data || !data->data)
+        return;
 
     if (path.isEmpty()) {
-        image.fill(0);
-        return image;
+        memset(data->data, 0, data->nbytes);
+        return;
     }
+
+    int imgWidth = data->width;
+    int imgHeight = data->height;
 
     QTransform transform;
     transform.translate(offs, offs);
@@ -512,8 +509,8 @@ static QImage makeDistanceField(int imgWidth, int imgHeight, const QPainterPath 
         bits[i] = exteriorColor;
 
     const qreal angleStep = qreal(15 * 3.141592653589793238 / 180);
-    const QPoint rotation(qRound(cos(angleStep) * 0x4000),
-                          qRound(sin(angleStep) * 0x4000)); // 2:14 signed
+    const QPoint rotation(qRound(qCos(angleStep) * 0x4000),
+                          qRound(qSin(angleStep) * 0x4000)); // 2:14 signed
 
     const quint32 *indices = pathIndices.data();
     QVarLengthArray<QPoint> normals;
@@ -521,8 +518,8 @@ static QImage makeDistanceField(int imgWidth, int imgHeight, const QPainterPath 
     QVarLengthArray<bool> isConvex;
     QVarLengthArray<bool> needsClipping;
 
-    drawPolygons(bits.data(), imgWidth, imgHeight, pathVertices.data(), indices, pathIndices.size(),
-                 interiorColor);
+    drawPolygons(bits.data(), imgWidth, imgHeight, pathVertices.data(),
+                 indices, pathIndices.size(), interiorColor);
 
     int index = 0;
 
@@ -547,7 +544,7 @@ static QImage makeDistanceField(int imgWidth, int imgHeight, const QPainterPath 
             QPoint n(to.y() - from.y(), from.x() - to.x());
             if (n.x() == 0 && n.y() == 0)
                 continue;
-            int scale = qRound((offs << 16) / sqrt(qreal(n.x() * n.x() + n.y() * n.y()))); // 8:16
+            int scale = qRound((offs << 16) / qSqrt(qreal(n.x() * n.x() + n.y() * n.y()))); // 8:16
             n.rx() = n.x() * scale >> 8;
             n.ry() = n.y() * scale >> 8;
             normals.append(n);
@@ -681,15 +678,11 @@ static QImage makeDistanceField(int imgWidth, int imgHeight, const QPainterPath 
     }
 
     const qint32 *inLine = bits.data();
-    uchar *outLine = image.bits();
-    int padding = image.bytesPerLine() - image.width();
+    uchar *outLine = data->data;
     for (int y = 0; y < imgHeight; ++y) {
         for (int x = 0; x < imgWidth; ++x, ++inLine, ++outLine)
             *outLine = uchar((0x7f80 - *inLine) >> 8);
-        outLine += padding;
     }
-
-    return image;
 }
 
 static bool imageHasNarrowOutlines(const QImage &im)
@@ -739,14 +732,11 @@ bool qt_fontHasNarrowOutlines(QFontEngine *fontEngine)
     if (!fe)
         return false;
 
-    QGlyphLayout glyphs;
-    glyph_t glyph;
-    glyphs.glyphs = &glyph;
-    glyphs.numGlyphs = 1;
-    int numGlyphs = 1;
-    QChar uc = QLatin1Char('O');
-    fe->stringToCMap(&uc, 1, &glyphs, &numGlyphs, QFontEngine::GlyphIndicesOnly);
-    QImage im = fe->alphaMapForGlyph(glyph, QFixed(), QTransform());
+    QImage im;
+
+    const glyph_t glyph = fe->glyphIndex('O');
+    if (glyph != 0)
+        im = fe->alphaMapForGlyph(glyph, QFixed(), QTransform());
 
     Q_ASSERT(fe->ref.load() == 0);
     delete fe;
@@ -762,38 +752,114 @@ bool qt_fontHasNarrowOutlines(const QRawFont &f)
         return false;
 
     QVector<quint32> glyphIndices = font.glyphIndexesForString(QLatin1String("O"));
-    if (glyphIndices.size() < 1)
+    if (glyphIndices.isEmpty() || glyphIndices[0] == 0)
         return false;
 
     return imageHasNarrowOutlines(font.alphaMapForGlyph(glyphIndices.at(0),
                                                         QRawFont::PixelAntialiasing));
 }
 
-static QImage renderDistanceFieldPath(const QPainterPath &path, bool doubleResolution)
+
+QDistanceFieldData::QDistanceFieldData(const QDistanceFieldData &other)
+    : QSharedData(other)
+    , glyph(other.glyph)
+    , width(other.width)
+    , height(other.height)
+    , nbytes(other.nbytes)
+{
+    if (nbytes && other.data)
+        data = (uchar *)memcpy(malloc(nbytes), other.data, nbytes);
+    else
+        data = 0;
+}
+
+QDistanceFieldData::~QDistanceFieldData()
+{
+    free(data);
+}
+
+QDistanceFieldData *QDistanceFieldData::create(const QSize &size)
+{
+    QDistanceFieldData *data = new QDistanceFieldData;
+
+    if (size.isValid()) {
+        data->width = size.width();
+        data->height = size.height();
+        // pixel data stored as a 1-byte alpha value
+        data->nbytes = data->width * data->height; // tightly packed
+        data->data = (uchar *)malloc(data->nbytes);
+    }
+
+    return data;
+}
+
+QDistanceFieldData *QDistanceFieldData::create(const QPainterPath &path, bool doubleResolution)
 {
     int dfMargin = QT_DISTANCEFIELD_RADIUS(doubleResolution) / QT_DISTANCEFIELD_SCALE(doubleResolution);
     int glyphWidth = qCeil(path.boundingRect().width() / QT_DISTANCEFIELD_SCALE(doubleResolution)) + dfMargin * 2;
 
-    QImage im = makeDistanceField(glyphWidth,
-                                  QT_DISTANCEFIELD_TILESIZE(doubleResolution),
-                                  path,
-                                  QT_DISTANCEFIELD_SCALE(doubleResolution),
-                                  QT_DISTANCEFIELD_RADIUS(doubleResolution) / QT_DISTANCEFIELD_SCALE(doubleResolution));
-    return im;
+    QDistanceFieldData *data = create(QSize(glyphWidth, QT_DISTANCEFIELD_TILESIZE(doubleResolution)));
+
+    makeDistanceField(data,
+                      path,
+                      QT_DISTANCEFIELD_SCALE(doubleResolution),
+                      QT_DISTANCEFIELD_RADIUS(doubleResolution) / QT_DISTANCEFIELD_SCALE(doubleResolution));
+    return data;
 }
 
-QImage qt_renderDistanceFieldGlyph(QFontEngine *fe, glyph_t glyph, bool doubleResolution)
+
+QDistanceField::QDistanceField()
+    : d(new QDistanceFieldData)
 {
-    QFixedPoint position;
-    QPainterPath path;
-    fe->addGlyphsToPath(&glyph, &position, 1, &path, 0);
-    path.translate(-path.boundingRect().topLeft());
-    path.setFillRule(Qt::WindingFill);
-
-    return renderDistanceFieldPath(path, doubleResolution);
 }
 
-QImage qt_renderDistanceFieldGlyph(const QRawFont &font, glyph_t glyph, bool doubleResolution)
+QDistanceField::QDistanceField(int width, int height)
+    : d(QDistanceFieldData::create(QSize(width, height)))
+{
+}
+
+QDistanceField::QDistanceField(const QDistanceField &other)
+{
+    d = other.d;
+}
+
+QDistanceField::QDistanceField(const QRawFont &font, glyph_t glyph, bool doubleResolution)
+{
+    setGlyph(font, glyph, doubleResolution);
+}
+
+QDistanceField::QDistanceField(QFontEngine *fontEngine, glyph_t glyph, bool doubleResolution)
+{
+    setGlyph(fontEngine, glyph, doubleResolution);
+}
+
+QDistanceField::QDistanceField(const QPainterPath &path, glyph_t glyph, bool doubleResolution)
+{
+    QPainterPath dfPath = path;
+    dfPath.translate(-dfPath.boundingRect().topLeft());
+    dfPath.setFillRule(Qt::WindingFill);
+
+    d = QDistanceFieldData::create(dfPath, doubleResolution);
+    d->glyph = glyph;
+}
+
+
+QDistanceField::QDistanceField(QDistanceFieldData *data)
+    : d(data)
+{
+}
+
+bool QDistanceField::isNull() const
+{
+    return !d->data;
+}
+
+glyph_t QDistanceField::glyph() const
+{
+    return d->glyph;
+}
+
+void QDistanceField::setGlyph(const QRawFont &font, glyph_t glyph, bool doubleResolution)
 {
     QRawFont renderFont = font;
     renderFont.setPixelSize(QT_DISTANCEFIELD_BASEFONTSIZE(doubleResolution) * QT_DISTANCEFIELD_SCALE(doubleResolution));
@@ -802,7 +868,158 @@ QImage qt_renderDistanceFieldGlyph(const QRawFont &font, glyph_t glyph, bool dou
     path.translate(-path.boundingRect().topLeft());
     path.setFillRule(Qt::WindingFill);
 
-    return renderDistanceFieldPath(path, doubleResolution);
+    d = QDistanceFieldData::create(path, doubleResolution);
+    d->glyph = glyph;
+}
+
+void QDistanceField::setGlyph(QFontEngine *fontEngine, glyph_t glyph, bool doubleResolution)
+{
+    QFixedPoint position;
+    QPainterPath path;
+    fontEngine->addGlyphsToPath(&glyph, &position, 1, &path, 0);
+    path.translate(-path.boundingRect().topLeft());
+    path.setFillRule(Qt::WindingFill);
+
+    d = QDistanceFieldData::create(path, doubleResolution);
+    d->glyph = glyph;
+}
+
+int QDistanceField::width() const
+{
+    return d->width;
+}
+
+int QDistanceField::height() const
+{
+    return d->height;
+}
+
+QDistanceField QDistanceField::copy(const QRect &r) const
+{
+    if (isNull())
+        return QDistanceField();
+
+    if (r.isNull())
+        return QDistanceField(new QDistanceFieldData(*d));
+
+    int x = r.x();
+    int y = r.y();
+    int w = r.width();
+    int h = r.height();
+
+    int dx = 0;
+    int dy = 0;
+    if (w <= 0 || h <= 0)
+        return QDistanceField();
+
+    QDistanceField df(w, h);
+    if (df.isNull())
+        return df;
+
+    if (x < 0 || y < 0 || x + w > d->width || y + h > d->height) {
+        memset(df.d->data, 0, df.d->nbytes);
+        if (x < 0) {
+            dx = -x;
+            x = 0;
+        }
+        if (y < 0) {
+            dy = -y;
+            y = 0;
+        }
+    }
+
+    int pixels_to_copy = qMax(w - dx, 0);
+    if (x > d->width)
+        pixels_to_copy = 0;
+    else if (pixels_to_copy > d->width - x)
+        pixels_to_copy = d->width - x;
+    int lines_to_copy = qMax(h - dy, 0);
+    if (y > d->height)
+        lines_to_copy = 0;
+    else if (lines_to_copy > d->height - y)
+        lines_to_copy = d->height - y;
+
+    const uchar *src = d->data + x + y * d->width;
+    uchar *dest = df.d->data + dx + dy * df.d->width;
+    for (int i = 0; i < lines_to_copy; ++i) {
+        memcpy(dest, src, pixels_to_copy);
+        src += d->width;
+        dest += df.d->width;
+    }
+
+    df.d->glyph = d->glyph;
+
+    return df;
+}
+
+uchar *QDistanceField::bits()
+{
+    return d->data;
+}
+
+const uchar *QDistanceField::bits() const
+{
+    return d->data;
+}
+
+const uchar *QDistanceField::constBits() const
+{
+    return d->data;
+}
+
+uchar *QDistanceField::scanLine(int i)
+{
+    if (isNull())
+        return 0;
+
+    Q_ASSERT(i >= 0 && i < d->height);
+    return d->data + i * d->width;
+}
+
+const uchar *QDistanceField::scanLine(int i) const
+{
+    if (isNull())
+        return 0;
+
+    Q_ASSERT(i >= 0 && i < d->height);
+    return d->data + i * d->width;
+}
+
+const uchar *QDistanceField::constScanLine(int i) const
+{
+    if (isNull())
+        return 0;
+
+    Q_ASSERT(i >= 0 && i < d->height);
+    return d->data + i * d->width;
+}
+
+QImage QDistanceField::toImage(QImage::Format format) const
+{
+    if (isNull())
+        return QImage();
+
+    QImage image(d->width, d->height, qt_depthForFormat(format) == 8 ?
+                                      format : QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull())
+        return image;
+
+    if (image.depth() == 8) {
+        for (int y = 0; y < d->height; ++y)
+            memcpy(image.scanLine(y), scanLine(y), d->width);
+    } else {
+        for (int y = 0; y < d->height; ++y) {
+            for (int x = 0; x < d->width; ++x) {
+                uint alpha = *(d->data + x + y * d->width);
+                image.setPixel(x, y, alpha << 24);
+            }
+        }
+
+        if (image.format() != format)
+            image = image.convertToFormat(format);
+    }
+
+    return image;
 }
 
 QT_END_NAMESPACE

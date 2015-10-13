@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,14 +46,9 @@
 #include <QtCore/qpair.h>
 #include <QtCore/qsettings.h>
 #include <QtGui/qaccessible.h>
-#include <QtGui/private/qaccessible2_p.h>
 #include <QtGui/qguiapplication.h>
 #include <qpa/qplatformnativeinterface.h>
 #include <QtGui/qwindow.h>
-#include <QtWidgets/qapplication.h>
-#include <QtWidgets/qgraphicsitem.h>
-#include <QtWidgets/qgraphicsview.h>
-#include <QtWidgets/qmessagebox.h>
 
 //#include <uiautomationcoreapi.h>
 #ifndef UiaRootObjectId
@@ -186,23 +173,10 @@ HRESULT STDMETHODCALLTYPE QWindowsEnumerate::Skip(unsigned long celt)
     return S_OK;
 }
 
-#ifndef QT_NO_DEBUG
-bool debug_accessibility()
-{
-    static int debugging = -1;
-    if (debugging == -1)
-        debugging = qgetenv("QT_DEBUG_ACCESSIBILITY").toInt();
-    return !!debugging;
-}
-#endif
-
 #if defined(DEBUG_SHOW_ATCLIENT_COMMANDS)
 void accessibleDebugClientCalls_helper(const char* funcName, const QAccessibleInterface *iface)
 {
-    QString str;
-    QDebug dbg(&str);
-    dbg << iface << QLatin1String(funcName);
-    accessibleDebug("%s", qPrintable(str));
+    qCDebug(lcQpaAccessibility) << iface << funcName;
 }
 #endif
 
@@ -217,10 +191,8 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::QueryInterface(REFIID id, LPVO
 
     QByteArray strIID = IIDToString(id);
     if (!strIID.isEmpty()) {
-        QString ss;
-        QDebug dbg(&ss);
-        dbg << accessibleInterface();
-        accessibleDebug("QWindowsIA2Accessible::QI() - IID:%s, iface:%s ", strIID.constData(), qPrintable(ss));
+        qCDebug(lcQpaAccessibility) << "QWindowsIA2Accessible::QI() - IID:"
+                                    << strIID << ", iface:" << accessibleInterface();
     }
     if (id == IID_IUnknown) {
         *iface = (IUnknown*)(IDispatch*)this;
@@ -564,15 +536,10 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::accLocation(long *pxLeft, long
     if (!accessible)
         return E_FAIL;
 
-    QRect rect;
-    if (varID.lVal) {
-        QAccessibleInterface *child = accessible->child(varID.lVal - 1);
-        if (!child || !child->isValid())
-            return E_FAIL;
-        rect = child->rect();
-    } else {
-        rect = accessible->rect();
-    }
+    QAccessibleInterface *acc = childPointer(accessible, varID);
+    if (!acc || !acc->isValid())
+        return E_FAIL;
+    const QRect rect = acc->rect();
 
     *pxLeft = rect.x();
     *pyTop = rect.y();
@@ -722,7 +689,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accChild(VARIANT varChildI
         return E_INVALIDARG;
 
     QAccessibleInterface *acc = childPointer(accessible, varChildID);
-    if (acc) {
+    if (acc && acc->isValid()) {
         *ppdispChild = QWindowsAccessibility::wrap(acc);
         return S_OK;
     }
@@ -811,7 +778,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accDescription(VARIANT var
     QString descr;
     if (varID.lVal) {
         QAccessibleInterface *child = childPointer(accessible, varID);
-        if (!child)
+        if (!child || !child->isValid())
             return E_FAIL;
         descr = child->text(QAccessible::Description);
     } else {
@@ -836,7 +803,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accHelp(VARIANT varID, BST
     QString help;
     if (varID.lVal) {
         QAccessibleInterface *child = childPointer(accessible, varID);
-        if (!child)
+        if (!child || !child->isValid())
             return E_FAIL;
         help = child->text(QAccessible::Help);
     } else {
@@ -895,7 +862,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accName(VARIANT varID, BST
     QString name;
     if (varID.lVal) {
         QAccessibleInterface *child = childPointer(accessible, varID);
-        if (!child)
+        if (!child || !child->isValid())
             return E_FAIL;
         name = child->text(QAccessible::Name);
         if (name.isEmpty()) {
@@ -911,6 +878,11 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accName(VARIANT varID, BST
             }
         }
     }
+
+    QString shortcut = accessible->text(QAccessible::Accelerator);
+    if (!shortcut.isEmpty())
+        name.append(QLatin1Char(' ') + shortcut);
+
     if (name.size()) {
         *pszName = QStringToBSTR(name);
         return S_OK;
@@ -938,7 +910,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accRole(VARIANT varID, VAR
     QAccessible::Role role;
     if (varID.lVal) {
         QAccessibleInterface *child = childPointer(accessible, varID);
-        if (!child)
+        if (!child || !child->isValid())
             return E_FAIL;
         role = child->role();
     } else {
@@ -951,6 +923,8 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accRole(VARIANT varID, VAR
             // does not support IAccessible2, since it should prefer IA2::role() then.
             if (role == QAccessible::LayeredPane)
                 role = QAccessible::Pane;
+            else if (role == QAccessible::WebDocument)
+                role = QAccessible::Document;
             else
                 role = QAccessible::Client;
         }
@@ -973,7 +947,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accState(VARIANT varID, VA
     QAccessible::State state;
     if (varID.lVal) {
         QAccessibleInterface *child = childPointer(accessible, varID);
-        if (!child)
+        if (!child || !child->isValid())
             return E_FAIL;
         state = child->state();
     } else {
@@ -1033,6 +1007,8 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accState(VARIANT varID, VA
         st |= STATE_SYSTEM_SIZEABLE;
     if (state.traversed)
         st |= STATE_SYSTEM_TRAVERSED;
+    if (state.disabled)
+        st |= STATE_SYSTEM_UNAVAILABLE;
 
     (*pvarState).vt = VT_I4;
     (*pvarState).lVal = st;
@@ -1053,7 +1029,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accValue(VARIANT varID, BS
 
     QString value;
     if (accessible->valueInterface()) {
-        value = QString::number(accessible->valueInterface()->currentValue().toDouble());
+        value = accessible->valueInterface()->currentValue().toString();
     } else {
         value = accessible->text(QAccessible::Value);
     }
@@ -1063,7 +1039,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::get_accValue(VARIANT varID, BS
     }
 
     *pszValue = 0;
-    accessibleDebug("return S_FALSE");
+    qCDebug(lcQpaAccessibility) << "return S_FALSE";
     return S_FALSE;
 }
 
@@ -1202,7 +1178,7 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::GetWindow(HWND *phwnd)
     QPlatformNativeInterface *platform = QGuiApplication::platformNativeInterface();
     Q_ASSERT(platform);
     *phwnd = (HWND)platform->nativeResourceForWindow("handle", window);
-    accessibleDebug("QWindowsAccessible::GetWindow(): %p", *phwnd);
+    qCDebug(lcQpaAccessibility) << "QWindowsAccessible::GetWindow(): " << *phwnd;
     return S_OK;
 }
 

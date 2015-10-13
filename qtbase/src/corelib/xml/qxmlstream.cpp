@@ -1,52 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "QtCore/qxmlstream.h"
-
-#if defined(QT_BUILD_XML_LIB) && defined(Q_OS_MAC64)
-// No need to define this in the 64-bit Mac libraries.
-// Since Qt 4.4 and previous weren't supported in 64-bit, there are
-// no QXmlStream* symbols to keep compatibility with
-# define QT_NO_XMLSTREAM
-#endif
 
 #ifndef QT_NO_XMLSTREAM
 
@@ -79,6 +64,8 @@ QT_BEGIN_NAMESPACE
 
 #include "qxmlstream_p.h"
 
+enum { StreamEOF = ~0U };
+
 /*!
     \enum QXmlStreamReader::TokenType
 
@@ -92,8 +79,8 @@ QT_BEGIN_NAMESPACE
     \value StartDocument The reader reports the XML version number in
     documentVersion(), and the encoding as specified in the XML
     document in documentEncoding().  If the document is declared
-    standalone, isStandaloneDocument() returns true; otherwise it
-    returns false.
+    standalone, isStandaloneDocument() returns \c true; otherwise it
+    returns \c false.
 
     \value EndDocument The reader reports the end of the document.
 
@@ -109,8 +96,8 @@ QT_BEGIN_NAMESPACE
     namespaceUri() and name().
 
     \value Characters The reader reports characters in text(). If the
-    characters are all white-space, isWhitespace() returns true. If
-    the characters stem from a CDATA section, isCDATA() returns true.
+    characters are all white-space, isWhitespace() returns \c true. If
+    the characters stem from a CDATA section, isCDATA() returns \c true.
 
     \value Comment The reader reports a comment in text().
 
@@ -340,7 +327,7 @@ QXmlStreamEntityResolver *QXmlStreamReader::entityResolver() const
   namespace prefixes, you can turn off namespace processing completely
   with the \l namespaceProcessing property.
 
-  \section1 Incremental parsing
+  \section1 Incremental Parsing
 
   QXmlStreamReader is an incremental parser. It can handle the case
   where the document can't be parsed all at once because it arrives in
@@ -356,15 +343,15 @@ QXmlStreamEntityResolver *QXmlStreamReader::entityResolver() const
   \l{QNetworkAccessManager} {network access manager}, you would issue
   a \l{QNetworkRequest} {network request} to the manager and receive a
   \l{QNetworkReply} {network reply} in return. Since a QNetworkReply
-  is a QIODevice, you connect its \l{QNetworkReply::readyRead()}
+  is a QIODevice, you connect its \l{QIODevice::readyRead()}
   {readyRead()} signal to a custom slot, e.g. \c{slotReadyRead()} in
   the code snippet shown in the discussion for QNetworkAccessManager.
   In this slot, you read all available data with
-  \l{QNetworkReply::readAll()} {readAll()} and pass it to the XML
+  \l{QIODevice::readAll()} {readAll()} and pass it to the XML
   stream reader using addData(). Then you call your custom parsing
   function that reads the XML events from the reader.
 
-  \section1 Performance and memory consumption
+  \section1 Performance and Memory Consumption
 
   QXmlStreamReader is memory-conservative by design, since it doesn't
   store the entire XML document tree in memory, but only the current
@@ -553,9 +540,9 @@ void QXmlStreamReader::clear()
 }
 
 /*!
-    Returns true if the reader has read until the end of the XML
+    Returns \c true if the reader has read until the end of the XML
     document, or if an error() has occurred and reading has been
-    aborted. Otherwise, it returns false.
+    aborted. Otherwise, it returns \c false.
 
     When atEnd() and hasError() return true and error() returns
     PrematureEndOfDocumentError, it means the XML has been well-formed
@@ -587,7 +574,7 @@ bool QXmlStreamReader::atEnd() const
 
   With one exception, once an error() is reported by readNext(),
   further reading of the XML stream is not possible. Then atEnd()
-  returns true, hasError() returns true, and this function returns
+  returns \c true, hasError() returns \c true, and this function returns
   QXmlStreamReader::Invalid.
 
   The exception is when error() returns PrematureEndOfDocumentError.
@@ -640,7 +627,7 @@ QXmlStreamReader::TokenType QXmlStreamReader::tokenType() const
 }
 
 /*!
-  Reads until the next start element within the current element. Returns true
+  Reads until the next start element within the current element. Returns \c true
   when a start element was reached. When the end element was reached, or when
   an error occurred, false is returned.
 
@@ -741,7 +728,7 @@ static const short QXmlStreamReader_tokenTypeString_indices[] = {
 
 /*!
     \property  QXmlStreamReader::namespaceProcessing
-    the namespace-processing flag of the stream reader
+    The namespace-processing flag of the stream reader
 
     This property controls whether or not the stream reader processes
     namespaces. If enabled, the reader processes namespaces, otherwise
@@ -918,7 +905,7 @@ inline uint QXmlStreamReaderPrivate::filterCarriageReturn()
             ++readBufferPos;
         return peekc;
     }
-    if (peekc == 0) {
+    if (peekc == StreamEOF) {
         putChar('\r');
         return 0;
     }
@@ -927,13 +914,13 @@ inline uint QXmlStreamReaderPrivate::filterCarriageReturn()
 
 /*!
  \internal
- If the end of the file is encountered, 0 is returned.
+ If the end of the file is encountered, ~0 is returned.
  */
 inline uint QXmlStreamReaderPrivate::getChar()
 {
     uint c;
     if (putStack.size()) {
-        c = atEnd ? 0 : putStack.pop();
+        c = atEnd ? StreamEOF : putStack.pop();
     } else {
         if (readBufferPos < readBuffer.size())
             c = readBuffer.at(readBufferPos++).unicode();
@@ -952,7 +939,7 @@ inline uint QXmlStreamReaderPrivate::peekChar()
     } else if (readBufferPos < readBuffer.size()) {
         c = readBuffer.at(readBufferPos).unicode();
     } else {
-        if ((c = getChar_helper()))
+        if ((c = getChar_helper()) != StreamEOF)
             --readBufferPos;
     }
 
@@ -976,7 +963,8 @@ bool QXmlStreamReaderPrivate::scanUntil(const char *str, short tokenToInject)
     int pos = textBuffer.size();
     int oldLineNumber = lineNumber;
 
-    while (uint c = getChar()) {
+    uint c;
+    while ((c = getChar()) != StreamEOF) {
         /* First, we do the validation & normalization. */
         switch (c) {
         case '\r':
@@ -1022,9 +1010,9 @@ bool QXmlStreamReaderPrivate::scanString(const char *str, short tokenToInject, b
 {
     int n = 0;
     while (str[n]) {
-        ushort c = getChar();
+        uint c = getChar();
         if (c != ushort(str[n])) {
-            if (c)
+            if (c != StreamEOF)
                 putChar(c);
             while (n--) {
                 putChar(ushort(str[n]));
@@ -1152,7 +1140,7 @@ inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
 {
     int n = 0;
     uint c;
-    while ((c = getChar())) {
+    while ((c = getChar()) != StreamEOF) {
         switch (ushort(c)) {
         case 0xfffe:
         case 0xffff:
@@ -1197,8 +1185,8 @@ inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
 inline int QXmlStreamReaderPrivate::fastScanSpace()
 {
     int n = 0;
-    ushort c;
-    while ((c = getChar())) {
+    uint c;
+    while ((c = getChar()) != StreamEOF) {
         switch (c) {
         case '\r':
             if ((c = filterCarriageReturn()) == 0)
@@ -1231,7 +1219,7 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
 {
     int n = 0;
     uint c;
-    while ((c = getChar())) {
+    while ((c = getChar()) != StreamEOF) {
         switch (ushort(c)) {
         case 0xfffe:
         case 0xffff:
@@ -1294,8 +1282,8 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
 inline int QXmlStreamReaderPrivate::fastScanName(int *prefix)
 {
     int n = 0;
-    ushort c;
-    while ((c = getChar())) {
+    uint c;
+    while ((c = getChar()) != StreamEOF) {
         switch (c) {
         case '\n':
         case ' ':
@@ -1411,7 +1399,7 @@ inline int QXmlStreamReaderPrivate::fastScanNMTOKEN()
 {
     int n = 0;
     uint c;
-    while ((c = getChar())) {
+    while ((c = getChar()) != StreamEOF) {
         if (fastDetermineNameChar(c) == NotName) {
             putChar(c);
             return n;
@@ -1467,7 +1455,7 @@ void QXmlStreamReaderPrivate::putReplacementInAttributeValue(const QString &s)
     }
 }
 
-ushort QXmlStreamReaderPrivate::getChar_helper()
+uint QXmlStreamReaderPrivate::getChar_helper()
 {
     const int BUFFER_SIZE = 8192;
     characterOffset += readBufferPos;
@@ -1491,7 +1479,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
     }
     if (!nbytesread) {
         atEnd = true;
-        return 0;
+        return StreamEOF;
     }
 
 #ifndef QT_NO_TEXTCODEC
@@ -1499,7 +1487,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
         if (nbytesread < 4) { // the 4 is to cover 0xef 0xbb 0xbf plus
                               // one extra for the utf8 codec
             atEnd = true;
-            return 0;
+            return StreamEOF;
         }
         int mib = 106; // UTF-8
 
@@ -1532,7 +1520,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
     if(lockEncoding && decoder->hasFailure()) {
         raiseWellFormedError(QXmlStream::tr("Encountered incorrectly encoded content."));
         readBuffer.clear();
-        return 0;
+        return StreamEOF;
     }
 #else
     readBuffer = QString::fromLatin1(rawReadBuffer.data(), nbytesread);
@@ -1546,7 +1534,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
     }
 
     atEnd = true;
-    return 0;
+    return StreamEOF;
 }
 
 QStringRef QXmlStreamReaderPrivate::namespaceForPrefix(const QStringRef &prefix)
@@ -1638,7 +1626,7 @@ void QXmlStreamReaderPrivate::resolveTag()
             if (attributes[j].name() == attribute.name()
                 && attributes[j].namespaceUri() == attribute.namespaceUri()
                 && (namespaceProcessing || attributes[j].qualifiedName() == attribute.qualifiedName()))
-                raiseWellFormedError(QXmlStream::tr("Attribute redefined."));
+                raiseWellFormedError(QXmlStream::tr("Attribute '%1' redefined.").arg(attribute.qualifiedName().toString()));
         }
     }
 
@@ -1718,9 +1706,9 @@ uint QXmlStreamReaderPrivate::resolveCharRef(int symbolIndex)
     uint s;
     // ### add toXShort to QStringRef?
     if (sym(symbolIndex).c == 'x')
-        s = symString(symbolIndex, 1).toString().toUInt(&ok, 16);
+        s = symString(symbolIndex, 1).toUInt(&ok, 16);
     else
-        s = symString(symbolIndex).toString().toUInt(&ok, 10);
+        s = symString(symbolIndex).toUInt(&ok, 10);
 
     ok &= (s == 0x9 || s == 0xa || s == 0xd || (s >= 0x20 && s <= 0xd7ff)
            || (s >= 0xe000 && s <= 0xfffd) || (s >= 0x10000 && s <= QChar::LastValidCodePoint));
@@ -1758,8 +1746,8 @@ void QXmlStreamReaderPrivate::checkPublicLiteral(const QStringRef &publicId)
 
 /*
   Checks whether the document starts with an xml declaration. If it
-  does, this function returns true; otherwise it sets up everything
-  for a synthetic start document event and returns false.
+  does, this function returns \c true; otherwise it sets up everything
+  for a synthetic start document event and returns \c false.
  */
 bool QXmlStreamReaderPrivate::checkStartDocument()
 {
@@ -1780,7 +1768,7 @@ void QXmlStreamReaderPrivate::startDocument()
 {
     QString err;
     if (documentVersion != QLatin1String("1.0")) {
-        if (documentVersion.toString().contains(QLatin1Char(' ')))
+        if (documentVersion.contains(QLatin1Char(' ')))
             err = QXmlStream::tr("Invalid XML version string.");
         else
             err = QXmlStream::tr("Unsupported XML version.");
@@ -2038,7 +2026,7 @@ QStringRef QXmlStreamReader::dtdSystemId() const
   element's namespace declarations. Otherwise an empty vector is
   returned.
 
-  The QXmlStreamNamespaceDeclaration class is defined to be a QVector
+  The QXmlStreamNamespaceDeclarations class is defined to be a QVector
   of QXmlStreamNamespaceDeclaration.
 
   \sa addExtraNamespaceDeclaration(), addExtraNamespaceDeclarations()
@@ -2347,19 +2335,19 @@ QXmlStreamAttribute::QXmlStreamAttribute(const QString &qualifiedName, const QSt
 
 /*! \fn bool QXmlStreamAttribute::isDefault() const
 
-   Returns true if the parser added this attribute with a default
+   Returns \c true if the parser added this attribute with a default
    value following an ATTLIST declaration in the DTD; otherwise
-   returns false.
+   returns \c false.
 */
 /*! \fn bool QXmlStreamAttribute::operator==(const QXmlStreamAttribute &other) const
 
-    Compares this attribute with \a other and returns true if they are
-    equal; otherwise returns false.
+    Compares this attribute with \a other and returns \c true if they are
+    equal; otherwise returns \c false.
  */
 /*! \fn bool QXmlStreamAttribute::operator!=(const QXmlStreamAttribute &other) const
 
-    Compares this attribute with \a other and returns true if they are
-    not equal; otherwise returns false.
+    Compares this attribute with \a other and returns \c true if they are
+    not equal; otherwise returns \c false.
  */
 
 
@@ -2408,13 +2396,10 @@ QXmlStreamAttribute& QXmlStreamAttribute::operator=(const QXmlStreamAttribute &o
 */
 
 /*!
-    \fn void QXmlStreamAttributes::append(const QXmlStreamAttribute &attribute)
+    \fn QXmlStreamAttributes::QXmlStreamAttributes()
 
-    Appends the given \a attribute to the end of the vector.
-
-    \sa QVector::append()
+    A constructor for QXmlStreamAttributes.
 */
-
 
 /*!
     \typedef QXmlStreamNotationDeclarations
@@ -2483,13 +2468,13 @@ Returns the public identifier.
 
 /*! \fn inline bool QXmlStreamNotationDeclaration::operator==(const QXmlStreamNotationDeclaration &other) const
 
-    Compares this notation declaration with \a other and returns true
-    if they are equal; otherwise returns false.
+    Compares this notation declaration with \a other and returns \c true
+    if they are equal; otherwise returns \c false.
  */
 /*! \fn inline bool QXmlStreamNotationDeclaration::operator!=(const QXmlStreamNotationDeclaration &other) const
 
-    Compares this notation declaration with \a other and returns true
-    if they are not equal; otherwise returns false.
+    Compares this notation declaration with \a other and returns \c true
+    if they are not equal; otherwise returns \c false.
  */
 
 /*!
@@ -2512,13 +2497,13 @@ Returns the public identifier.
 */
 /*! \fn inline bool QXmlStreamNamespaceDeclaration::operator==(const QXmlStreamNamespaceDeclaration &other) const
 
-    Compares this namespace declaration with \a other and returns true
-    if they are equal; otherwise returns false.
+    Compares this namespace declaration with \a other and returns \c true
+    if they are equal; otherwise returns \c false.
  */
 /*! \fn inline bool QXmlStreamNamespaceDeclaration::operator!=(const QXmlStreamNamespaceDeclaration &other) const
 
-    Compares this namespace declaration with \a other and returns true
-    if they are not equal; otherwise returns false.
+    Compares this namespace declaration with \a other and returns \c true
+    if they are not equal; otherwise returns \c false.
  */
 
 /*!
@@ -2660,13 +2645,13 @@ Returns the entity's value.
 
 /*! \fn bool QXmlStreamEntityDeclaration::operator==(const QXmlStreamEntityDeclaration &other) const
 
-    Compares this entity declaration with \a other and returns true if
-    they are equal; otherwise returns false.
+    Compares this entity declaration with \a other and returns \c true if
+    they are equal; otherwise returns \c false.
  */
 /*! \fn bool QXmlStreamEntityDeclaration::operator!=(const QXmlStreamEntityDeclaration &other) const
 
-    Compares this entity declaration with \a other and returns true if
-    they are not equal; otherwise returns false.
+    Compares this entity declaration with \a other and returns \c true if
+    they are not equal; otherwise returns \c false.
  */
 
 /*!  Returns the value of the attribute \a name in the namespace
@@ -2778,37 +2763,37 @@ void QXmlStreamAttributes::append(const QString &qualifiedName, const QString &v
 #ifndef QT_NO_XMLSTREAMREADER
 
 /*! \fn bool QXmlStreamReader::isStartDocument() const
-  Returns true if tokenType() equals \l StartDocument; otherwise returns false.
+  Returns \c true if tokenType() equals \l StartDocument; otherwise returns \c false.
 */
 /*! \fn bool QXmlStreamReader::isEndDocument() const
-  Returns true if tokenType() equals \l EndDocument; otherwise returns false.
+  Returns \c true if tokenType() equals \l EndDocument; otherwise returns \c false.
 */
 /*! \fn bool QXmlStreamReader::isStartElement() const
-  Returns true if tokenType() equals \l StartElement; otherwise returns false.
+  Returns \c true if tokenType() equals \l StartElement; otherwise returns \c false.
 */
 /*! \fn bool QXmlStreamReader::isEndElement() const
-  Returns true if tokenType() equals \l EndElement; otherwise returns false.
+  Returns \c true if tokenType() equals \l EndElement; otherwise returns \c false.
 */
 /*! \fn bool QXmlStreamReader::isCharacters() const
-  Returns true if tokenType() equals \l Characters; otherwise returns false.
+  Returns \c true if tokenType() equals \l Characters; otherwise returns \c false.
 
   \sa isWhitespace(), isCDATA()
 */
 /*! \fn bool QXmlStreamReader::isComment() const
-  Returns true if tokenType() equals \l Comment; otherwise returns false.
+  Returns \c true if tokenType() equals \l Comment; otherwise returns \c false.
 */
 /*! \fn bool QXmlStreamReader::isDTD() const
-  Returns true if tokenType() equals \l DTD; otherwise returns false.
+  Returns \c true if tokenType() equals \l DTD; otherwise returns \c false.
 */
 /*! \fn bool QXmlStreamReader::isEntityReference() const
-  Returns true if tokenType() equals \l EntityReference; otherwise returns false.
+  Returns \c true if tokenType() equals \l EntityReference; otherwise returns \c false.
 */
 /*! \fn bool QXmlStreamReader::isProcessingInstruction() const
-  Returns true if tokenType() equals \l ProcessingInstruction; otherwise returns false.
+  Returns \c true if tokenType() equals \l ProcessingInstruction; otherwise returns \c false.
 */
 
-/*!  Returns true if the reader reports characters that only consist
-  of white-space; otherwise returns false.
+/*!  Returns \c true if the reader reports characters that only consist
+  of white-space; otherwise returns \c false.
 
   \sa isCharacters(), text()
 */
@@ -2818,8 +2803,8 @@ bool QXmlStreamReader::isWhitespace() const
     return d->type == QXmlStreamReader::Characters && d->isWhitespace;
 }
 
-/*!  Returns true if the reader reports characters that stem from a
-  CDATA section; otherwise returns false.
+/*!  Returns \c true if the reader reports characters that stem from a
+  CDATA section; otherwise returns \c false.
 
   \sa isCharacters(), text()
 */
@@ -2832,10 +2817,10 @@ bool QXmlStreamReader::isCDATA() const
 
 
 /*!
-  Returns true if this document has been declared standalone in the
-  XML declaration; otherwise returns false.
+  Returns \c true if this document has been declared standalone in the
+  XML declaration; otherwise returns \c false.
 
-  If no XML declaration has been parsed, this function returns false.
+  If no XML declaration has been parsed, this function returns \c false.
  */
 bool QXmlStreamReader::isStandaloneDocument() const
 {
@@ -3177,7 +3162,7 @@ QXmlStreamPrivateTagStack::NamespaceDeclaration &QXmlStreamWriterPrivate::findNa
                 --j;
             if (j < 0)
                 break;
-	}
+        }
         namespaceDeclaration.prefix = addToStringStorage(s);
     }
     namespaceDeclaration.namespaceUri = addToStringStorage(namespaceUri);
@@ -3330,7 +3315,7 @@ QTextCodec *QXmlStreamWriter::codec() const
 /*!
     \property  QXmlStreamWriter::autoFormatting
     \since 4.4
-    the auto-formatting flag of the stream writer
+    The auto-formatting flag of the stream writer
 
     This property controls whether or not the stream writer
     automatically formats the generated XML data. If enabled, the
@@ -3937,8 +3922,8 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
  \fn bool QXmlStreamAttributes::hasAttribute(const QString &qualifiedName) const
  \since 4.5
 
- Returns true if this QXmlStreamAttributes has an attribute whose
- qualified name is \a qualifiedName; otherwise returns false.
+ Returns \c true if this QXmlStreamAttributes has an attribute whose
+ qualified name is \a qualifiedName; otherwise returns \c false.
 
  Note that this is not namespace aware. For instance, if this
  QXmlStreamAttributes contains an attribute whose lexical name is "xlink:href"
@@ -3960,9 +3945,9 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
  \overload
  \since 4.5
 
- Returns true if this QXmlStreamAttributes has an attribute whose
+ Returns \c true if this QXmlStreamAttributes has an attribute whose
  namespace URI and name correspond to \a namespaceUri and \a name;
- otherwise returns false.
+ otherwise returns \c false.
 */
 
 #endif // QT_NO_XMLSTREAMREADER

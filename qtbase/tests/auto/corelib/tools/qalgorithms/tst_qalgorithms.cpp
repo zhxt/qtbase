@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +36,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <iterator>
 #include <algorithm>
 #include <qalgorithms.h>
 #include <QStringList>
@@ -78,10 +71,22 @@ private slots:
     void qCountContainer() const;
     void binaryFindOnLargeContainer() const;
 
-#if Q_TEST_PERFORMANCE
+    void popCount08_data() { popCount_data_impl(sizeof(quint8 )); }
+    void popCount16_data() { popCount_data_impl(sizeof(quint16)); }
+    void popCount32_data() { popCount_data_impl(sizeof(quint32)); }
+    void popCount64_data() { popCount_data_impl(sizeof(quint64)); }
+    void popCount08()      { popCount_impl<quint8 >(); }
+    void popCount16()      { popCount_impl<quint16>(); }
+    void popCount32()      { popCount_impl<quint32>(); }
+    void popCount64()      { popCount_impl<quint64>(); }
+
 private:
+#if Q_TEST_PERFORMANCE
     void performance();
 #endif
+    void popCount_data_impl(size_t sizeof_T_Int);
+    template <typename T_Int>
+    void popCount_impl();
 };
 
 class TestInt
@@ -834,6 +839,12 @@ void tst_QAlgorithms::qCountContainer() const
 class RAI
 {
   public:
+    typedef int difference_type;
+    typedef int value_type;
+    typedef std::random_access_iterator_tag iterator_category;
+    typedef int *pointer;
+    typedef int &reference;
+
     RAI(int searched = 5, int hidePos = 4, int len = 10)
         : curPos_(0)
         , length_(len)
@@ -1005,6 +1016,72 @@ void tst_QAlgorithms::binaryFindOnLargeContainer() const
 
   RAI foundIt = qBinaryFind(rai.begin(), rai.end(), 5);
   QCOMPARE(foundIt.pos(), 1073987655);
+}
+
+// alternative implementation of qPopulationCount for comparison:
+static Q_DECL_CONSTEXPR const uint bitsSetInNibble[] = {
+    0, 1, 1, 2, 1, 2, 2, 3,
+    1, 2, 2, 3, 2, 3, 3, 4,
+};
+Q_STATIC_ASSERT(sizeof bitsSetInNibble / sizeof *bitsSetInNibble == 16);
+
+static Q_DECL_CONSTEXPR uint bitsSetInByte(quint8 byte)
+{
+    return bitsSetInNibble[byte & 0xF] + bitsSetInNibble[byte >> 4];
+}
+static Q_DECL_CONSTEXPR uint bitsSetInShort(quint16 word)
+{
+    return bitsSetInByte(word & 0xFF) + bitsSetInByte(word >> 8);
+}
+static Q_DECL_CONSTEXPR uint bitsSetInInt(quint32 word)
+{
+    return bitsSetInShort(word & 0xFFFF) + bitsSetInShort(word >> 16);
+}
+static Q_DECL_CONSTEXPR uint bitsSetInInt64(quint64 word)
+{
+    return bitsSetInInt(word & 0xFFFFFFFF) + bitsSetInInt(word >> 32);
+}
+
+
+void tst_QAlgorithms::popCount_data_impl(size_t sizeof_T_Int)
+{
+    using namespace QTest;
+    addColumn<quint64>("input");
+    addColumn<uint>("expected");
+
+    for (uint i = 0; i < UCHAR_MAX; ++i) {
+        const uchar byte = static_cast<uchar>(i);
+        const uint bits = bitsSetInByte(byte);
+        const quint64 value = static_cast<quint64>(byte);
+        const quint64 input = value << ((i % sizeof_T_Int) * 8U);
+        newRow(qPrintable(QString::asprintf("0x%016llx", input))) << input << bits;
+    }
+
+    // and some random ones:
+    if (sizeof_T_Int >= 8)
+        for (size_t i = 0; i < 1000; ++i) {
+            const quint64 input = quint64(qrand()) << 32 | quint32(qrand());
+            newRow(qPrintable(QString::asprintf("0x%016llx", input))) << input << bitsSetInInt64(input);
+        }
+        else if (sizeof_T_Int >= 2)
+            for (size_t i = 0; i < 1000 ; ++i) {
+                const quint32 input = qrand();
+                if (sizeof_T_Int >= 4)
+                    newRow(qPrintable(QString::asprintf("0x%08x", input))) << quint64(input) << bitsSetInInt(input);
+                else
+                    newRow(qPrintable(QString::asprintf("0x%04x", quint16(input & 0xFFFF)))) << quint64(input & 0xFFFF) << bitsSetInShort(input & 0xFFFF);
+            }
+}
+
+template <typename T_Int>
+void tst_QAlgorithms::popCount_impl()
+{
+    QFETCH(quint64, input);
+    QFETCH(uint, expected);
+
+    const T_Int value = static_cast<T_Int>(input);
+
+    QCOMPARE(qPopulationCount(value), expected);
 }
 
 QTEST_APPLESS_MAIN(tst_QAlgorithms)

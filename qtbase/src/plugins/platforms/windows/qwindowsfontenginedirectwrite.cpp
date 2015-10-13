@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +33,10 @@
 
 #ifndef QT_NO_DIRECTWRITE
 
+#if WINVER < 0x0600
+#  undef WINVER
+#  define WINVER 0x0600
+#endif
 #if _WIN32_WINNT < 0x0600
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x0600
@@ -53,6 +49,7 @@
 #include <QtCore/QSettings>
 #include <QtCore/QtEndian>
 #include <QtCore/QVarLengthArray>
+#include <private/qstringiterator_p.h>
 
 #include <dwrite.h>
 #include <d2d1.h>
@@ -68,9 +65,13 @@ namespace {
     class GeometrySink: public IDWriteGeometrySink
     {
     public:
-        GeometrySink(QPainterPath *path) : m_path(path), m_refCount(0)
+        GeometrySink(QPainterPath *path)
+            : m_refCount(0), m_path(path)
         {
             Q_ASSERT(m_path != 0);
+        }
+        virtual ~GeometrySink()
+        {
         }
 
         IFACEMETHOD_(void, AddBeziers)(const D2D1_BEZIER_SEGMENT *beziers, UINT bezierCount);
@@ -191,18 +192,14 @@ namespace {
     database uses most of the same logic but creates a direct write
     font based on the LOGFONT rather than a GDI handle.
 
-    The engine is currently regarded as experimental, meaning that code
-    using it should do substantial testing to make sure it covers their
-    use cases.
-
     Will probably be superseded by a common Free Type font engine in Qt 5.X.
 */
 
 QWindowsFontEngineDirectWrite::QWindowsFontEngineDirectWrite(IDWriteFontFace *directWriteFontFace,
                                                qreal pixelSize,
                                                const QSharedPointer<QWindowsFontEngineData> &d)
-
-    : m_fontEngineData(d)
+    : QFontEngine(DirectWrite)
+    , m_fontEngineData(d)
     , m_directWriteFontFace(directWriteFontFace)
     , m_directWriteBitmapRenderTarget(0)
     , m_lineThickness(-1)
@@ -212,10 +209,11 @@ QWindowsFontEngineDirectWrite::QWindowsFontEngineDirectWrite(IDWriteFontFace *di
     , m_xHeight(-1)
     , m_lineGap(-1)
 {
-    if (QWindowsContext::verboseFonts)
-        qDebug("%s %g", __FUNCTION__, pixelSize);
+    qCDebug(lcQpaFonts) << __FUNCTION__ << pixelSize;
 
-    d->directWriteFactory->AddRef();
+    Q_ASSERT(m_directWriteFontFace);
+
+    m_fontEngineData->directWriteFactory->AddRef();
     m_directWriteFontFace->AddRef();
 
     fontDef.pixelSize = pixelSize;
@@ -225,8 +223,7 @@ QWindowsFontEngineDirectWrite::QWindowsFontEngineDirectWrite(IDWriteFontFace *di
 
 QWindowsFontEngineDirectWrite::~QWindowsFontEngineDirectWrite()
 {
-    if (QWindowsContext::verboseFonts)
-        qDebug("%s", __FUNCTION__);
+    qCDebug(lcQpaFonts) << __FUNCTION__;
 
     m_fontEngineData->directWriteFactory->Release();
     m_directWriteFontFace->Release();
@@ -237,19 +234,17 @@ QWindowsFontEngineDirectWrite::~QWindowsFontEngineDirectWrite()
 
 void QWindowsFontEngineDirectWrite::collectMetrics()
 {
-    if (m_directWriteFontFace != 0) {
-        DWRITE_FONT_METRICS metrics;
+    DWRITE_FONT_METRICS metrics;
 
-        m_directWriteFontFace->GetMetrics(&metrics);
-        m_unitsPerEm = metrics.designUnitsPerEm;
+    m_directWriteFontFace->GetMetrics(&metrics);
+    m_unitsPerEm = metrics.designUnitsPerEm;
 
-        m_lineThickness = DESIGN_TO_LOGICAL(metrics.underlineThickness);
-        m_ascent = DESIGN_TO_LOGICAL(metrics.ascent);
-        m_descent = DESIGN_TO_LOGICAL(metrics.descent);
-        m_xHeight = DESIGN_TO_LOGICAL(metrics.xHeight);
-        m_lineGap = DESIGN_TO_LOGICAL(metrics.lineGap);
-        m_underlinePosition = DESIGN_TO_LOGICAL(metrics.underlinePosition);
-    }
+    m_lineThickness = DESIGN_TO_LOGICAL(metrics.underlineThickness);
+    m_ascent = DESIGN_TO_LOGICAL(metrics.ascent);
+    m_descent = DESIGN_TO_LOGICAL(metrics.descent);
+    m_xHeight = DESIGN_TO_LOGICAL(metrics.xHeight);
+    m_lineGap = DESIGN_TO_LOGICAL(metrics.lineGap);
+    m_underlinePosition = DESIGN_TO_LOGICAL(metrics.underlinePosition);
 }
 
 QFixed QWindowsFontEngineDirectWrite::underlinePosition() const
@@ -272,31 +267,24 @@ bool QWindowsFontEngineDirectWrite::getSfntTableData(uint tag, uchar *buffer, ui
 {
     bool ret = false;
 
-    if (m_directWriteFontFace) {
-        DWORD t = qbswap<quint32>(tag);
-
-        const void *tableData = 0;
-        void *tableContext = 0;
-        UINT32 tableSize;
-        BOOL exists;
-        HRESULT hr = m_directWriteFontFace->TryGetFontTable(
-                    t, &tableData, &tableSize, &tableContext, &exists
-                    );
-
-        if (SUCCEEDED(hr)) {
-            if (exists) {
-                if (!buffer) {
-                    *length = tableSize;
-                    ret = true;
-                } else if (*length >= tableSize) {
-                    memcpy(buffer, tableData, tableSize);
-                    ret = true;
-                }
-            }
-            m_directWriteFontFace->ReleaseFontTable(tableContext);
-        } else {
-            qErrnoWarning("%s: TryGetFontTable failed", __FUNCTION__);
+    const void *tableData = 0;
+    UINT32 tableSize;
+    void *tableContext = 0;
+    BOOL exists;
+    HRESULT hr = m_directWriteFontFace->TryGetFontTable(qbswap<quint32>(tag),
+                                                        &tableData, &tableSize,
+                                                        &tableContext, &exists);
+    if (SUCCEEDED(hr)) {
+        if (exists) {
+            ret = true;
+            if (buffer && *length >= tableSize)
+                memcpy(buffer, tableData, tableSize);
+            *length = tableSize;
+            Q_ASSERT(int(*length) > 0);
         }
+        m_directWriteFontFace->ReleaseFontTable(tableContext);
+    } else {
+        qErrnoWarning("%s: TryGetFontTable failed", __FUNCTION__);
     }
 
     return ret;
@@ -310,60 +298,56 @@ QFixed QWindowsFontEngineDirectWrite::emSquareSize() const
         return QFontEngine::emSquareSize();
 }
 
-// ### Qt 5.1: replace with QStringIterator
-inline unsigned int getChar(const QChar *str, int &i, const int len)
+glyph_t QWindowsFontEngineDirectWrite::glyphIndex(uint ucs4) const
 {
-    uint uc = str[i].unicode();
-    if (QChar::isHighSurrogate(uc) && i < len-1) {
-        uint low = str[i+1].unicode();
-        if (QChar::isLowSurrogate(low)) {
-            uc = QChar::surrogateToUcs4(uc, low);
-            ++i;
-        }
+    UINT16 glyphIndex;
+
+    HRESULT hr = m_directWriteFontFace->GetGlyphIndicesW(&ucs4, 1, &glyphIndex);
+    if (FAILED(hr)) {
+        qErrnoWarning("%s: glyphIndex failed", __FUNCTION__);
+        glyphIndex = 0;
     }
-    return uc;
+
+    return glyphIndex;
 }
 
 bool QWindowsFontEngineDirectWrite::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs,
                                                  int *nglyphs, QFontEngine::ShaperFlags flags) const
 {
-    if (m_directWriteFontFace != 0) {
-        QVarLengthArray<UINT32> codePoints(len);
-        for (int i=0; i<len; ++i) {
-            codePoints[i] = getChar(str, i, len);
-            if (flags & QFontEngine::RightToLeft)
-                codePoints[i] = QChar::mirroredChar(codePoints[i]);
-        }
-
-        QVarLengthArray<UINT16> glyphIndices(len);
-        HRESULT hr = m_directWriteFontFace->GetGlyphIndicesW(codePoints.data(),
-                                                             len,
-                                                             glyphIndices.data());
-
-        if (SUCCEEDED(hr)) {
-            for (int i=0; i<len; ++i)
-                glyphs->glyphs[i] = glyphIndices[i];
-
-            *nglyphs = len;
-            glyphs->numGlyphs = len;
-
-            if (!(flags & GlyphIndicesOnly))
-                recalcAdvances(glyphs, 0);
-
-            return true;
-        } else {
-            qErrnoWarning("%s: GetGlyphIndicesW failed", __FUNCTION__);
-        }
+    Q_ASSERT(glyphs->numGlyphs >= *nglyphs);
+    if (*nglyphs < len) {
+        *nglyphs = len;
+        return false;
     }
 
-    return false;
+    QVarLengthArray<UINT32> codePoints(len);
+    int actualLength = 0;
+    QStringIterator it(str, str + len);
+    while (it.hasNext())
+        codePoints[actualLength++] = it.next();
+
+    QVarLengthArray<UINT16> glyphIndices(actualLength);
+    HRESULT hr = m_directWriteFontFace->GetGlyphIndicesW(codePoints.data(), actualLength,
+                                                         glyphIndices.data());
+    if (FAILED(hr)) {
+        qErrnoWarning("%s: GetGlyphIndicesW failed", __FUNCTION__);
+        return false;
+    }
+
+    for (int i = 0; i < actualLength; ++i)
+        glyphs->glyphs[i] = glyphIndices.at(i);
+
+    *nglyphs = actualLength;
+    glyphs->numGlyphs = actualLength;
+
+    if (!(flags & GlyphIndicesOnly))
+        recalcAdvances(glyphs, 0);
+
+    return true;
 }
 
 void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::ShaperFlags) const
 {
-    if (m_directWriteFontFace == 0)
-        return;
-
     QVarLengthArray<UINT16> glyphIndices(glyphs->numGlyphs);
 
     // ### Caching?
@@ -375,13 +359,11 @@ void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEn
                                                               glyphIndices.size(),
                                                               glyphMetrics.data());
     if (SUCCEEDED(hr)) {
-        for (int i=0; i<glyphs->numGlyphs; ++i) {
-            glyphs->advances_x[i] = DESIGN_TO_LOGICAL(glyphMetrics[i].advanceWidth);
-            glyphs->advances_y[i] = 0;
-        }
+        for (int i = 0; i < glyphs->numGlyphs; ++i)
+            glyphs->advances[i] = DESIGN_TO_LOGICAL(glyphMetrics[i].advanceWidth);
         if (fontDef.styleStrategy & QFont::ForceIntegerMetrics) {
             for (int i = 0; i < glyphs->numGlyphs; ++i)
-                glyphs->advances_x[i] = glyphs->advances_x[i].round();
+                glyphs->advances[i] = glyphs->advances[i].round();
         }
     } else {
         qErrnoWarning("%s: GetDesignGlyphMetrics failed", __FUNCTION__);
@@ -391,9 +373,6 @@ void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEn
 void QWindowsFontEngineDirectWrite::addGlyphsToPath(glyph_t *glyphs, QFixedPoint *positions, int nglyphs,
                                              QPainterPath *path, QTextItem::RenderFlags flags)
 {
-    if (m_directWriteFontFace == 0)
-        return;
-
     QVarLengthArray<UINT16> glyphIndices(nglyphs);
     QVarLengthArray<DWRITE_GLYPH_OFFSET> glyphOffsets(nglyphs);
     QVarLengthArray<FLOAT> glyphAdvances(nglyphs);
@@ -439,9 +418,6 @@ glyph_metrics_t QWindowsFontEngineDirectWrite::boundingBox(const QGlyphLayout &g
 
 glyph_metrics_t QWindowsFontEngineDirectWrite::boundingBox(glyph_t g)
 {
-    if (m_directWriteFontFace == 0)
-        return glyph_metrics_t();
-
     UINT16 glyphIndex = g;
 
     DWRITE_GLYPH_METRICS glyphMetrics;
@@ -485,8 +461,8 @@ QFixed QWindowsFontEngineDirectWrite::ascent() const
 QFixed QWindowsFontEngineDirectWrite::descent() const
 {
     return fontDef.styleStrategy & QFont::ForceIntegerMetrics
-           ? (m_descent - 1).round()
-           : (m_descent - 1);
+           ? m_descent.round()
+           : m_descent;
 }
 
 QFixed QWindowsFontEngineDirectWrite::leading() const
@@ -513,15 +489,11 @@ QImage QWindowsFontEngineDirectWrite::alphaMapForGlyph(glyph_t glyph, QFixed sub
 {
     QImage im = imageForGlyph(glyph, subPixelPosition, 0, QTransform());
 
-    QImage indexed(im.width(), im.height(), QImage::Format_Indexed8);
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgba(0, 0, 0, i);
-    indexed.setColorTable(colors);
+    QImage alphaMap(im.width(), im.height(), QImage::Format_Alpha8);
 
     for (int y=0; y<im.height(); ++y) {
         uint *src = (uint*) im.scanLine(y);
-        uchar *dst = indexed.scanLine(y);
+        uchar *dst = alphaMap.scanLine(y);
         for (int x=0; x<im.width(); ++x) {
             *dst = 255 - (m_fontEngineData->pow_gamma[qGray(0xffffffff - *src)] * 255. / 2047.);
             ++dst;
@@ -529,7 +501,7 @@ QImage QWindowsFontEngineDirectWrite::alphaMapForGlyph(glyph_t glyph, QFixed sub
         }
     }
 
-    return indexed;
+    return alphaMap;
 }
 
 bool QWindowsFontEngineDirectWrite::supportsSubPixelPositions() const
@@ -543,8 +515,9 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
                                              const QTransform &xform)
 {
     glyph_metrics_t metrics = QFontEngine::boundingBox(t, xform);
-    int width = (metrics.width + margin * 2 + 4).ceil().toInt() ;
-    int height = (metrics.height + margin * 2 + 4).ceil().toInt();
+    // This needs to be kept in sync with alphaMapBoundingBox
+    int width = (metrics.width + margin * 2).ceil().toInt() ;
+    int height = (metrics.height + margin * 2).ceil().toInt();
 
     UINT16 glyphIndex = t;
     FLOAT glyphAdvance = metrics.xoff.toReal();
@@ -594,7 +567,7 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
 
         int size = width * height * 3;
         BYTE *alphaValues = new BYTE[size];
-        memset(alphaValues, size, 0);
+        memset(alphaValues, 0, size);
 
         hr = glyphAnalysis->CreateAlphaTexture(DWRITE_TEXTURE_CLEARTYPE_3x1,
                                                &rect,
@@ -642,45 +615,12 @@ QImage QWindowsFontEngineDirectWrite::alphaRGBMapForGlyph(glyph_t t,
 {
     QImage mask = imageForGlyph(t,
                                 subPixelPosition,
-                                glyphMargin(QFontEngineGlyphCache::Raster_RGBMask),
+                                glyphMargin(QFontEngine::Format_A32),
                                 xform);
 
     return mask.depth() == 32
            ? mask
            : mask.convertToFormat(QImage::Format_RGB32);
-}
-
-const char *QWindowsFontEngineDirectWrite::name() const
-{
-    return 0;
-}
-
-bool QWindowsFontEngineDirectWrite::canRender(const QChar *string, int len)
-{
-    QVarLengthArray<UINT32> codePoints(len);
-    int actualLength = 0;
-    for (int i=0; i<len; ++i, actualLength++)
-        codePoints[actualLength] = getChar(string, i, len);
-
-    QVarLengthArray<UINT16> glyphIndices(actualLength);
-    HRESULT hr = m_directWriteFontFace->GetGlyphIndices(codePoints.data(), actualLength,
-                                                        glyphIndices.data());
-    if (FAILED(hr)) {
-        qErrnoWarning("%s: GetGlyphIndices failed", __FUNCTION__);
-        return false;
-    } else {
-        for (int i=0; i<glyphIndices.size(); ++i) {
-            if (glyphIndices.at(i) == 0)
-                return false;
-        }
-
-        return true;
-    }
-}
-
-QFontEngine::Type QWindowsFontEngineDirectWrite::type() const
-{
-    return QFontEngine::DirectWrite;
 }
 
 QFontEngine *QWindowsFontEngineDirectWrite::cloneWithSize(qreal pixelSize) const
@@ -758,6 +698,18 @@ QString QWindowsFontEngineDirectWrite::fontNameSubstitute(const QString &familyN
     static const char keyC[] = "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\"
                                "FontSubstitutes";
     return QSettings(QLatin1String(keyC), QSettings::NativeFormat).value(familyName, familyName).toString();
+}
+
+glyph_metrics_t QWindowsFontEngineDirectWrite::alphaMapBoundingBox(glyph_t glyph, QFixed pos, const QTransform &matrix, GlyphFormat format)
+{
+    Q_UNUSED(pos);
+    int margin = 0;
+    if (format == QFontEngine::Format_A32 || format == QFontEngine::Format_ARGB)
+        margin = glyphMargin(QFontEngine::Format_A32);
+    glyph_metrics_t gm = QFontEngine::boundingBox(glyph, matrix);
+    gm.width += margin * 2;
+    gm.height += margin * 2;
+    return gm;
 }
 
 QT_END_NAMESPACE

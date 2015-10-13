@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -147,6 +139,13 @@ bool Moc::parseClassHead(ClassDef *def)
                 def->superclassList += qMakePair(type, access);
             }
         } while (test(COMMA));
+
+        if (!def->superclassList.isEmpty()
+            && knownGadgets.contains(def->superclassList.first().first)) {
+            // Q_GADGET subclasses are treated as Q_GADGETs
+            knownGadgets.insert(def->classname, def->qualified);
+            knownGadgets.insert(def->qualified, def->qualified);
+        }
     }
     if (!test(LBRACE))
         return false;
@@ -224,14 +223,11 @@ Type Moc::parseType()
             ;
         }
         if (test(LANGLE)) {
-            QByteArray templ = lexemUntil(RANGLE);
-            for (int i = 0; i < templ.size(); ++i) {
-                type.name += templ.at(i);
-                if ((templ.at(i) == '<' && i+1 < templ.size() && templ.at(i+1) == ':')
-                    || (templ.at(i) == '>' && i+1 < templ.size() && templ.at(i+1) == '>')) {
-                    type.name += ' ';
-                }
+            if (type.name.isEmpty()) {
+                // '<' cannot start a type
+                return type;
             }
+            type.name += lexemUntil(RANGLE);
         }
         if (test(SCOPE)) {
             type.name += lexem();
@@ -608,21 +604,27 @@ void Moc::parse()
                     continue;
 
                 while (inClass(&def) && hasNext()) {
-                    if (next() == Q_OBJECT_TOKEN) {
+                    switch (next()) {
+                    case Q_OBJECT_TOKEN:
                         def.hasQObject = true;
                         break;
+                    case Q_GADGET_TOKEN:
+                        def.hasQGadget = true;
+                        break;
+                    default: break;
                     }
                 }
 
-                if (!def.hasQObject)
+                if (!def.hasQObject && !def.hasQGadget)
                     continue;
 
                 for (int i = namespaceList.size() - 1; i >= 0; --i)
                     if (inNamespace(&namespaceList.at(i)))
                         def.qualified.prepend(namespaceList.at(i).name + "::");
 
-                knownQObjectClasses.insert(def.classname);
-                knownQObjectClasses.insert(def.qualified);
+                QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
+                classHash.insert(def.classname, def.qualified);
+                classHash.insert(def.qualified, def.qualified);
 
                 continue; }
             default: break;
@@ -695,9 +697,11 @@ void Moc::parse()
                     parsePluginData(&def);
                     break;
                 case Q_ENUMS_TOKEN:
+                case Q_ENUM_TOKEN:
                     parseEnumOrFlag(&def, false);
                     break;
                 case Q_FLAGS_TOKEN:
+                case Q_FLAG_TOKEN:
                     parseEnumOrFlag(&def, true);
                     break;
                 case Q_DECLARE_FLAGS_TOKEN:
@@ -785,14 +789,19 @@ void Moc::parse()
 
 
             if (!def.hasQObject && !def.hasQGadget)
-                error("Class declarations lacks Q_OBJECT macro.");
+                error("Class declaration lacks Q_OBJECT macro.");
+
+            // Add meta tags to the plugin meta data:
+            if (!def.pluginData.iid.isEmpty())
+                def.pluginData.metaArgs = metaArgs;
 
             checkSuperClasses(&def);
             checkProperties(&def);
 
             classList += def;
-            knownQObjectClasses.insert(def.classname);
-            knownQObjectClasses.insert(def.qualified);
+            QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
+            classHash.insert(def.classname, def.qualified);
+            classHash.insert(def.qualified, def.qualified);
         }
     }
 }
@@ -810,7 +819,7 @@ static void findRequiredContainers(ClassDef *cdef, QSet<QByteArray> *requiredQtC
 
     for (int i = 0; i < cdef->propertyList.count(); ++i) {
         const PropertyDef &p = cdef->propertyList.at(i);
-        foreach (const QByteArray candidate, candidates) {
+        foreach (const QByteArray &candidate, candidates) {
             if (p.type.contains(candidate + "<"))
                 requiredQtContainers->insert(candidate);
         }
@@ -821,7 +830,7 @@ static void findRequiredContainers(ClassDef *cdef, QSet<QByteArray> *requiredQtC
     for (int i = 0; i < allFunctions.count(); ++i) {
         const FunctionDef &f = allFunctions.at(i);
         foreach (const ArgumentDef &arg, f.arguments) {
-            foreach (const QByteArray candidate, candidates) {
+            foreach (const QByteArray &candidate, candidates) {
                 if (arg.normalizedType.contains(candidate + "<"))
                     requiredQtContainers->insert(candidate);
             }
@@ -871,7 +880,7 @@ void Moc::generate(FILE *out)
     }
 
     // after finding the containers, we sort them into a list to avoid
-    // non-deterministic behaviour which may cause rebuilds unnecessarily.
+    // non-deterministic behavior which may cause rebuilds unnecessarily.
     QList<QByteArray> requiredContainerList = requiredQtContainers.toList();
     std::sort(requiredContainerList.begin(), requiredContainerList.end());
 
@@ -892,7 +901,7 @@ void Moc::generate(FILE *out)
     fprintf(out, "QT_BEGIN_MOC_NAMESPACE\n");
 
     for (i = 0; i < classList.size(); ++i) {
-        Generator generator(&classList[i], metaTypes, knownQObjectClasses, out);
+        Generator generator(&classList[i], metaTypes, knownQObjectClasses, knownGadgets, out);
         generator.generateCode();
     }
 
@@ -988,7 +997,7 @@ void Moc::parseSignals(ClassDef *def)
             prev();
         }
         FunctionDef funcDef;
-        funcDef.access = FunctionDef::Protected;
+        funcDef.access = FunctionDef::Public;
         parseFunction(&funcDef);
         if (funcDef.isVirtual)
             warning("Signals cannot be declared virtual");
@@ -1391,10 +1400,14 @@ QByteArray Moc::lexemUntil(Token target)
     QByteArray s;
     while (from <= index) {
         QByteArray n = symbols.at(from++-1).lexem();
-        if (s.size() && n.size()
-            && is_ident_char(s.at(s.size()-1))
-            && is_ident_char(n.at(0)))
-            s += ' ';
+        if (s.size() && n.size()) {
+            char prev = s.at(s.size()-1);
+            char next = n.at(0);
+            if ((is_ident_char(prev) && is_ident_char(next))
+                || (prev == '<' && next == ':')
+                || (prev == '>' && next == '>'))
+                s += ' ';
+        }
         s += n;
     }
     return s;
@@ -1429,9 +1442,20 @@ bool Moc::until(Token target) {
         case RBRACK: --brackCount; break;
         case LPAREN: ++parenCount; break;
         case RPAREN: --parenCount; break;
-        case LANGLE: ++angleCount; break;
-        case RANGLE: --angleCount; break;
-        case GTGT: angleCount -= 2; t = RANGLE; break;
+        case LANGLE:
+            if (parenCount == 0 && braceCount == 0 && parenCount == 0)
+                ++angleCount;
+          break;
+        case RANGLE:
+            if (parenCount == 0 && braceCount == 0)
+                --angleCount;
+          break;
+        case GTGT:
+            if (parenCount == 0 && braceCount == 0) {
+                angleCount -= 2;
+                t = RANGLE;
+            }
+            break;
         default: break;
         }
         if (t == target
@@ -1529,10 +1553,17 @@ void Moc::checkProperties(ClassDef *cdef)
     // specify get function, for compatibiliy we accept functions
     // returning pointers, or const char * for QByteArray.
     //
+    QSet<QByteArray> definedProperties;
     for (int i = 0; i < cdef->propertyList.count(); ++i) {
         PropertyDef &p = cdef->propertyList[i];
         if (p.read.isEmpty() && p.member.isEmpty())
             continue;
+        if (definedProperties.contains(p.name)) {
+            QByteArray msg = "The property '" + p.name + "' is defined multiple times in class " + cdef->classname + ".";
+            warning(msg.constData());
+        }
+        definedProperties.insert(p.name);
+
         for (int j = 0; j < cdef->publicList.count(); ++j) {
             const FunctionDef &f = cdef->publicList.at(j);
             if (f.name != p.read)

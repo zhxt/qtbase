@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -52,6 +44,7 @@
 #include "tokenizer.h"
 #include "qdocdatabase.h"
 #include <qdebug.h>
+#include "generator.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -99,8 +92,8 @@ void CppCodeParser::initializeParser(const Config &config)
     nodeTypeMap.insert(COMMAND_PROPERTY, Node::Property);
     nodeTypeMap.insert(COMMAND_VARIABLE, Node::Variable);
 
-    exampleFiles = config.getCleanPathList(CONFIG_EXAMPLES);
-    exampleDirs = config.getCleanPathList(CONFIG_EXAMPLEDIRS);
+    exampleFiles = config.getCanonicalPathList(CONFIG_EXAMPLES);
+    exampleDirs = config.getCanonicalPathList(CONFIG_EXAMPLEDIRS);
     QStringList exampleFilePatterns = config.getStringList(
                 CONFIG_EXAMPLES + Config::dot + CONFIG_FILEEXTENSIONS);
 
@@ -173,7 +166,7 @@ void CppCodeParser::parseHeaderFile(const Location& location, const QString& fil
     Tokenizer fileTokenizer(fileLocation, in);
     tokenizer = &fileTokenizer;
     readToken();
-    matchDeclList(qdb_->treeRoot());
+    matchDeclList(qdb_->primaryTreeRoot());
     if (!fileTokenizer.version().isEmpty())
         qdb_->setVersion(fileTokenizer.version());
     in.close();
@@ -207,10 +200,10 @@ void CppCodeParser::parseSourceFile(const Location& location, const QString& fil
     readToken();
 
     /*
-      The set of active namespaces is cleared before parsing
+      The set of open namespaces is cleared before parsing
       each source file. The word "source" here means cpp file.
      */
-    activeNamespaces_.clear();
+    qdb_->clearOpenNamespaces();
 
     matchDocsAndStuff();
     in.close();
@@ -218,15 +211,13 @@ void CppCodeParser::parseSourceFile(const Location& location, const QString& fil
 }
 
 /*!
-  This is called after all the header files have been parsed.
-  I think the most important thing it does is resolve class
-  inheritance links in the tree. But it also initializes a
-  bunch of stuff.
+  This is called after all the C++ header files have been
+  parsed. The most important thing it does is resolve C++
+  class inheritance links in the tree. It also initializes
+  a bunch of other collections.
  */
 void CppCodeParser::doneParsingHeaderFiles()
 {
-    qdb_->resolveInheritance();
-
     QMapIterator<QString, QString> i(sequentialIteratorClasses);
     while (i.hasNext()) {
         i.next();
@@ -265,44 +256,57 @@ void CppCodeParser::doneParsingHeaderFiles()
  */
 void CppCodeParser::doneParsingSourceFiles()
 {
-    qdb_->treeRoot()->clearCurrentChildPointers();
-    qdb_->treeRoot()->normalizeOverloads();
+    qdb_->primaryTreeRoot()->normalizeOverloads();
     qdb_->fixInheritance();
     qdb_->resolveProperties();
-    qdb_->treeRoot()->makeUndocumentedChildrenInternal();
+    qdb_->primaryTreeRoot()->makeUndocumentedChildrenInternal();
 }
 
+static QSet<QString> topicCommands_;
 /*!
   Returns the set of strings reopresenting the topic commands.
  */
-QSet<QString> CppCodeParser::topicCommands()
+const QSet<QString>& CppCodeParser::topicCommands()
 {
-    return QSet<QString>() << COMMAND_CLASS
-                           << COMMAND_DITAMAP
-                           << COMMAND_ENUM
-                           << COMMAND_EXAMPLE
-                           << COMMAND_EXTERNALPAGE
-                           << COMMAND_FILE
-                           << COMMAND_FN
-                           << COMMAND_GROUP
-                           << COMMAND_HEADERFILE
-                           << COMMAND_MACRO
-                           << COMMAND_MODULE
-                           << COMMAND_NAMESPACE
-                           << COMMAND_PAGE
-                           << COMMAND_PROPERTY
-                           << COMMAND_TYPEDEF
-                           << COMMAND_VARIABLE
-                           << COMMAND_QMLCLASS
-                           << COMMAND_QMLTYPE
-                           << COMMAND_QMLPROPERTY
-                           << COMMAND_QMLATTACHEDPROPERTY
-                           << COMMAND_QMLSIGNAL
-                           << COMMAND_QMLATTACHEDSIGNAL
-                           << COMMAND_QMLMETHOD
-                           << COMMAND_QMLATTACHEDMETHOD
-                           << COMMAND_QMLBASICTYPE
-                           << COMMAND_QMLMODULE;
+    if (topicCommands_.isEmpty()) {
+        topicCommands_ << COMMAND_CLASS
+                       << COMMAND_DITAMAP
+                       << COMMAND_ENUM
+                       << COMMAND_EXAMPLE
+                       << COMMAND_EXTERNALPAGE
+                       << COMMAND_FILE
+                       << COMMAND_FN
+                       << COMMAND_GROUP
+                       << COMMAND_HEADERFILE
+                       << COMMAND_MACRO
+                       << COMMAND_MODULE
+                       << COMMAND_NAMESPACE
+                       << COMMAND_PAGE
+                       << COMMAND_PROPERTY
+                       << COMMAND_TYPEDEF
+                       << COMMAND_VARIABLE
+                       << COMMAND_QMLTYPE
+                       << COMMAND_QMLPROPERTY
+                       << COMMAND_QMLPROPERTYGROUP
+                       << COMMAND_QMLATTACHEDPROPERTY
+                       << COMMAND_QMLSIGNAL
+                       << COMMAND_QMLATTACHEDSIGNAL
+                       << COMMAND_QMLMETHOD
+                       << COMMAND_QMLATTACHEDMETHOD
+                       << COMMAND_QMLBASICTYPE
+                       << COMMAND_QMLMODULE
+                       << COMMAND_JSTYPE
+                       << COMMAND_JSPROPERTY
+                       << COMMAND_JSPROPERTYGROUP
+                       << COMMAND_JSATTACHEDPROPERTY
+                       << COMMAND_JSSIGNAL
+                       << COMMAND_JSATTACHEDSIGNAL
+                       << COMMAND_JSMETHOD
+                       << COMMAND_JSATTACHEDMETHOD
+                       << COMMAND_JSBASICTYPE
+                       << COMMAND_JSMODULE;
+    }
+    return topicCommands_;
 }
 
 /*!
@@ -323,41 +327,33 @@ Node* CppCodeParser::processTopicCommand(const Doc& doc,
             doc.startLocation().warning(tr("Invalid syntax in '\\%1'").arg(COMMAND_FN));
         }
         else {
-            if (!activeNamespaces_.isEmpty()) {
-                foreach (const QString& usedNamespace_, activeNamespaces_) {
-                    QStringList newPath = usedNamespace_.split("::") + parentPath;
-                    func = qdb_->findFunctionNode(newPath, clone);
-                    if (func)
-                        break;
-                }
-            }
-            // Search the root namespace if no match was found.
-            if (func == 0)
-                func = qdb_->findFunctionNode(parentPath, clone);
-
+            func = qdb_->findFunctionNode(parentPath, clone);
             if (func == 0) {
                 if (parentPath.isEmpty() && !lastPath_.isEmpty())
                     func = qdb_->findFunctionNode(lastPath_, clone);
-                if (func == 0) {
-                    doc.location().warning(tr("Cannot find '%1' in '\\%2' %3")
-                                           .arg(clone->name() + "(...)")
-                                           .arg(COMMAND_FN)
-                                           .arg(arg.first),
-                                           tr("I cannot find any function of that name with the "
-                                              "specified signature. Make sure that the signature "
-                                              "is identical to the declaration, including 'const' "
-                                              "qualifiers."));
-                }
-                else {
-                    doc.location().warning(tr("Missing '%1::' for '%2' in '\\%3'")
-                                           .arg(lastPath_.join("::"))
-                                           .arg(clone->name() + "()")
-                                           .arg(COMMAND_FN));
-                }
             }
-            else {
+
+            /*
+              If the node was not found, then search for it in the
+              open C++ namespaces. We don't expect this search to
+              be necessary often. Nor do we expect it to succeed
+              very often.
+            */
+            if (func == 0)
+                func = qdb_->findNodeInOpenNamespace(parentPath, clone);
+
+            if (func == 0) {
+                doc.location().warning(tr("Cannot find '%1' in '\\%2' %3")
+                                       .arg(clone->name() + "(...)")
+                                       .arg(COMMAND_FN)
+                                       .arg(arg.first),
+                                       tr("I cannot find any function of that name with the "
+                                          "specified signature. Make sure that the signature "
+                                          "is identical to the declaration, including 'const' "
+                                          "qualifiers."));
+            }
+            else
                 lastPath_ = parentPath;
-            }
             if (func) {
                 func->borrowParameterNames(clone);
                 func->setParentPath(clone->parentPath());
@@ -370,7 +366,7 @@ Node* CppCodeParser::processTopicCommand(const Doc& doc,
         QStringList parentPath;
         FunctionNode *func = 0;
 
-        extra.root = qdb_->treeRoot();
+        extra.root = qdb_->primaryTreeRoot();
         extra.isMacro = true;
         if (makeFunctionNode(arg.first, &parentPath, &func, extra)) {
             if (!parentPath.isEmpty()) {
@@ -392,7 +388,7 @@ Node* CppCodeParser::processTopicCommand(const Doc& doc,
             return func;
         }
         else if (QRegExp("[A-Za-z_][A-Za-z0-9_]+").exactMatch(arg.first)) {
-            func = new FunctionNode(qdb_->treeRoot(), arg.first);
+            func = new FunctionNode(qdb_->primaryTreeRoot(), arg.first);
             func->setAccess(Node::Public);
             func->setLocation(doc.startLocation());
             func->setMetaness(FunctionNode::MacroWithoutParams);
@@ -413,38 +409,13 @@ Node* CppCodeParser::processTopicCommand(const Doc& doc,
           without including the namespace qualifier.
          */
         Node::Type type =  nodeTypeMap[command];
-        Node::SubType subtype = Node::NoSubType;
-        if (type == Node::Document)
-            subtype = Node::QmlClass;
-
         QStringList paths = arg.first.split(QLatin1Char(' '));
         QStringList path = paths[0].split("::");
         Node *node = 0;
 
-        /*
-          If the command refers to something that can be in a
-          C++ namespace, search for it first in all the known
-          C++ namespaces.
-         */
-        if (!activeNamespaces_.isEmpty()) {
-            foreach (const QString& usedNamespace_, activeNamespaces_) {
-                QStringList newPath = usedNamespace_.split("::") + path;
-                node = qdb_->findNodeByNameAndType(newPath, type, subtype);
-                if (node) {
-                    path = newPath;
-                    break;
-                }
-            }
-        }
-
-        /*
-          If the node was not found in a C++ namespace, search
-          for it in the root namespace.
-         */
-        if (node == 0) {
-            node = qdb_->findNodeByNameAndType(path, type, subtype);
-        }
-
+        node = qdb_->findNodeInOpenNamespace(path, type);
+        if (node == 0)
+            node = qdb_->findNodeByNameAndType(path, type);
         if (node == 0) {
             doc.location().warning(tr("Cannot find '%1' specified with '\\%2' in any header file")
                                    .arg(arg.first).arg(command));
@@ -452,54 +423,82 @@ Node* CppCodeParser::processTopicCommand(const Doc& doc,
 
         }
         else if (node->isInnerNode()) {
+            if (type == Node::Namespace) {
+                NamespaceNode* ns = static_cast<NamespaceNode*>(node);
+                ns->markSeen();
+            }
             /*
-              This treets a class as a namespace.
+              This treats a class as a namespace.
              */
-            if (path.size() > 1) {
-                path.pop_back();
-                QString ns = path.join("::");
-                activeNamespaces_.insert(ns);
+            if ((type == Node::Class) || (type == Node::Namespace)) {
+                if (path.size() > 1) {
+                    path.pop_back();
+                    QString ns = path.join("::");
+                    qdb_->insertOpenNamespace(ns);
+                }
             }
         }
         return node;
     }
     else if (command == COMMAND_EXAMPLE) {
         if (Config::generateExamples) {
-            ExampleNode* en = new ExampleNode(qdb_->treeRoot(), arg.first);
+            ExampleNode* en = new ExampleNode(qdb_->primaryTreeRoot(), arg.first);
             en->setLocation(doc.startLocation());
             createExampleFileNodes(en);
             return en;
         }
     }
     else if (command == COMMAND_EXTERNALPAGE) {
-        DocNode* dn = new DocNode(qdb_->treeRoot(), arg.first, Node::ExternalPage, Node::ArticlePage);
+        DocumentNode* dn = new DocumentNode(qdb_->primaryTreeRoot(),
+                                            arg.first,
+                                            Node::ExternalPage,
+                                            Node::ArticlePage);
         dn->setLocation(doc.startLocation());
         return dn;
     }
     else if (command == COMMAND_FILE) {
-        DocNode* dn = new DocNode(qdb_->treeRoot(), arg.first, Node::File, Node::NoPageType);
-        dn->setLocation(doc.startLocation());
-        return dn;
-    }
-    else if (command == COMMAND_GROUP) {
-        DocNode* dn = qdb_->addGroup(arg.first);
+        DocumentNode* dn = new DocumentNode(qdb_->primaryTreeRoot(),
+                                            arg.first,
+                                            Node::File,
+                                            Node::NoPageType);
         dn->setLocation(doc.startLocation());
         return dn;
     }
     else if (command == COMMAND_HEADERFILE) {
-        DocNode* dn = new DocNode(qdb_->treeRoot(), arg.first, Node::HeaderFile, Node::ApiPage);
+        DocumentNode* dn = new DocumentNode(qdb_->primaryTreeRoot(),
+                                            arg.first,
+                                            Node::HeaderFile,
+                                            Node::ApiPage);
         dn->setLocation(doc.startLocation());
         return dn;
+    }
+    else if (command == COMMAND_GROUP) {
+        CollectionNode* cn = qdb_->addGroup(arg.first);
+        cn->setLocation(doc.startLocation());
+        cn->markSeen();
+        return cn;
     }
     else if (command == COMMAND_MODULE) {
-        DocNode* dn = qdb_->addModule(arg.first);
-        dn->setLocation(doc.startLocation());
-        return dn;
+        CollectionNode* cn = qdb_->addModule(arg.first);
+        cn->setLocation(doc.startLocation());
+        cn->markSeen();
+        return cn;
     }
     else if (command == COMMAND_QMLMODULE) {
-        DocNode* dn = qdb_->addQmlModule(arg.first);
-        dn->setLocation(doc.startLocation());
-        return dn;
+        QStringList blankSplit = arg.first.split(QLatin1Char(' '));
+        CollectionNode* cn = qdb_->addQmlModule(blankSplit[0]);
+        cn->setLogicalModuleInfo(blankSplit);
+        cn->setLocation(doc.startLocation());
+        cn->markSeen();
+        return cn;
+    }
+    else if (command == COMMAND_JSMODULE) {
+        QStringList blankSplit = arg.first.split(QLatin1Char(' '));
+        CollectionNode* cn = qdb_->addJsModule(blankSplit[0]);
+        cn->setLogicalModuleInfo(blankSplit);
+        cn->setLocation(doc.startLocation());
+        cn->markSeen();
+        return cn;
     }
     else if (command == COMMAND_PAGE) {
         Node::PageType ptype = Node::ArticlePage;
@@ -522,131 +521,89 @@ Node* CppCodeParser::processTopicCommand(const Doc& doc,
                 ptype = Node::DitaMapPage;
         }
 
-        /*
-          Search for a node with the same name. If there is one,
-          then there is a collision, so create a collision node
-          and make the existing node a child of the collision
-          node, and then create the new Page node and make
-          it a child of the collision node as well. Return the
-          collision node.
-
-          If there is no collision, just create a new Page
-          node and return that one.
-        */
-        NameCollisionNode* ncn = qdb_->checkForCollision(args[0]);
-        DocNode* dn = 0;
-        if (ptype == Node::DitaMapPage)
-            dn = new DitaMapNode(qdb_->treeRoot(), args[0]);
-        else
-            dn = new DocNode(qdb_->treeRoot(), args[0], Node::Page, ptype);
-        dn->setLocation(doc.startLocation());
-        if (ncn) {
-            ncn->addCollision(dn);
+#if 0
+        const Node* n = qdb_->checkForCollision(args[0]);
+        if (n) {
+            QString other = n->doc().location().fileName();
+            doc.location().warning(tr("Name/title collision detected: '%1' in '\\%2'")
+                                   .arg(args[0]).arg(command),
+                                   tr("Also used here: %1").arg(other));
         }
+#endif
+        DocumentNode* dn = 0;
+        if (ptype == Node::DitaMapPage)
+            dn = new DitaMapNode(qdb_->primaryTreeRoot(), args[0]);
+        else
+            dn = new DocumentNode(qdb_->primaryTreeRoot(), args[0], Node::Page, ptype);
+        dn->setLocation(doc.startLocation());
         return dn;
     }
     else if (command == COMMAND_DITAMAP) {
-        DocNode* dn = new DitaMapNode(qdb_->treeRoot(), arg.first);
+        DocumentNode* dn = new DitaMapNode(qdb_->primaryTreeRoot(), arg.first);
         dn->setLocation(doc.startLocation());
         return dn;
     }
-    else if ((command == COMMAND_QMLCLASS) || (command == COMMAND_QMLTYPE)) {
-        if (command == COMMAND_QMLCLASS)
-            doc.startLocation().warning(tr("\\qmlclass is deprecated; use \\qmltype instead"));
-        ClassNode* classNode = 0;
-        QStringList names = arg.first.split(QLatin1Char(' '));
-        if (names.size() > 1) {
-            if (names[1] != "0")
-                doc.startLocation().warning(tr("\\qmltype no longer has a 2nd argument; "
-                                               "use '\\instantiates <class>' in \\qmltype "
-                                               "comments instead"));
-            else
-                doc.startLocation().warning(tr("The 0 arg is no longer used for indicating "
-                                               "that the QML type does not instantiate a "
-                                               "C++ class"));
-            /*
-              If the second argument of the \\qmlclass command
-              is 0 we should ignore the C++ class. The second
-              argument should only be 0 when you are documenting
-              QML in a .qdoc file.
-             */
-            if (names[1] != "0")
-                classNode = qdb_->findClassNode(names[1].split("::"));
-        }
-
-        /*
-          Search for a node with the same name. If there is one,
-          then there is a collision, so create a collision node
-          and make the existing node a child of the collision
-          node, and then create the new QML class node and make
-          it a child of the collision node as well. Return the
-          collision node.
-
-          If there is no collision, just create a new QML class
-          node and return that one.
-         */
-        NameCollisionNode* ncn = qdb_->checkForCollision(names[0]);
-        QmlClassNode* qcn = new QmlClassNode(qdb_->treeRoot(), names[0]);
-        qcn->setClassNode(classNode);
+    else if ((command == COMMAND_QMLTYPE) || (command == COMMAND_JSTYPE)) {
+        QmlTypeNode* qcn = new QmlTypeNode(qdb_->primaryTreeRoot(), arg.first);
+        if (command == COMMAND_JSTYPE)
+            qcn->setGenus(Node::JS);
         qcn->setLocation(doc.startLocation());
-#if 0
-        // to be removed if \qmltype and \instantiates work ok
-        if (isParsingCpp() || isParsingQdoc()) {
-            qcn->requireCppClass();
-            if (names.size() < 2) {
-                QString msg = "C++ class name not specified for class documented as "
-                    "QML type: '\\qmlclass " + arg.first + " <class name>'";
-                doc.startLocation().warning(tr(msg.toLatin1().data()));
-            }
-            else if (!classNode) {
-                QString msg = "C++ class not found in any .h file for class documented "
-                    "as QML type: '\\qmlclass " + arg.first + "'";
-                doc.startLocation().warning(tr(msg.toLatin1().data()));
-            }
-        }
-#endif
-        if (ncn)
-            ncn->addCollision(qcn);
         return qcn;
     }
-    else if (command == COMMAND_QMLBASICTYPE) {
-        QmlBasicTypeNode* n = new QmlBasicTypeNode(qdb_->treeRoot(), arg.first);
+    else if ((command == COMMAND_QMLBASICTYPE) || (command == COMMAND_JSBASICTYPE)) {
+        QmlBasicTypeNode* n = new QmlBasicTypeNode(qdb_->primaryTreeRoot(), arg.first);
+        if (command == COMMAND_JSBASICTYPE)
+            n->setGenus(Node::JS);
         n->setLocation(doc.startLocation());
         return n;
     }
     else if ((command == COMMAND_QMLSIGNAL) ||
              (command == COMMAND_QMLMETHOD) ||
              (command == COMMAND_QMLATTACHEDSIGNAL) ||
-             (command == COMMAND_QMLATTACHEDMETHOD)) {
+             (command == COMMAND_QMLATTACHEDMETHOD) ||
+             (command == COMMAND_JSSIGNAL) ||
+             (command == COMMAND_JSMETHOD) ||
+             (command == COMMAND_JSATTACHEDSIGNAL) ||
+             (command == COMMAND_JSATTACHEDMETHOD)) {
         QString module;
-        QString element;
+        QString qmlTypeName;
         QString type;
-        if (splitQmlMethodArg(arg.first,type,module,element)) {
-            QmlClassNode* qmlClass = qdb_->findQmlType(module,element);
-            if (qmlClass) {
+        if (splitQmlMethodArg(arg.first, type, module, qmlTypeName)) {
+            QmlTypeNode* qmlType = qdb_->findQmlType(module, qmlTypeName);
+            if (qmlType) {
                 bool attached = false;
                 Node::Type nodeType = Node::QmlMethod;
-                if (command == COMMAND_QMLSIGNAL)
+                if ((command == COMMAND_QMLSIGNAL) ||
+                    (command == COMMAND_JSSIGNAL))
                     nodeType = Node::QmlSignal;
-                else if (command == COMMAND_QMLATTACHEDSIGNAL) {
+                else if ((command == COMMAND_QMLATTACHEDSIGNAL) ||
+                         (command == COMMAND_JSATTACHEDSIGNAL)) {
                     nodeType = Node::QmlSignal;
                     attached = true;
                 }
-                else if (command == COMMAND_QMLMETHOD) {
+                else if ((command == COMMAND_QMLMETHOD) ||
+                         (command == COMMAND_JSMETHOD)) {
                     // do nothing
                 }
-                else if (command == COMMAND_QMLATTACHEDMETHOD)
+                else if ((command == COMMAND_QMLATTACHEDMETHOD) ||
+                         (command == COMMAND_JSATTACHEDMETHOD))
                     attached = true;
                 else
                     return 0; // never get here.
                 FunctionNode* fn = makeFunctionNode(doc,
                                                     arg.first,
-                                                    qmlClass,
+                                                    qmlType,
                                                     nodeType,
                                                     attached,
                                                     command);
-                if (fn)
+                if (fn) {
                     fn->setLocation(doc.startLocation());
+                    if ((command == COMMAND_JSSIGNAL) ||
+                        (command == COMMAND_JSMETHOD) ||
+                        (command == COMMAND_JSATTACHEDSIGNAL) ||
+                        (command == COMMAND_JSATTACHEDMETHOD))
+                        fn->setGenus(Node::JS);
+                }
                 return fn;
             }
         }
@@ -655,28 +612,57 @@ Node* CppCodeParser::processTopicCommand(const Doc& doc,
 }
 
 /*!
+  A QML property group argument has the form...
+
+  <QML-module>::<QML-type>::<name>
+
+  This function splits the argument into those parts.
+  A <QML-module> is the QML equivalent of a C++ namespace.
+  So this function splits \a arg on "::" and stores the
+  parts in \a module, \a qmlTypeName, and \a name, and returns
+  true. If any part is not found, a qdoc warning is emitted
+  and false is returned.
+ */
+bool CppCodeParser::splitQmlPropertyGroupArg(const QString& arg,
+                                             QString& module,
+                                             QString& qmlTypeName,
+                                             QString& name)
+{
+    QStringList colonSplit = arg.split("::");
+    if (colonSplit.size() == 3) {
+        module = colonSplit[0];
+        qmlTypeName = colonSplit[1];
+        name = colonSplit[2];
+        return true;
+    }
+    QString msg = "Unrecognizable QML module/component qualifier for " + arg;
+    location().warning(tr(msg.toLatin1().data()));
+    return false;
+}
+
+/*!
   A QML property argument has the form...
 
-  <type> <element>::<name>
-  <type> <QML-module>::<element>::<name>
+  <type> <QML-type>::<name>
+  <type> <QML-module>::<QML-type>::<name>
 
   This function splits the argument into one of those
   two forms. The three part form is the old form, which
   was used before the creation of Qt Quick 2 and Qt
   Components. A <QML-module> is the QML equivalent of a
   C++ namespace. So this function splits \a arg on "::"
-  and stores the parts in \a type, \a module, \a element,
-  and \a name, and returns true. If any part other than
+  and stores the parts in \a type, \a module, \a qmlTypeName,
+  and \a name, and returns \c true. If any part other than
   \a module is not found, a qdoc warning is emitted and
   false is returned.
 
-  \note The two elements \e{Component} and \e{QtObject} never
-  have a module qualifier.
+  \note The two QML types \e{Component} and \e{QtObject}
+  never have a module qualifier.
  */
 bool CppCodeParser::splitQmlPropertyArg(const QString& arg,
                                         QString& type,
                                         QString& module,
-                                        QString& element,
+                                        QString& qmlTypeName,
                                         QString& name)
 {
     QStringList blankSplit = arg.split(QLatin1Char(' '));
@@ -685,13 +671,13 @@ bool CppCodeParser::splitQmlPropertyArg(const QString& arg,
         QStringList colonSplit(blankSplit[1].split("::"));
         if (colonSplit.size() == 3) {
             module = colonSplit[0];
-            element = colonSplit[1];
+            qmlTypeName = colonSplit[1];
             name = colonSplit[2];
             return true;
         }
         if (colonSplit.size() == 2) {
             module.clear();
-            element = colonSplit[0];
+            qmlTypeName = colonSplit[0];
             name = colonSplit[1];
             return true;
         }
@@ -708,21 +694,21 @@ bool CppCodeParser::splitQmlPropertyArg(const QString& arg,
 /*!
   A QML signal or method argument has the form...
 
-  <type> <element>::<name>(<param>, <param>, ...)
-  <type> <QML-module>::<element>::<name>(<param>, <param>, ...)
+  <type> <QML-type>::<name>(<param>, <param>, ...)
+  <type> <QML-module>::<QML-type>::<name>(<param>, <param>, ...)
 
   This function splits the argument into one of those two
-  forms, sets \a module, \a element, and \a name, and returns
+  forms, sets \a module, \a qmlTypeName, and \a name, and returns
   true. If the argument doesn't match either form, an error
   message is emitted and false is returned.
 
-  \note The two elements \e{Component} and \e{QtObject} never
+  \note The two QML types \e{Component} and \e{QtObject} never
   have a module qualifier.
  */
 bool CppCodeParser::splitQmlMethodArg(const QString& arg,
                                       QString& type,
                                       QString& module,
-                                      QString& element)
+                                      QString& qmlTypeName)
 {
     QStringList colonSplit(arg.split("::"));
     if (colonSplit.size() > 1) {
@@ -731,22 +717,22 @@ bool CppCodeParser::splitQmlMethodArg(const QString& arg,
             type = blankSplit[0];
             if (colonSplit.size() > 2) {
                 module = blankSplit[1];
-                element = colonSplit[1];
+                qmlTypeName = colonSplit[1];
             }
             else {
                 module.clear();
-                element = blankSplit[1];
+                qmlTypeName = blankSplit[1];
             }
         }
         else {
             type.clear();
             if (colonSplit.size() > 2) {
                 module = colonSplit[0];
-                element = colonSplit[1];
+                qmlTypeName = colonSplit[1];
             }
             else {
                 module.clear();
-                element = colonSplit[0];
+                qmlTypeName = colonSplit[0];
             }
         }
         return true;
@@ -762,79 +748,131 @@ bool CppCodeParser::splitQmlMethodArg(const QString& arg,
   Currently, this function is called only for \e{qmlproperty}
   and \e{qmlattachedproperty}.
  */
-Node* CppCodeParser::processTopicCommandGroup(const Doc& doc,
-                                              const QString& command,
-                                              const ArgList& args)
+void CppCodeParser::processQmlProperties(const Doc& doc,
+                                         NodeList& nodes,
+                                         DocList& docs,
+                                         bool jsProps)
 {
-    QmlPropGroupNode* qmlPropGroup = 0;
-    if ((command == COMMAND_QMLPROPERTY) ||
-            (command == COMMAND_QMLATTACHEDPROPERTY)) {
-        QString arg;
-        QString type;
-        QString module;
-        QString element;
-        QString property;
-        QmlClassNode* qmlClass = 0;
-        bool attached = (command == COMMAND_QMLATTACHEDPROPERTY);
-        ArgList::ConstIterator argsIter = args.constBegin();
-        arg = argsIter->first;
-        if (splitQmlPropertyArg(arg,type,module,element,property)) {
-            qmlClass = qdb_->findQmlType(module,element);
-            if (qmlClass) {
-                qmlPropGroup = new QmlPropGroupNode(qmlClass,property); //,attached);
-                qmlPropGroup->setLocation(doc.startLocation());
-            }
+    QString arg;
+    QString type;
+    QString topic;
+    QString module;
+    QString qmlTypeName;
+    QString property;
+    QmlPropertyNode* qpn = 0;
+    QmlTypeNode* qmlType = 0;
+    QmlPropertyGroupNode* qpgn = 0;
+
+    Topic qmlPropertyGroupTopic;
+    const TopicList& topics = doc.topicsUsed();
+    for (int i=0; i<topics.size(); ++i) {
+        if ((topics.at(i).topic == COMMAND_QMLPROPERTYGROUP) ||
+            (topics.at(i).topic == COMMAND_JSPROPERTYGROUP)) {
+            qmlPropertyGroupTopic = topics.at(i);
+            break;
         }
-        if (qmlPropGroup) {
-            if (qmlClass->hasProperty(property)) {
-                doc.startLocation().warning(tr("QML property documented multiple times: '%1'").arg(arg));
+    }
+    if (qmlPropertyGroupTopic.isEmpty() && topics.size() > 1) {
+        qmlPropertyGroupTopic = topics.at(0);
+        if (jsProps)
+            qmlPropertyGroupTopic.topic = COMMAND_JSPROPERTYGROUP;
+        else
+            qmlPropertyGroupTopic.topic = COMMAND_QMLPROPERTYGROUP;
+        arg = qmlPropertyGroupTopic.args;
+        if (splitQmlPropertyArg(arg, type, module, qmlTypeName, property)) {
+            int i = property.indexOf('.');
+            if (i != -1) {
+                property = property.left(i);
+                qmlPropertyGroupTopic.args = module + "::" + qmlTypeName + "::" + property;
+                doc.location().warning(tr("No QML property group command found; using \\%1 %2")
+                                       .arg(COMMAND_QMLPROPERTYGROUP).arg(qmlPropertyGroupTopic.args));
             }
             else {
-                QmlPropertyNode *qmlPropNode = new QmlPropertyNode(qmlPropGroup,property,type,attached);
-                qmlPropNode->setLocation(doc.startLocation());
-            }
-            ++argsIter;
-            while (argsIter != args.constEnd()) {
-                arg = argsIter->first;
-                if (splitQmlPropertyArg(arg,type,module,element,property)) {
-                    if (qmlClass->hasProperty(property)) {
-                        doc.startLocation().warning(tr("QML property documented multiple times: '%1'").arg(arg));
-                    }
-                    else {
-                        QmlPropertyNode* qmlPropNode = new QmlPropertyNode(qmlPropGroup,
-                                                                           property,
-                                                                           type,
-                                                                           attached);
-                        qmlPropNode->setLocation(doc.startLocation());
-                    }
-                }
-                ++argsIter;
+                /*
+                  Assumption: No '.' in the property name
+                  means there is no property group.
+                 */
+                qmlPropertyGroupTopic.clear();
             }
         }
     }
-    return qmlPropGroup;
+
+    if (!qmlPropertyGroupTopic.isEmpty()) {
+        arg = qmlPropertyGroupTopic.args;
+        if (splitQmlPropertyGroupArg(arg, module, qmlTypeName, property)) {
+            qmlType = qdb_->findQmlType(module, qmlTypeName);
+            if (qmlType) {
+                qpgn = new QmlPropertyGroupNode(qmlType, property);
+                qpgn->setLocation(doc.startLocation());
+                if (jsProps)
+                    qpgn->setGenus(Node::JS);
+                nodes.append(qpgn);
+                docs.append(doc);
+            }
+        }
+    }
+    for (int i=0; i<topics.size(); ++i) {
+        if (topics.at(i).topic == COMMAND_QMLPROPERTYGROUP) {
+             continue;
+        }
+        topic = topics.at(i).topic;
+        arg = topics.at(i).args;
+        if ((topic == COMMAND_QMLPROPERTY) || (topic == COMMAND_QMLATTACHEDPROPERTY) ||
+            (topic == COMMAND_JSPROPERTY) || (topic == COMMAND_JSATTACHEDPROPERTY)) {
+            bool attached = ((topic == COMMAND_QMLATTACHEDPROPERTY) ||
+                             (topic == COMMAND_JSATTACHEDPROPERTY));
+            if (splitQmlPropertyArg(arg, type, module, qmlTypeName, property)) {
+                qmlType = qdb_->findQmlType(module, qmlTypeName);
+                if (qmlType) {
+                    if (qmlType->hasQmlProperty(property, attached) != 0) {
+                        QString msg = tr("QML property documented multiple times: '%1'").arg(arg);
+                        doc.startLocation().warning(msg);
+                    }
+                    else if (qpgn) {
+                        qpn = new QmlPropertyNode(qpgn, property, type, attached);
+                        qpn->setLocation(doc.startLocation());
+                        if (jsProps)
+                            qpn->setGenus(Node::JS);
+                    }
+                    else {
+                        qpn = new QmlPropertyNode(qmlType, property, type, attached);
+                        qpn->setLocation(doc.startLocation());
+                        if (jsProps)
+                            qpn->setGenus(Node::JS);
+                        nodes.append(qpn);
+                        docs.append(doc);
+                    }
+                }
+            }
+        }
+    }
 }
 
+static QSet<QString> otherMetaCommands_;
 /*!
   Returns the set of strings representing the common metacommands
   plus some other metacommands.
  */
-QSet<QString> CppCodeParser::otherMetaCommands()
+const QSet<QString>& CppCodeParser::otherMetaCommands()
 {
-    return commonMetaCommands() << COMMAND_INHEADERFILE
-                                << COMMAND_OVERLOAD
-                                << COMMAND_REIMP
-                                << COMMAND_RELATES
-                                << COMMAND_CONTENTSPAGE
-                                << COMMAND_NEXTPAGE
-                                << COMMAND_PREVIOUSPAGE
-                                << COMMAND_INDEXPAGE
-                                << COMMAND_STARTPAGE
-                                << COMMAND_QMLINHERITS
-                                << COMMAND_QMLINSTANTIATES
-                                << COMMAND_QMLDEFAULT
-                                << COMMAND_QMLREADONLY
-                                << COMMAND_QMLABSTRACT;
+    if (otherMetaCommands_.isEmpty()) {
+        otherMetaCommands_ = commonMetaCommands();
+        otherMetaCommands_ << COMMAND_INHEADERFILE
+                           << COMMAND_OVERLOAD
+                           << COMMAND_REIMP
+                           << COMMAND_RELATES
+                           << COMMAND_CONTENTSPAGE
+                           << COMMAND_NEXTPAGE
+                           << COMMAND_PREVIOUSPAGE
+                           << COMMAND_INDEXPAGE
+                           << COMMAND_STARTPAGE
+                           << COMMAND_QMLINHERITS
+                           << COMMAND_QMLINSTANTIATES
+                           << COMMAND_QMLDEFAULT
+                           << COMMAND_QMLREADONLY
+                           << COMMAND_QMLABSTRACT;
+    }
+    return otherMetaCommands_;
 }
 
 /*!
@@ -867,8 +905,8 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
         }
     }
     else if (command == COMMAND_REIMP) {
-        if (node->parent() && !node->parent()->isInternal()) {
-            if (node != 0 && node->type() == Node::Function) {
+        if (node != 0 && node->parent() && !node->parent()->isInternal()) {
+            if (node->type() == Node::Function) {
                 FunctionNode *func = (FunctionNode *) node;
                 const FunctionNode *from = func->reimplementedFrom();
                 if (from == 0) {
@@ -900,38 +938,12 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
         }
     }
     else if (command == COMMAND_RELATES) {
-        /*
-          Find the node that this node relates to.
-         */
-        Node* n = 0;
-        if (arg.startsWith(QLatin1Char('<')) || arg.startsWith('"')) {
-            /*
-              It should be a header file, I think.
-            */
-            n = qdb_->findNodeByNameAndType(QStringList(arg), Node::Document, Node::NoSubType);
-        }
-        else {
-            /*
-              If it wasn't a file, it should be either a class or a namespace.
-             */
-            QStringList newPath = arg.split("::");
-            n = qdb_->findClassNode(newPath);
-            if (!n)
-                n = qdb_->findNamespaceNode(newPath);
-        }
-
-        if (!n) {
-            /*
-              Didn't ind it. Error...
-             */
+        QStringList path = arg.split("::");
+        Node* n = qdb_->findRelatesNode(path);
+        if (!n)
             doc.location().warning(tr("Cannot find '%1' in '\\%2'").arg(arg).arg(COMMAND_RELATES));
-        }
-        else {
-            /*
-              Found it. This node relates to it.
-             */
+        else
             node->setRelates(static_cast<InnerNode*>(n));
-        }
     }
     else if (command == COMMAND_CONTENTSPAGE) {
         setLink(node, Node::ContentsLink, arg);
@@ -951,14 +963,14 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
     else if (command == COMMAND_QMLINHERITS) {
         if (node->name() == arg)
             doc.location().warning(tr("%1 tries to inherit itself").arg(arg));
-        else if (node->subType() == Node::QmlClass) {
-            QmlClassNode *qmlClass = static_cast<QmlClassNode*>(node);
-            qmlClass->setQmlBaseName(arg);
-            QmlClassNode::addInheritedBy(arg,node);
+        else if (node->isQmlType() || node->isJsType()) {
+            QmlTypeNode* qmlType = static_cast<QmlTypeNode*>(node);
+            qmlType->setQmlBaseName(arg);
+            QmlTypeNode::addInheritedBy(arg,node);
         }
     }
     else if (command == COMMAND_QMLINSTANTIATES) {
-        if ((node->type() == Node::Document) && (node->subType() == Node::QmlClass)) {
+        if (node->isQmlType() || node->isJsType()) {
             ClassNode* classNode = qdb_->findClassNode(arg.split("::"));
             if (classNode)
                 node->setClassNode(classNode);
@@ -973,8 +985,8 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
             QmlPropertyNode* qpn = static_cast<QmlPropertyNode*>(node);
             qpn->setDefault();
         }
-        else if (node->type() == Node::Document && node->subType() == Node::QmlPropertyGroup) {
-            QmlPropGroupNode* qpgn = static_cast<QmlPropGroupNode*>(node);
+        else if (node->type() == Node::QmlPropertyGroup) {
+            QmlPropertyGroupNode* qpgn = static_cast<QmlPropertyGroupNode*>(node);
             NodeList::ConstIterator p = qpgn->childNodes().constBegin();
             while (p != qpgn->childNodes().constEnd()) {
                 if ((*p)->type() == Node::QmlProperty) {
@@ -990,8 +1002,8 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
             QmlPropertyNode* qpn = static_cast<QmlPropertyNode*>(node);
             qpn->setReadOnly(1);
         }
-        else if (node->type() == Node::Document && node->subType() == Node::QmlPropertyGroup) {
-            QmlPropGroupNode* qpgn = static_cast<QmlPropGroupNode*>(node);
+        else if (node->type() == Node::QmlPropertyGroup) {
+            QmlPropertyGroupNode* qpgn = static_cast<QmlPropertyGroupNode*>(node);
             NodeList::ConstIterator p = qpgn->childNodes().constBegin();
             while (p != qpgn->childNodes().constEnd()) {
                 if ((*p)->type() == Node::QmlProperty) {
@@ -1003,9 +1015,8 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
         }
     }
     else if (command == COMMAND_QMLABSTRACT) {
-        if ((node->type() == Node::Document) && (node->subType() == Node::QmlClass)) {
+        if (node->isQmlType() || node->isJsType())
             node->setAbstract(true);
-        }
     }
     else {
         processCommonMetaCommand(doc.location(),command,argLocPair,node);
@@ -1042,7 +1053,7 @@ void CppCodeParser::reset()
     access = Node::Public;
     metaness = FunctionNode::Plain;
     lastPath_.clear();
-    moduleName.clear();
+    physicalModuleName.clear();
 }
 
 /*!
@@ -1097,7 +1108,7 @@ bool CppCodeParser::skipTo(int target)
 {
     while ((tok != Tok_Eoi) && (tok != target))
         readToken();
-    return (tok == target ? true : false);
+    return tok == target;
 }
 
 /*!
@@ -1317,6 +1328,11 @@ bool CppCodeParser::matchParameter(FunctionNode *func)
     CodeChunk dataType;
     QString name;
     CodeChunk defaultValue;
+
+    if (match(Tok_QPrivateSignal)) {
+        func->setPrivateSignal();
+        return true;
+    }
 
     if (!matchDataType(&dataType, &name)) {
         return false;
@@ -1577,11 +1593,7 @@ bool CppCodeParser::matchBaseSpecifier(ClassNode *classe, bool isClass)
     if (!matchDataType(&baseClass))
         return false;
 
-    qdb_->addBaseClass(classe,
-                       access,
-                       baseClass.toPath(),
-                       baseClass.toString(),
-                       classe->parent());
+    classe->addUnresolvedBaseClass(access, baseClass.toPath(), baseClass.toString());
     return true;
 }
 
@@ -1617,7 +1629,7 @@ bool CppCodeParser::matchClassDecl(InnerNode *parent,
     while (tok == Tok_Ident)
         readToken();
     if (tok == Tok_Gulbrandsen) {
-        Node* n = parent->findChildNodeByNameAndType(previousLexeme(),Node::Class);
+        Node* n = parent->findChildNode(previousLexeme(),Node::Class);
         if (n) {
             parent = static_cast<InnerNode*>(n);
             if (parent) {
@@ -1640,8 +1652,8 @@ bool CppCodeParser::matchClassDecl(InnerNode *parent,
     classe->setLocation(location());
     if (compat)
         classe->setStatus(Node::Compat);
-    if (!moduleName.isEmpty())
-        classe->setModuleName(moduleName);
+    if (!physicalModuleName.isEmpty())
+        classe->setPhysicalModuleName(physicalModuleName);
     classe->setTemplateStuff(templateStuff);
 
     if (match(Tok_Colon) && !matchBaseList(classe, isClass))
@@ -1676,9 +1688,8 @@ bool CppCodeParser::matchNamespaceDecl(InnerNode *parent)
     */
     QString namespaceName = previousLexeme();
     NamespaceNode* ns = 0;
-    if (parent) {
-        ns = static_cast<NamespaceNode*>(parent->findChildNodeByNameAndType(namespaceName, Node::Namespace));
-    }
+    if (parent)
+        ns = static_cast<NamespaceNode*>(parent->findChildNode(namespaceName, Node::Namespace));
     if (!ns) {
         ns = new NamespaceNode(parent, namespaceName);
         ns->setAccess(access);
@@ -1690,35 +1701,76 @@ bool CppCodeParser::matchNamespaceDecl(InnerNode *parent)
     return matched && match(Tok_RightBrace);
 }
 
-bool CppCodeParser::matchUsingDecl()
+/*!
+  Match a C++ \c using clause. Return \c true if the match
+  is successful. Otherwise false.
+
+  If the \c using clause is for a namespace, an open namespace
+  <is inserted for qdoc to look in to find things.
+
+  If the \c using clause is a base class member function, the
+  member function is added to \a parent as an unresolved
+  \c using clause.
+ */
+bool CppCodeParser::matchUsingDecl(InnerNode* parent)
 {
+    bool usingNamespace = false;
     readToken(); // skip 'using'
 
-    // 'namespace'
-    if (tok != Tok_namespace)
-        return false;
-
-    readToken();
-    // identifier
-    if (tok != Tok_Ident)
-        return false;
-
-    QString name;
-    while (tok == Tok_Ident) {
-        name += lexeme();
-        readToken();
-        if (tok == Tok_Semicolon)
-            break;
-        else if (tok != Tok_Gulbrandsen)
-            return false;
-        name += "::";
+    if (tok == Tok_namespace) {
+        usingNamespace = true;
         readToken();
     }
 
-    /*
-        So far, so good. We have 'using namespace Foo;'.
-    */
-    activeNamespaces_.insert(name);
+    int openLeftAngles = 0;
+    int openLeftParens = 0;
+    bool usingOperator = false;
+    QString name;
+    while (tok != Tok_Semicolon) {
+        if ((tok != Tok_Ident) && (tok != Tok_Gulbrandsen)) {
+            if (tok == Tok_LeftAngle) {
+                ++openLeftAngles;
+            }
+            else if (tok == Tok_RightAngle) {
+                if (openLeftAngles <= 0)
+                    return false;
+                --openLeftAngles;
+            }
+            else if (tok == Tok_Comma) {
+                if (openLeftAngles <= 0)
+                    return false;
+            }
+            else if (tok == Tok_operator) {
+                usingOperator = true;
+            }
+            else if (tok == Tok_SomeOperator) {
+                if (!usingOperator)
+                    return false;
+            }
+            else if (tok == Tok_LeftParen) {
+                ++openLeftParens;
+            }
+            else if (tok == Tok_RightParen) {
+                if (openLeftParens <= 0)
+                    return false;
+                --openLeftParens;
+            }
+            else {
+                return false;
+            }
+        }
+        name += lexeme();
+        readToken();
+    }
+
+    if (usingNamespace) {
+        // 'using namespace Foo;'.
+        qdb_->insertOpenNamespace(name);
+    }
+    else if (parent && parent->isClass()) {
+        ClassNode* cn = static_cast<ClassNode*>(parent);
+        cn->addUnresolvedUsingClause(name);
+    }
     return true;
 }
 
@@ -1816,7 +1868,7 @@ bool CppCodeParser::matchTypedefDecl(InnerNode *parent)
     if (!match(Tok_Semicolon))
         return false;
 
-    if (parent && !parent->findChildNodeByNameAndType(name, Node::Typedef)) {
+    if (parent && !parent->findChildNode(name, Node::Typedef)) {
         TypedefNode* td = new TypedefNode(parent, name);
         td->setAccess(access);
         td->setLocation(location());
@@ -1856,6 +1908,16 @@ bool CppCodeParser::matchProperty(InnerNode *parent)
             return false;
         QString key = previousLexeme();
         QString value;
+
+        // Keywords with no associated values
+        if (key == "CONSTANT") {
+            property->setConstant();
+            continue;
+        }
+        else if (key == "FINAL") {
+            property->setFinal();
+            continue;
+        }
 
         if (match(Tok_Ident) || match(Tok_Number)) {
             value = previousLexeme();
@@ -1907,7 +1969,7 @@ bool CppCodeParser::matchProperty(InnerNode *parent)
             if (ok)
                 property->setRevision(revision);
             else
-                parent->doc().location().warning(tr("Invalid revision number: %1").arg(value));
+                location().warning(tr("Invalid revision number: %1").arg(value));
         } else if (key == "SCRIPTABLE") {
             QString v = value.toLower();
             if (v == "true")
@@ -1919,10 +1981,6 @@ bool CppCodeParser::matchProperty(InnerNode *parent)
                 property->setRuntimeScrFunc(value);
             }
         }
-        else if (key == "CONSTANT")
-            property->setConstant();
-        else if (key == "FINAL")
-            property->setFinal();
     }
     match(Tok_RightParen);
     return true;
@@ -1953,7 +2011,7 @@ bool CppCodeParser::matchDeclList(InnerNode *parent)
             matchNamespaceDecl(parent);
             break;
         case Tok_using:
-            matchUsingDecl();
+            matchUsingDecl(parent);
             break;
         case Tok_template:
             {
@@ -2002,7 +2060,11 @@ bool CppCodeParser::matchDeclList(InnerNode *parent)
         case Tok_Q_PROPERTY:
         case Tok_Q_PRIVATE_PROPERTY:
         case Tok_QDOC_PROPERTY:
-            matchProperty(parent);
+            if (!matchProperty(parent)) {
+                location().warning(tr("Failed to parse token %1 in property declaration").arg(lexeme()));
+                skipTo(Tok_RightParen);
+                match(Tok_RightParen);
+            }
             break;
         case Tok_Q_DECLARE_SEQUENTIAL_ITERATOR:
             readToken();
@@ -2041,7 +2103,7 @@ bool CppCodeParser::matchDeclList(InnerNode *parent)
                     TypedefNode *flagsNode = new TypedefNode(parent, flagsType);
                     flagsNode->setAccess(access);
                     flagsNode->setLocation(location());
-                    EnumNode* en = static_cast<EnumNode*>(parent->findChildNodeByNameAndType(name, Node::Enum));
+                    EnumNode* en = static_cast<EnumNode*>(parent->findChildNode(name, Node::Enum));
                     if (en)
                         en->setFlagsType(flagsNode);
                 }
@@ -2051,9 +2113,9 @@ bool CppCodeParser::matchDeclList(InnerNode *parent)
         case Tok_QT_MODULE:
             readToken();
             if (match(Tok_LeftParen) && match(Tok_Ident))
-                moduleName = previousLexeme();
-            if (!moduleName.startsWith("Qt"))
-                moduleName.prepend("Qt");
+                physicalModuleName = previousLexeme();
+            if (!physicalModuleName.startsWith("Qt"))
+                physicalModuleName.prepend("Qt");
             match(Tok_RightParen);
             break;
         default:
@@ -2079,10 +2141,9 @@ bool CppCodeParser::matchDeclList(InnerNode *parent)
 bool CppCodeParser::matchDocsAndStuff()
 {
     ExtraFuncData extra;
-    QSet<QString> topicCommandsAllowed = topicCommands();
-    QSet<QString> otherMetacommandsAllowed = otherMetaCommands();
-    QSet<QString> metacommandsAllowed = topicCommandsAllowed +
-            otherMetacommandsAllowed;
+    const QSet<QString>& topicCommandsAllowed = topicCommands();
+    const QSet<QString>& otherMetacommandsAllowed = otherMetaCommands();
+    const QSet<QString>& metacommandsAllowed = topicCommandsAllowed + otherMetacommandsAllowed;
 
     while (tok != Tok_Eoi) {
         if (tok == Tok_Doc) {
@@ -2099,25 +2160,27 @@ bool CppCodeParser::matchDocsAndStuff()
             /*
               Doc parses the comment.
              */
-            Doc doc(start_loc,end_loc,comment,metacommandsAllowed);
-
+            Doc doc(start_loc,end_loc,comment,metacommandsAllowed, topicCommandsAllowed);
             QString topic;
-            ArgList args;
+            bool isQmlPropertyTopic = false;
+            bool isJsPropertyTopic = false;
 
-            QSet<QString> topicCommandsUsed = topicCommandsAllowed & doc.metaCommandsUsed();
-
-            /*
-              There should be one topic command in the set,
-              or none. If the set is empty, then the comment
-              should be a function description.
-             */
-            if (topicCommandsUsed.count() > 0) {
-                topic = *topicCommandsUsed.constBegin();
-                args = doc.metaCommandArgs(topic);
+            const TopicList& topics = doc.topicsUsed();
+            if (!topics.isEmpty()) {
+                topic = topics[0].topic;
+                if ((topic == COMMAND_QMLPROPERTY) ||
+                    (topic == COMMAND_QMLPROPERTYGROUP) ||
+                    (topic == COMMAND_QMLATTACHEDPROPERTY)) {
+                    isQmlPropertyTopic = true;
+                }
+                else if ((topic == COMMAND_JSPROPERTY) ||
+                         (topic == COMMAND_JSPROPERTYGROUP) ||
+                         (topic == COMMAND_JSATTACHEDPROPERTY)) {
+                    isJsPropertyTopic = true;
+                }
             }
-
             NodeList nodes;
-            QList<Doc> docs;
+            DocList docs;
 
             if (topic.isEmpty()) {
                 QStringList parentPath;
@@ -2125,15 +2188,15 @@ bool CppCodeParser::matchDocsAndStuff()
                 FunctionNode *func = 0;
 
                 if (matchFunctionDecl(0, &parentPath, &clone, QString(), extra)) {
-                    foreach (const QString& usedNamespace_, activeNamespaces_) {
-                        QStringList newPath = usedNamespace_.split("::") + parentPath;
-                        func = qdb_->findFunctionNode(newPath, clone);
-                        if (func) {
-                            break;
-                        }
-                    }
+                    func = qdb_->findFunctionNode(parentPath, clone);
+                    /*
+                      If the node was not found, then search for it in the
+                      open C++ namespaces. We don't expect this search to
+                      be necessary often. Nor do we expect it to succeed
+                      very often.
+                    */
                     if (func == 0)
-                        func = qdb_->findFunctionNode(parentPath, clone);
+                        func = qdb_->findNodeInOpenNamespace(parentPath, clone);
 
                     if (func) {
                         func->borrowParameterNames(clone);
@@ -2151,43 +2214,39 @@ bool CppCodeParser::matchDocsAndStuff()
                                 .arg(COMMAND_FN).arg(COMMAND_PAGE));
                 }
             }
+            else if (isQmlPropertyTopic || isJsPropertyTopic) {
+                Doc nodeDoc = doc;
+                processQmlProperties(nodeDoc, nodes, docs, isJsPropertyTopic);
+            }
             else {
-                /*
-                  There is a topic command. Process it.
-                 */
-                if ((topic == COMMAND_QMLPROPERTY) ||
-                        (topic == COMMAND_QMLATTACHEDPROPERTY)) {
+                ArgList args;
+                const QSet<QString>& topicCommandsUsed = topicCommandsAllowed & doc.metaCommandsUsed();
+                if (topicCommandsUsed.count() > 0) {
+                    topic = *topicCommandsUsed.constBegin();
+                    args = doc.metaCommandArgs(topic);
+                }
+                if (topicCommandsUsed.count() > 1) {
+                    QString topics;
+                    QSet<QString>::ConstIterator t = topicCommandsUsed.constBegin();
+                    while (t != topicCommandsUsed.constEnd()) {
+                        topics += " \\" + *t + ",";
+                        ++t;
+                    }
+                    topics[topics.lastIndexOf(',')] = '.';
+                    int i = topics.lastIndexOf(',');
+                    topics[i] = ' ';
+                    topics.insert(i+1,"and");
+                    doc.location().warning(tr("Multiple topic commands found in comment: %1").arg(topics));
+                }
+                ArgList::ConstIterator a = args.constBegin();
+                while (a != args.constEnd()) {
                     Doc nodeDoc = doc;
-                    Node *node = processTopicCommandGroup(nodeDoc, topic,args);
+                    Node *node = processTopicCommand(nodeDoc,topic,*a);
                     if (node != 0) {
                         nodes.append(node);
                         docs.append(nodeDoc);
                     }
-                }
-                else {
-                    if (topicCommandsUsed.count() > 1) {
-                        QString topics;
-                        QSet<QString>::ConstIterator t = topicCommandsUsed.constBegin();
-                        while (t != topicCommandsUsed.constEnd()) {
-                            topics += " \\" + *t + ",";
-                            ++t;
-                        }
-                        topics[topics.lastIndexOf(',')] = '.';
-                        int i = topics.lastIndexOf(',');
-                        topics[i] = ' ';
-                        topics.insert(i+1,"and");
-                        doc.location().warning(tr("Multiple topic commands found in comment: %1").arg(topics));
-                    }
-                    ArgList::ConstIterator a = args.constBegin();
-                    while (a != args.constEnd()) {
-                        Doc nodeDoc = doc;
-                        Node *node = processTopicCommand(nodeDoc,topic,*a);
-                        if (node != 0) {
-                            nodes.append(node);
-                            docs.append(nodeDoc);
-                        }
-                        ++a;
-                    }
+                    ++a;
                 }
             }
 
@@ -2199,8 +2258,9 @@ bool CppCodeParser::matchDocsAndStuff()
                 checkModuleInclusion(*n);
                 if ((*n)->isInnerNode() && ((InnerNode *)*n)->includes().isEmpty()) {
                     InnerNode *m = static_cast<InnerNode *>(*n);
-                    while (m->parent() != qdb_->treeRoot())
+                    while (m->parent() && m->physicalModuleName().isEmpty()) {
                         m = m->parent();
+                    }
                     if (m == *n)
                         ((InnerNode *)*n)->addInclude((*n)->name());
                     else
@@ -2211,7 +2271,7 @@ bool CppCodeParser::matchDocsAndStuff()
             }
         }
         else if (tok == Tok_using) {
-            matchUsingDecl();
+            matchUsingDecl(0);
         }
         else {
             QStringList parentPath;
@@ -2256,9 +2316,8 @@ bool CppCodeParser::makeFunctionNode(const QString& signature,
     Tokenizer* outerTokenizer = tokenizer;
     int outerTok = tok;
 
-    Location loc;
     QByteArray latin1 = signature.toLatin1();
-    Tokenizer stringTokenizer(loc, latin1);
+    Tokenizer stringTokenizer(location(), latin1);
     stringTokenizer.setParsingFnOrMacro(true);
     tokenizer = &stringTokenizer;
     readToken();
@@ -2281,7 +2340,7 @@ bool CppCodeParser::makeFunctionNode(const QString& signature,
   the \a type.
 
   \a parent is the QML class node. The QML module and QML
-  element names have already been consumed to find \a parent.
+  type names have already been consumed to find \a parent.
   What remains in \a sig is the method signature. The method
   must be a child of \a parent.
  */
@@ -2338,10 +2397,10 @@ void CppCodeParser::instantiateIteratorMacro(const QString &container,
     Tokenizer stringTokenizer(loc, latin1);
     tokenizer = &stringTokenizer;
     readToken();
-    matchDeclList(QDocDatabase::qdocDB()->treeRoot());
+    matchDeclList(QDocDatabase::qdocDB()->primaryTreeRoot());
 }
 
-void CppCodeParser::createExampleFileNodes(DocNode *dn)
+void CppCodeParser::createExampleFileNodes(DocumentNode *dn)
 {
     QString examplePath = dn->name();
     QString proFileName = examplePath + QLatin1Char('/') + examplePath.split(QLatin1Char('/')).last() + ".pro";
@@ -2371,8 +2430,11 @@ void CppCodeParser::createExampleFileNodes(DocNode *dn)
                                         proFileName,
                                         userFriendlyFilePath);
             if (fullPath.isEmpty()) {
-                dn->location().warning(tr("Cannot find file '%1' or '%2'").arg(tmp).arg(proFileName));
-                dn->location().warning(tr("  EXAMPLE PATH DOES NOT EXIST: %1").arg(examplePath));
+                QString details = QLatin1String("Example directories: ") + exampleDirs.join(QLatin1Char(' '));
+                if (!exampleFiles.isEmpty())
+                    details += QLatin1String(", example files: ") + exampleFiles.join(QLatin1Char(' '));
+                dn->location().warning(tr("Cannot find file '%1' or '%2'").arg(tmp).arg(proFileName), details);
+                dn->location().warning(tr("  EXAMPLE PATH DOES NOT EXIST: %1").arg(examplePath), details);
                 return;
             }
         }
@@ -2409,13 +2471,13 @@ void CppCodeParser::createExampleFileNodes(DocNode *dn)
     }
 
     foreach (const QString &exampleFile, exampleFiles) {
-        new DocNode(dn,
+        new DocumentNode(dn,
                     exampleFile.mid(sizeOfBoringPartOfName),
                     Node::File,
                     Node::NoPageType);
     }
     foreach (const QString &imageFile, imageFiles) {
-        new DocNode(dn,
+        new DocumentNode(dn,
                     imageFile.mid(sizeOfBoringPartOfName),
                     Node::Image,
                     Node::NoPageType);

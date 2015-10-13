@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -67,9 +59,10 @@ QStringList QLibraryPrivate::prefixes_sys()
 
 bool QLibraryPrivate::load_sys()
 {
+#ifndef Q_OS_WINRT
     //avoid 'Bad Image' message box
     UINT oldmode = SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOOPENFILEERRORBOX);
-
+#endif
     // We make the following attempts at locating the library:
     //
     // WinCE
@@ -106,9 +99,20 @@ bool QLibraryPrivate::load_sys()
         attempts.append(QFileInfo(fileName).absoluteFilePath());
 #endif
     }
+#ifdef Q_OS_WINRT
+    if (fileName.startsWith(QLatin1Char('/')))
+        attempts.prepend(QDir::rootPath() + fileName);
+#endif
 
     Q_FOREACH (const QString &attempt, attempts) {
+#ifndef Q_OS_WINRT
         pHnd = LoadLibrary((wchar_t*)QDir::toNativeSeparators(attempt).utf16());
+#else // Q_OS_WINRT
+        QString path = QDir::toNativeSeparators(QDir::current().relativeFilePath(attempt));
+        pHnd = LoadPackagedLibrary((LPCWSTR)path.utf16(), 0);
+        if (pHnd)
+            qualifiedFileName = attempt;
+#endif // !Q_OS_WINRT
 
         // If we have a handle or the last error is something other than "unable
         // to find the module", then bail out
@@ -116,13 +120,16 @@ bool QLibraryPrivate::load_sys()
             break;
     }
 
+#ifndef Q_OS_WINRT
     SetErrorMode(oldmode);
+#endif
     if (!pHnd) {
         errorString = QLibrary::tr("Cannot load library %1: %2").arg(fileName).arg(qt_error_string());
     } else {
         // Query the actual name of the library that was loaded
         errorString.clear();
 
+#ifndef Q_OS_WINRT
         wchar_t buffer[MAX_PATH];
         ::GetModuleFileName(pHnd, buffer, MAX_PATH);
 
@@ -133,6 +140,7 @@ bool QLibraryPrivate::load_sys()
             qualifiedFileName = moduleFileName;
         else
             qualifiedFileName = dir.filePath(moduleFileName);
+#endif // !Q_OS_WINRT
     }
     return (pHnd != 0);
 }

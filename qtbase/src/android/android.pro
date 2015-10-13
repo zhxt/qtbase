@@ -1,2 +1,3 @@
 TEMPLATE      = subdirs
-SUBDIRS       = jar java
+CONFIG        += ordered
+SUBDIRS       = jar java templates accessibility

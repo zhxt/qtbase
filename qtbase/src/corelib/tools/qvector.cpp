@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -180,11 +172,11 @@
 /*!
     \fn QVector<T> QVector::mid(int pos, int length = -1) const
 
-    Returns a vector whose elements are copied from this vector,
+    Returns a sub-vector which contains elements from this vector,
     starting at position \a pos. If \a length is -1 (the default), all
-    elements after \a pos are copied; otherwise \a length elements (or
+    elements after \a pos are included; otherwise \a length elements (or
     all remaining elements if there are less than \a length elements)
-    are copied.
+    are included.
 */
 
 
@@ -193,6 +185,15 @@
     Constructs an empty vector.
 
     \sa resize()
+*/
+
+/*!
+    \fn QVector::QVector(QVector<T> &&other)
+
+    Move-constructs a QVector instance, making it point at the same
+    object that \a other was pointing to.
+
+    \since 5.2
 */
 
 /*! \fn QVector::QVector(int size)
@@ -228,7 +229,7 @@
 /*! \fn QVector::QVector(std::initializer_list<T> args)
     \since 4.8
 
-    Construct a vector from the std::initilizer_list given by \a args.
+    Constructs a vector from the std::initializer_list given by \a args.
 
     This constructor is only enabled if the compiler supports C++11 initializer
     lists.
@@ -246,6 +247,14 @@
     vector.
 */
 
+/*!
+    \fn QVector<T> &QVector::operator=(QVector<T> &&other)
+
+    Move-assigns \a other to this QVector instance.
+
+    \since 5.2
+*/
+
 /*! \fn void QVector::swap(QVector<T> &other)
     \since 4.8
 
@@ -255,8 +264,8 @@
 
 /*! \fn bool QVector::operator==(const QVector<T> &other) const
 
-    Returns true if \a other is equal to this vector; otherwise
-    returns false.
+    Returns \c true if \a other is equal to this vector; otherwise
+    returns \c false.
 
     Two vectors are considered equal if they contain the same values
     in the same order.
@@ -269,8 +278,8 @@
 
 /*! \fn bool QVector::operator!=(const QVector<T> &other) const
 
-    Returns true if \a other is not equal to this vector; otherwise
-    returns false.
+    Returns \c true if \a other is not equal to this vector; otherwise
+    returns \c false.
 
     Two vectors are considered equal if they contain the same values
     in the same order.
@@ -290,7 +299,7 @@
 
 /*! \fn bool QVector::isEmpty() const
 
-    Returns true if the vector has size 0; otherwise returns false.
+    Returns \c true if the vector has size 0; otherwise returns \c false.
 
     \sa size(), resize()
 */
@@ -454,6 +463,18 @@
     \sa operator<<(), prepend(), insert()
 */
 
+/*! \fn void QVector::append(const QVector<T> &value)
+
+    \overload
+
+    \since 5.5
+
+    Appends the items of the \a value vector to this vector.
+
+    \sa operator<<(), operator+=()
+*/
+
+
 /*! \fn void QVector::prepend(const T &value)
 
     Inserts \a value at the beginning of the vector.
@@ -545,6 +566,69 @@
     \sa insert(), replace(), fill()
 */
 
+/*! \fn void QVector::removeAt(int i)
+    \since 5.2
+
+    Removes the element at index position \a i.
+    Equivalent to
+    \code
+    remove(i);
+    \endcode
+
+    Provided for compatibility with QList.
+
+    \sa remove(), QList::removeAt()
+*/
+
+/*! \fn int QVector::removeAll(const T &t)
+    \since 5.4
+
+    Removes all elements that compare equal to \a t from the
+    vector. Returns the number of elements removed, if any.
+
+    Provided for compatibility with QList.
+
+    \sa removeOne(), QList::removeAll()
+*/
+
+/*! \fn bool QVector::removeOne(const T &t)
+    \since 5.4
+
+    Removes the first element that compares equal to \a t from the
+    vector. Returns whether an element was, in fact, removed.
+
+    Provided for compatibility with QList.
+
+    \sa removeAll(), QList::removeOne()
+*/
+
+/*! \fn int QVector::length() const
+    \since 5.2
+
+    Same as size() and count().
+
+    Provided for compatibility with QList.
+
+    \sa size(), count(), QList::length()
+*/
+
+/*! \fn T QVector::takeAt(int i)
+    \since 5.2
+
+    Removes the element at index position \a i and returns it.
+
+    Equivalent to
+    \code
+    T t = at(i);
+    remove(i);
+    return t;
+    \endcode
+
+    Provided for compatibility with QList.
+
+    \sa takeFirst(), takeLast(), QList::takeAt()
+*/
+
 /*! \fn void QVector::removeFirst()
     \since 5.1
     Removes the first item in the vector. Calling this function is
@@ -566,6 +650,7 @@
 */
 
 /*! \fn T QVector::takeFirst()
+    \since 5.1
 
     Removes the first item in the vector and returns it. This function
     assumes the vector is not empty. To avoid failure, call isEmpty()
@@ -575,6 +660,7 @@
 */
 
 /*! \fn T QVector::takeLast()
+    \since 5.1
 
     Removes the last item in the list and returns it. This function
     assumes the vector is not empty. To avoid failure, call isEmpty()
@@ -632,8 +718,8 @@
 
 /*! \fn bool QVector::contains(const T &value) const
 
-    Returns true if the vector contains an occurrence of \a value;
-    otherwise returns false.
+    Returns \c true if the vector contains an occurrence of \a value;
+    otherwise returns \c false.
 
     This function requires the value type to have an implementation of
     \c operator==().
@@ -644,8 +730,8 @@
 /*! \fn bool QVector::startsWith(const T &value) const
     \since 4.5
 
-    Returns true if this vector is not empty and its first
-    item is equal to \a value; otherwise returns false.
+    Returns \c true if this vector is not empty and its first
+    item is equal to \a value; otherwise returns \c false.
 
     \sa isEmpty(), first()
 */
@@ -653,8 +739,8 @@
 /*! \fn bool QVector::endsWith(const T &value) const
     \since 4.5
 
-    Returns true if this vector is not empty and its last
-    item is equal to \a value; otherwise returns false.
+    Returns \c true if this vector is not empty and its last
+    item is equal to \a value; otherwise returns \c false.
 
     \sa isEmpty(), last()
 */
@@ -850,8 +936,8 @@
 /*! \fn bool QVector::empty() const
 
     This function is provided for STL compatibility. It is equivalent
-    to isEmpty(), returning true if the vector is empty; otherwise
-    returns false.
+    to isEmpty(), returning \c true if the vector is empty; otherwise
+    returns \c false.
 */
 
 /*! \fn QVector<T> &QVector::operator+=(const QVector<T> &other)
@@ -902,6 +988,11 @@
     iterators}. The STL-style non-const iterator is simply a typedef
     for "T *" (pointer to T).
 
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
     \sa QVector::begin(), QVector::end(), QVector::const_iterator, QMutableVectorIterator
 */
 
@@ -913,6 +1004,11 @@
     QVector provides both \l{STL-style iterators} and \l{Java-style
     iterators}. The STL-style const iterator is simply a typedef for
     "const T *" (pointer to const T).
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
 
     \sa QVector::constBegin(), QVector::constEnd(), QVector::iterator, QVectorIterator
 */

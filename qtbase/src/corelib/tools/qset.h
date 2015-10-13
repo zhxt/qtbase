@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -60,7 +52,7 @@ public:
 #ifdef Q_COMPILER_INITIALIZER_LISTS
     inline QSet(std::initializer_list<T> list)
     {
-        reserve(list.size());
+        reserve(int(list.size()));
         for (typename std::initializer_list<T>::const_iterator it = list.begin(); it != list.end(); ++it)
             insert(*it);
     }
@@ -70,6 +62,7 @@ public:
     inline QSet<T> &operator=(const QSet<T> &other)
         { q_hash = other.q_hash; return *this; }
 #ifdef Q_COMPILER_RVALUE_REFS
+    inline QSet(QSet &&other) : q_hash(qMove(other.q_hash)) {}
     inline QSet<T> &operator=(QSet<T> &&other)
         { qSwap(q_hash, other.q_hash); return *this; }
 #endif
@@ -90,7 +83,9 @@ public:
 
     inline void detach() { q_hash.detach(); }
     inline bool isDetached() const { return q_hash.isDetached(); }
+#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
     inline void setSharable(bool sharable) { q_hash.setSharable(sharable); }
+#endif
 
     inline void clear() { q_hash.clear(); }
 
@@ -180,7 +175,10 @@ public:
     inline const_iterator cend() const { return q_hash.end(); }
     inline const_iterator constEnd() const { return q_hash.constEnd(); }
     iterator erase(iterator i)
-        { return q_hash.erase(reinterpret_cast<typename Hash::iterator &>(i)); }
+    {
+        Q_ASSERT_X(isValidIterator(i), "QSet::erase", "The specified const_iterator argument 'i' is invalid");
+        return q_hash.erase(reinterpret_cast<typename Hash::iterator &>(i));
+    }
 
     // more Qt
     typedef iterator Iterator;
@@ -233,7 +231,20 @@ public:
 
 private:
     Hash q_hash;
+    bool isValidIterator(const iterator &i) const
+    {
+        return q_hash.isValidIterator(reinterpret_cast<const typename Hash::iterator&>(i));
+    }
 };
+
+template <typename T>
+uint qHash(const QSet<T> &key, uint seed = 0)
+Q_DECL_NOEXCEPT_EXPR(noexcept(qHashRangeCommutative(key.begin(), key.end(), seed)))
+{
+    return qHashRangeCommutative(key.begin(), key.end(), seed);
+}
+
+// inline function implementations
 
 template <class T>
 Q_INLINE_TEMPLATE void QSet<T>::reserve(int asize) { q_hash.reserve(asize); }
@@ -253,8 +264,16 @@ Q_INLINE_TEMPLATE QSet<T> &QSet<T>::unite(const QSet<T> &other)
 template <class T>
 Q_INLINE_TEMPLATE QSet<T> &QSet<T>::intersect(const QSet<T> &other)
 {
-    QSet<T> copy1(*this);
-    QSet<T> copy2(other);
+    QSet<T> copy1;
+    QSet<T> copy2;
+    if (size() <= other.size()) {
+        copy1 = *this;
+        copy2 = other;
+    } else {
+        copy1 = other;
+        copy2 = *this;
+        *this = copy1;
+    }
     typename QSet<T>::const_iterator i = copy1.constEnd();
     while (i != copy1.constBegin()) {
         --i;
@@ -338,12 +357,9 @@ class QMutableSetIterator
 public:
     inline QMutableSetIterator(QSet<T> &container)
         : c(&container)
-    { c->setSharable(false); i = c->begin(); n = c->end(); }
-    inline ~QMutableSetIterator()
-    { c->setSharable(true); }
+    { i = c->begin(); n = c->end(); }
     inline QMutableSetIterator &operator=(QSet<T> &container)
-    { c->setSharable(true); c = &container; c->setSharable(false);
-      i = c->begin(); n = c->end(); return *this; }
+    { c = &container; i = c->begin(); n = c->end(); return *this; }
     inline void toFront() { i = c->begin(); n = c->end(); }
     inline void toBack() { i = c->end(); n = i; }
     inline bool hasNext() const { return c->constEnd() != i; }

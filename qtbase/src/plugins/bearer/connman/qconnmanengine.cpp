@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,9 +46,6 @@
 #include <QtDBus/QDBusInterface>
 #include <QtDBus/QDBusMessage>
 #include <QtDBus/QDBusReply>
-#include <sys/inotify.h>
-#include <fcntl.h>
-#include <private/qcore_unix_p.h>
 #ifndef QT_NO_BEARERMANAGEMENT
 #ifndef QT_NO_DBUS
 
@@ -76,7 +65,6 @@ QConnmanEngine::QConnmanEngine(QObject *parent)
 
 QConnmanEngine::~QConnmanEngine()
 {
-    qt_safe_close(inotifyFileDescriptor);
 }
 
 bool QConnmanEngine::connmanAvailable() const
@@ -94,8 +82,8 @@ void QConnmanEngine::initialize()
     ofonoContextManager = new QOfonoDataConnectionManagerInterface(ofonoManager->currentModem(),this);
     connect(ofonoContextManager,SIGNAL(roamingAllowedChanged(bool)),this,SLOT(reEvaluateCellular()));
 
-    connect(connmanManager,SIGNAL(servicesChanged(ConnmanMapList, QList<QDBusObjectPath>)),
-            this, SLOT(updateServices(ConnmanMapList, QList<QDBusObjectPath>)));
+    connect(connmanManager,SIGNAL(servicesChanged(ConnmanMapList,QList<QDBusObjectPath>)),
+            this, SLOT(updateServices(ConnmanMapList,QList<QDBusObjectPath>)));
 
     connect(connmanManager,SIGNAL(servicesReady(QStringList)),this,SLOT(servicesReady(QStringList)));
     connect(connmanManager,SIGNAL(scanFinished()),this,SLOT(finishedScan()));
@@ -104,14 +92,6 @@ void QConnmanEngine::initialize()
         addServiceConfiguration(servPath);
     }
     Q_EMIT updateCompleted();
-    QSettings confFile(QStringLiteral("nemomobile"),QStringLiteral("connectionagent"));
-
-    inotifyFileDescriptor = ::inotify_init();
-    inotifyWatcher = ::inotify_add_watch(inotifyFileDescriptor, QFile::encodeName(confFile.fileName()), IN_MODIFY);
-    if (inotifyWatcher > 0) {
-        QSocketNotifier *notifier = new QSocketNotifier(inotifyFileDescriptor, QSocketNotifier::Read, this);
-        connect(notifier, SIGNAL(activated(int)), this, SLOT(inotifyActivated()));
-    }
 }
 
 void QConnmanEngine::changedModem()
@@ -189,10 +169,6 @@ void QConnmanEngine::connectToId(const QString &id)
                     emit connectionError(id, QBearerEngineImpl::OperationNotSupported);
                     return;
                 }
-                if (isAlwaysAskRoaming()) {
-                    emit connectionError(id, QBearerEngineImpl::OperationNotSupported);
-                    return;
-                }
             }
         }
         if (serv->autoConnect())
@@ -266,12 +242,11 @@ QNetworkSession::State QConnmanEngine::sessionStateForId(const QString &id)
         return QNetworkSession::Disconnected;
     }
 
-    if (servState == QLatin1String("association") || servState == QLatin1String("configuration")
-            || servState == QLatin1String("ready")) {
+    if (servState == QLatin1String("association") || servState == QLatin1String("configuration")) {
         return QNetworkSession::Connecting;
     }
 
-    if (servState == QLatin1String("online")) {
+    if (servState == QLatin1String("online") || servState == QLatin1String("ready")) {
         return QNetworkSession::Connected;
     }
 
@@ -357,7 +332,7 @@ void QConnmanEngine::serviceStateChanged(const QString &state)
     QConnmanServiceInterface *service = qobject_cast<QConnmanServiceInterface *>(sender());
     configurationChange(service);
 
-    if (state == QStringLiteral("failure")) {
+    if (state == QLatin1String("failure")) {
         emit connectionError(service->path(), ConnectError);
     }
 }
@@ -415,9 +390,8 @@ QNetworkConfiguration::StateFlags QConnmanEngine::getStateForService(const QStri
 
     if (serv->type() == QLatin1String("cellular")) {
 
-        if (!serv->autoConnect()
-                || (serv->roaming()
-                    && (isAlwaysAskRoaming() || !isRoamingAllowed(serv->path())))) {
+        if (!serv->autoConnect()|| (serv->roaming()
+                    && !isRoamingAllowed(serv->path()))) {
             flag = (flag | QNetworkConfiguration::Defined);
         } else {
             flag = (flag | QNetworkConfiguration::Discovered);
@@ -431,7 +405,7 @@ QNetworkConfiguration::StateFlags QConnmanEngine::getStateForService(const QStri
             flag = QNetworkConfiguration::Undefined;
         }
     }
-    if (state == QLatin1String("online")) {
+    if (state == QLatin1String("online") || state == QLatin1String("ready")) {
         flag = (flag | QNetworkConfiguration::Active);
     }
 
@@ -468,7 +442,7 @@ QNetworkConfiguration::BearerType QConnmanEngine::ofonoTechToBearerType(const QS
         } else if (currentTechnology == QLatin1String("hspa")) {
             return QNetworkConfiguration::BearerHSPA;
         } else if (currentTechnology == QLatin1String("lte")) {
-            return QNetworkConfiguration::BearerWiMAX; //not exact
+            return QNetworkConfiguration::BearerLTE;
         }
     }
     return QNetworkConfiguration::BearerUnknown;
@@ -507,7 +481,7 @@ void QConnmanEngine::addServiceConfiguration(const QString &servicePath)
 {
     QMutexLocker locker(&mutex);
     if (!connmanServiceInterfaces.contains(servicePath)) {
-        QConnmanServiceInterface *serv = new QConnmanServiceInterface(servicePath);
+        QConnmanServiceInterface *serv = new QConnmanServiceInterface(servicePath, this);
         connmanServiceInterfaces.insert(serv->path(),serv);
     }
 
@@ -542,7 +516,7 @@ void QConnmanEngine::addServiceConfiguration(const QString &servicePath)
         cpPriv->id = servicePath;
         cpPriv->type = QNetworkConfiguration::InternetAccessPoint;
 
-        if (service->security() == QStringLiteral("none")) {
+        if (service->security() == QLatin1String("none")) {
             cpPriv->purpose = QNetworkConfiguration::PublicPurpose;
         } else {
             cpPriv->purpose = QNetworkConfiguration::PrivatePurpose;
@@ -570,30 +544,11 @@ bool QConnmanEngine::requiresPolling() const
     return false;
 }
 
-bool QConnmanEngine::isAlwaysAskRoaming()
-{
-    QSettings confFile(QStringLiteral("nemomobile"),QStringLiteral("connectionagent"));
-    confFile.beginGroup(QStringLiteral("Connectionagent"));
-    return confFile.value(QStringLiteral("askForRoaming")).toBool();
-}
-
 void QConnmanEngine::reEvaluateCellular()
 {
     Q_FOREACH (const QString &servicePath, connmanManager->getServices()) {
         if (servicePath.contains("cellular") && accessPointConfigurations.contains(servicePath)) {
             configurationChange(connmanServiceInterfaces.value(servicePath));
-        }
-    }
-}
-
-void QConnmanEngine::inotifyActivated()
-{
-    char buffer[1024];
-    int len = qt_safe_read(inotifyFileDescriptor, (void *)buffer, sizeof(buffer));
-    if (len > 0) {
-        struct inotify_event *event = (struct inotify_event *)buffer;
-        if (event->wd == inotifyWatcher && (event->mask & IN_MODIFY) == 0) {
-            QTimer::singleShot(1000, this, SLOT(reEvaluateCellular())); //give this time to finish write
         }
     }
 }

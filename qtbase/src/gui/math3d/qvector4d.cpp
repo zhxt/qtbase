@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -68,6 +60,14 @@ QT_BEGIN_NAMESPACE
     \fn QVector4D::QVector4D()
 
     Constructs a null vector, i.e. with coordinates (0, 0, 0, 0).
+*/
+
+/*!
+    \fn QVector4D::QVector4D(Qt::Initialization)
+    \since 5.5
+    \internal
+
+    Constructs a vector without initializing the contents.
 */
 
 /*!
@@ -157,8 +157,8 @@ QVector4D::QVector4D(const QVector3D& vector, float wpos)
 /*!
     \fn bool QVector4D::isNull() const
 
-    Returns true if the x, y, z, and w coordinates are set to 0.0,
-    otherwise returns false.
+    Returns \c true if the x, y, z, and w coordinates are set to 0.0,
+    otherwise returns \c false.
 */
 
 /*!
@@ -225,6 +225,25 @@ QVector4D::QVector4D(const QVector3D& vector, float wpos)
     \sa w(), setX(), setY(), setZ()
 */
 
+/*! \fn float &QVector4D::operator[](int i)
+    \since 5.2
+
+    Returns the component of the vector at index position \a i
+    as a modifiable reference.
+
+    \a i must be a valid index position in the vector (i.e., 0 <= \a i
+    < 4).
+*/
+
+/*! \fn float QVector4D::operator[](int i) const
+    \since 5.2
+
+    Returns the component of the vector at index position \a i.
+
+    \a i must be a valid index position in the vector (i.e., 0 <= \a i
+    < 4).
+*/
+
 /*!
     Returns the length of the vector from the origin.
 
@@ -237,7 +256,7 @@ float QVector4D::length() const
                  double(yp) * double(yp) +
                  double(zp) * double(zp) +
                  double(wp) * double(wp);
-    return float(sqrt(len));
+    return float(std::sqrt(len));
 }
 
 /*!
@@ -270,7 +289,7 @@ QVector4D QVector4D::normalized() const
     if (qFuzzyIsNull(len - 1.0f)) {
         return *this;
     } else if (!qFuzzyIsNull(len)) {
-        double sqrtLen = sqrt(len);
+        double sqrtLen = std::sqrt(len);
         return QVector4D(float(double(xp) / sqrtLen),
                          float(double(yp) / sqrtLen),
                          float(double(zp) / sqrtLen),
@@ -296,7 +315,7 @@ void QVector4D::normalize()
     if (qFuzzyIsNull(len - 1.0f) || qFuzzyIsNull(len))
         return;
 
-    len = sqrt(len);
+    len = std::sqrt(len);
 
     xp = float(double(xp) / len);
     yp = float(double(yp) / len);
@@ -348,6 +367,16 @@ void QVector4D::normalize()
 */
 
 /*!
+    \fn QVector4D &QVector4D::operator/=(const QVector4D &vector)
+    \since 5.5
+
+    Divides the components of this vector by the corresponding
+    components in \a vector.
+
+    \sa operator*=()
+*/
+
+/*!
     Returns the dot product of \a v1 and \a v2.
 */
 float QVector4D::dotProduct(const QVector4D& v1, const QVector4D& v2)
@@ -359,7 +388,7 @@ float QVector4D::dotProduct(const QVector4D& v1, const QVector4D& v2)
     \fn bool operator==(const QVector4D &v1, const QVector4D &v2)
     \relates QVector4D
 
-    Returns true if \a v1 is equal to \a v2; otherwise returns false.
+    Returns \c true if \a v1 is equal to \a v2; otherwise returns \c false.
     This operator uses an exact floating-point comparison.
 */
 
@@ -367,7 +396,7 @@ float QVector4D::dotProduct(const QVector4D& v1, const QVector4D& v2)
     \fn bool operator!=(const QVector4D &v1, const QVector4D &v2)
     \relates QVector4D
 
-    Returns true if \a v1 is not equal to \a v2; otherwise returns false.
+    Returns \c true if \a v1 is not equal to \a v2; otherwise returns \c false.
     This operator uses an exact floating-point comparison.
 */
 
@@ -441,10 +470,21 @@ float QVector4D::dotProduct(const QVector4D& v1, const QVector4D& v2)
 */
 
 /*!
+    \fn const QVector4D operator/(const QVector4D &vector, const QVector4D &divisor)
+    \relates QVector4D
+    \since 5.5
+
+    Returns the QVector4D object formed by dividing components of the given
+    \a vector by a respective components of the given \a divisor.
+
+    \sa QVector4D::operator/=()
+*/
+
+/*!
     \fn bool qFuzzyCompare(const QVector4D& v1, const QVector4D& v2)
     \relates QVector4D
 
-    Returns true if \a v1 and \a v2 are equal, allowing for a small
+    Returns \c true if \a v1 and \a v2 are equal, allowing for a small
     fuzziness factor for floating-point comparisons; false otherwise.
 */
 
@@ -533,10 +573,11 @@ QVector4D::operator QVariant() const
 
 QDebug operator<<(QDebug dbg, const QVector4D &vector)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QVector4D("
         << vector.x() << ", " << vector.y() << ", "
         << vector.z() << ", " << vector.w() << ')';
-    return dbg.space();
+    return dbg;
 }
 
 #endif

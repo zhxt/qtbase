@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -71,6 +63,8 @@ private slots:
     void submit_data();
     void submit();
     void testRoleNames();
+    void testSwappingRowsProxy();
+    void testDragAndDrop();
 };
 
 // Subclass that exposes the protected functions.
@@ -217,7 +211,6 @@ void tst_QAbstractProxyModel::mapFromSource()
     QCOMPARE(model.mapFromSource(sourceIndex), mapFromSource);
 }
 
-Q_DECLARE_METATYPE(QItemSelection)
 void tst_QAbstractProxyModel::mapSelectionFromSource_data()
 {
     QTest::addColumn<QItemSelection>("selection");
@@ -396,6 +389,122 @@ void tst_QAbstractProxyModel::testRoleNames()
     QVERIFY( proxy2RoleNames.value(StandardItemModelWithCustomRoleNames::CustomRole1) == "custom1" );
     QVERIFY( proxy2RoleNames.value(StandardItemModelWithCustomRoleNames::CustomRole2) == "custom2" );
 }
+
+// This class only supports very simple table models
+class SwappingProxy : public QAbstractProxyModel
+{
+    static int swapRow(const int row)
+    {
+        if (row == 2) {
+            return 3;
+        } else if (row == 3) {
+            return 2;
+        } else {
+            return row;
+        }
+    }
+public:
+    virtual QModelIndex index(int row, int column, const QModelIndex &parentIdx) const
+    {
+        if (!sourceModel())
+            return QModelIndex();
+        if (row < 0 || column < 0)
+            return QModelIndex();
+        if (row >= sourceModel()->rowCount())
+            return QModelIndex();
+        if (column >= sourceModel()->columnCount())
+            return QModelIndex();
+        return createIndex(row, column, parentIdx.internalPointer());
+    }
+
+    virtual QModelIndex parent(const QModelIndex &parentIdx) const
+    {
+        // well, we're a 2D model
+        Q_UNUSED(parentIdx);
+        return QModelIndex();
+    }
+
+    virtual int rowCount(const QModelIndex &parentIdx) const
+    {
+        if (parentIdx.isValid() || !sourceModel())
+            return 0;
+        return sourceModel()->rowCount();
+    }
+
+    virtual int columnCount(const QModelIndex &parentIdx) const
+    {
+        if (parentIdx.isValid() || !sourceModel())
+            return 0;
+        return sourceModel()->rowCount();
+    }
+
+    virtual QModelIndex mapToSource(const QModelIndex &proxyIndex) const
+    {
+        if (!proxyIndex.isValid())
+            return QModelIndex();
+        if (!sourceModel())
+            return QModelIndex();
+        Q_ASSERT(!proxyIndex.parent().isValid());
+        return sourceModel()->index(swapRow(proxyIndex.row()), proxyIndex.column(), QModelIndex());
+    }
+
+    virtual QModelIndex mapFromSource(const QModelIndex &sourceIndex) const
+    {
+        if (!sourceIndex.isValid())
+            return QModelIndex();
+        if (!sourceModel())
+            return QModelIndex();
+        Q_ASSERT(!sourceIndex.parent().isValid());
+        return index(swapRow(sourceIndex.row()), sourceIndex.column(), QModelIndex());
+    }
+};
+
+void tst_QAbstractProxyModel::testSwappingRowsProxy()
+{
+    QStandardItemModel defaultModel;
+    defaultModel.setRowCount(4);
+    defaultModel.setColumnCount(2);
+    for (int row = 0; row < defaultModel.rowCount(); ++row) {
+        defaultModel.setItem(row, 0, new QStandardItem(QString::number(row) + QLatin1Char('A')));
+        defaultModel.setItem(row, 1, new QStandardItem(QString::number(row) + QLatin1Char('B')));
+    }
+    SwappingProxy proxy;
+    proxy.setSourceModel(&defaultModel);
+    QCOMPARE(proxy.data(proxy.index(0, 0, QModelIndex())), QVariant("0A"));
+    QCOMPARE(proxy.data(proxy.index(0, 1, QModelIndex())), QVariant("0B"));
+    QCOMPARE(proxy.data(proxy.index(1, 0, QModelIndex())), QVariant("1A"));
+    QCOMPARE(proxy.data(proxy.index(1, 1, QModelIndex())), QVariant("1B"));
+    QCOMPARE(proxy.data(proxy.index(2, 0, QModelIndex())), QVariant("3A"));
+    QCOMPARE(proxy.data(proxy.index(2, 1, QModelIndex())), QVariant("3B"));
+    QCOMPARE(proxy.data(proxy.index(3, 0, QModelIndex())), QVariant("2A"));
+    QCOMPARE(proxy.data(proxy.index(3, 1, QModelIndex())), QVariant("2B"));
+
+    for (int row = 0; row < defaultModel.rowCount(); ++row) {
+        QModelIndex left = proxy.index(row, 0, QModelIndex());
+        QModelIndex right = proxy.index(row, 1, QModelIndex());
+        QCOMPARE(left.sibling(left.row(), 1), right);
+        QCOMPARE(right.sibling(right.row(), 0), left);
+    }
+}
+
+class StandardItemModelWithCustomDragAndDrop : public QStandardItemModel
+{
+public:
+    QStringList mimeTypes() const { return QStringList() << QStringLiteral("foo/mimetype"); }
+    Qt::DropActions supportedDragActions() const { return Qt::CopyAction | Qt::LinkAction; }
+    Qt::DropActions supportedDropActions() const { return Qt::MoveAction; }
+};
+
+void tst_QAbstractProxyModel::testDragAndDrop()
+{
+    StandardItemModelWithCustomDragAndDrop sourceModel;
+    SubQAbstractProxyModel proxy;
+    proxy.setSourceModel(&sourceModel);
+    QCOMPARE(proxy.mimeTypes(), sourceModel.mimeTypes());
+    QCOMPARE(proxy.supportedDragActions(), sourceModel.supportedDragActions());
+    QCOMPARE(proxy.supportedDropActions(), sourceModel.supportedDropActions());
+}
+
 
 QTEST_MAIN(tst_QAbstractProxyModel)
 #include "tst_qabstractproxymodel.moc"

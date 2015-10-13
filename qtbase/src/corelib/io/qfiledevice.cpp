@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -53,9 +45,9 @@ QT_BEGIN_NAMESPACE
 static const int QFILE_WRITEBUFFER_SIZE = 16384;
 
 QFileDevicePrivate::QFileDevicePrivate()
-    : fileEngine(0), lastWasWrite(false),
-      writeBuffer(QFILE_WRITEBUFFER_SIZE), error(QFile::NoError),
-      cachedSize(0)
+    : fileEngine(0),
+      writeBuffer(QFILE_WRITEBUFFER_SIZE), cachedSize(0),
+      error(QFile::NoError), lastWasWrite(false)
 {
 }
 
@@ -139,10 +131,9 @@ void QFileDevicePrivate::setError(QFileDevice::FileError err, int errNum)
     are returned and on Windows the rights of the current user are
     returned. This behavior might change in a future Qt version.
 
-    Note that Qt does not by default check for permissions on NTFS
-    file systems, as this may decrease the performance of file
-    handling considerably. It is possible to force permission checking
-    on NTFS by including the following code in your source:
+    \note On NTFS file systems, ownership and permissions checking is
+    disabled by default for performance reasons. To enable it,
+    include the following line:
 
     \snippet ntfsp.cpp 0
 
@@ -232,8 +223,8 @@ QFileDevice::~QFileDevice()
 }
 
 /*!
-    Returns true if the file can only be manipulated sequentially;
-    otherwise returns false.
+    Returns \c true if the file can only be manipulated sequentially;
+    otherwise returns \c false.
 
     Most files support random-access, but some special files may not.
 
@@ -249,7 +240,7 @@ bool QFileDevice::isSequential() const
   Returns the file handle of the file.
 
   This is a small positive integer, suitable for use with C library
-  functions such as fdopen() and fcntl(). On systems that use file
+  functions such as \c fdopen() and \c fcntl(). On systems that use file
   descriptors for sockets (i.e. Unix systems, but not Windows) the handle
   can be used with QSocketNotifier as well.
 
@@ -270,7 +261,7 @@ int QFileDevice::handle() const
 
 /*!
     Returns the name of the file.
-    The default implementation in QFileDevice returns QString().
+    The default implementation in QFileDevice returns a null string.
 */
 QString QFileDevice::fileName() const
 {
@@ -286,8 +277,8 @@ static inline qint64 _qfile_writeData(QAbstractFileEngine *engine, QRingBuffer *
 }
 
 /*!
-    Flushes any buffered data to the file. Returns true if successful;
-    otherwise returns false.
+    Flushes any buffered data to the file. Returns \c true if successful;
+    otherwise returns \c false.
 */
 bool QFileDevice::flush()
 {
@@ -351,11 +342,11 @@ qint64 QFileDevice::pos() const
 }
 
 /*!
-  Returns true if the end of the file has been reached; otherwise returns
+  Returns \c true if the end of the file has been reached; otherwise returns
   false.
 
   For regular empty files on Unix (e.g. those in \c /proc), this function
-  returns true, since the file system reports that the size of such a file is
+  returns \c true, since the file system reports that the size of such a file is
   0. Therefore, you should not depend on atEnd() when reading data from such a
   file, but rather call read() until no more data can be read.
 */
@@ -398,9 +389,9 @@ bool QFileDevice::atEnd() const
     return false.
 
     Seeking beyond the end of a file:
-    If the position is beyond the end of a file, then seek() shall not
+    If the position is beyond the end of a file, then seek() will not
     immediately extend the file. If a write is performed at this position,
-    then the file shall be extended. The content of the file between the
+    then the file will be extended. The content of the file between the
     previous end of file and the newly written data is UNDEFINED and
     varies between platforms and file systems.
 */
@@ -578,7 +569,7 @@ qint64 QFileDevice::writeData(const char *data, qint64 len)
     Returns the file error status.
 
     The I/O device status returns an error code. For example, if open()
-    returns false, or a read/write operation returns -1, this function can
+    returns \c false, or a read/write operation returns -1, this function can
     be called to find out the reason why the operation failed.
 
     \sa unsetError()
@@ -617,9 +608,9 @@ qint64 QFileDevice::size() const
 }
 
 /*!
-    Sets the file size (in bytes) \a sz. Returns true if the file if the
+    Sets the file size (in bytes) \a sz. Returns \c true if the
     resize succeeds; false otherwise. If \a sz is larger than the file
-    currently is the new bytes will be set to 0, if \a sz is smaller the
+    currently is, the new bytes will be set to 0; if \a sz is smaller, the
     file is simply truncated.
 
     \sa size()
@@ -657,8 +648,11 @@ QFile::Permissions QFileDevice::permissions() const
 
 /*!
     Sets the permissions for the file to the \a permissions specified.
-    Returns true if successful, or false if the permissions cannot be
+    Returns \c true if successful, or \c false if the permissions cannot be
     modified.
+
+    \warning This function does not manipulate ACLs, which may limit its
+    effectiveness.
 
     \sa permissions()
 */
@@ -681,6 +675,13 @@ bool QFileDevice::setPermissions(Permissions permissions)
     function.
 
     \value NoOptions        No options.
+    \value MapPrivateOption The mapped memory will be private, so any
+    modifications will not be visible to other processes and will not
+    be written to disk.  Any such modifications will be lost when the
+    memory is unmapped.  It is unspecified whether modifications made
+    to the file made after the mapping is created will be visible through
+    the mapped memory.  This flag is not supported on Windows CE.
+    This enum value was introduced in Qt 5.4.
 */
 
 /*!
@@ -689,6 +690,10 @@ bool QFileDevice::setPermissions(Permissions permissions)
     open after the memory has been mapped.  When the QFile is destroyed
     or a new file is opened with this object, any maps that have not been
     unmapped will automatically be unmapped.
+
+    The mapping will have the same open mode as the file (read and/or write),
+    except when using MapPrivateOption, in which case it is always possible
+    to write to the mapped memory.
 
     Any mapping options can be passed through \a flags.
 
@@ -715,7 +720,7 @@ uchar *QFileDevice::map(qint64 offset, qint64 size, MemoryMapFlags flags)
 /*!
     Unmaps the memory \a address.
 
-    Returns true if the unmap succeeds; false otherwise.
+    Returns \c true if the unmap succeeds; false otherwise.
 
     \sa map()
  */

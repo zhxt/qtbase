@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -100,7 +92,8 @@
 */
 
 #include "qtcpserver.h"
-#include "private/qobject_p.h"
+#include "qtcpserver_p.h"
+
 #include "qalgorithms.h"
 #include "qhostaddress.h"
 #include "qlist.h"
@@ -115,43 +108,6 @@ QT_BEGIN_NAMESPACE
     if (!d->socketEngine) { \
         return returnValue; \
     } } while (0)
-
-class QTcpServerPrivate : public QObjectPrivate, public QAbstractSocketEngineReceiver
-{
-    Q_DECLARE_PUBLIC(QTcpServer)
-public:
-    QTcpServerPrivate();
-    ~QTcpServerPrivate();
-
-    QList<QTcpSocket *> pendingConnections;
-
-    quint16 port;
-    QHostAddress address;
-
-    QAbstractSocket::SocketState state;
-    QAbstractSocketEngine *socketEngine;
-
-    QAbstractSocket::SocketError serverSocketError;
-    QString serverSocketErrorString;
-
-    int maxConnections;
-
-#ifndef QT_NO_NETWORKPROXY
-    QNetworkProxy proxy;
-    QNetworkProxy resolveProxy(const QHostAddress &address, quint16 port);
-#endif
-
-    // from QAbstractSocketEngineReceiver
-    void readNotification();
-    void closeNotification() { readNotification(); }
-    inline void writeNotification() {}
-    inline void exceptionNotification() {}
-    inline void connectionNotification() {}
-#ifndef QT_NO_NETWORKPROXY
-    inline void proxyAuthenticationRequired(const QNetworkProxy &, QAuthenticator *) {}
-#endif
-
-};
 
 /*! \internal
 */
@@ -265,13 +221,20 @@ QTcpServer::~QTcpServer()
     close();
 }
 
+/*! \internal
+*/
+QTcpServer::QTcpServer(QTcpServerPrivate &dd, QObject *parent)
+    : QObject(dd, parent)
+{
+}
+
 /*!
     Tells the server to listen for incoming connections on address \a
     address and port \a port. If \a port is 0, a port is chosen
     automatically. If \a address is QHostAddress::Any, the server
     will listen on all network interfaces.
 
-    Returns true on success; otherwise returns false.
+    Returns \c true on success; otherwise returns \c false.
 
     \sa isListening()
 */
@@ -351,8 +314,8 @@ bool QTcpServer::listen(const QHostAddress &address, quint16 port)
 }
 
 /*!
-    Returns true if the server is currently listening for incoming
-    connections; otherwise returns false.
+    Returns \c true if the server is currently listening for incoming
+    connections; otherwise returns \c false.
 
     \sa listen()
 */
@@ -408,8 +371,8 @@ qintptr QTcpServer::socketDescriptor() const
 
 /*!
     Sets the socket descriptor this server should use when listening
-    for incoming connections to \a socketDescriptor. Returns true if
-    the socket is set successfully; otherwise returns false.
+    for incoming connections to \a socketDescriptor. Returns \c true if
+    the socket is set successfully; otherwise returns \c false.
 
     The socket is assumed to be in listening state.
 
@@ -486,8 +449,8 @@ QHostAddress QTcpServer::serverAddress() const
 
 /*!
     Waits for at most \a msec milliseconds or until an incoming
-    connection is available. Returns true if a connection is
-    available; otherwise returns false. If the operation timed out
+    connection is available. Returns \c true if a connection is
+    available; otherwise returns \c false. If the operation timed out
     and \a timedOut is not 0, *\a timedOut will be set to true.
 
     This is a blocking function call. Its use is disadvised in a
@@ -524,8 +487,8 @@ bool QTcpServer::waitForNewConnection(int msec, bool *timedOut)
 }
 
 /*!
-    Returns true if the server has a pending connection; otherwise
-    returns false.
+    Returns \c true if the server has a pending connection; otherwise
+    returns \c false.
 
     \sa nextPendingConnection(), setMaxPendingConnections()
 */

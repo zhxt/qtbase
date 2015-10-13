@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,7 +38,6 @@
 #include "qvariant.h"
 #include "qdebug.h"
 
-#include <math.h>
 #include <stdio.h>
 #include <limits.h>
 
@@ -90,7 +81,8 @@ QT_BEGIN_NAMESPACE
     specified.
 
     A color can be set by passing an RGB string (such as "#112233"),
-    or a color name (such as "blue"), to the setNamedColor() function.
+    or an ARGB string (such as "#ff112233") or a color name (such as "blue"),
+    to the setNamedColor() function.
     The color names are taken from the SVG 1.0 color names. The name()
     function returns the name of the color in the format
     "#RRGGBB". Colors can also be set using setRgb(), setHsv() and
@@ -301,6 +293,17 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
+    \enum QColor::NameFormat
+
+    How to format the output of the name() function
+
+    \value HexRgb #RRGGBB A "#" character followed by three two-digit hexadecimal numbers (i.e. \c{#RRGGBB}).
+    \value HexArgb #AARRGGBB A "#" character followed by four two-digit hexadecimal numbers (i.e. \c{#AARRGGBB}).
+
+    \sa name()
+*/
+
+/*!
     \fn Spec QColor::spec() const
 
     Returns how the color was specified.
@@ -477,7 +480,7 @@ QColor::QColor(Spec spec)
 /*!
     \fn bool QColor::isValid() const
 
-    Returns true if the color is valid; otherwise returns false.
+    Returns \c true if the color is valid; otherwise returns \c false.
 */
 
 /*!
@@ -489,9 +492,26 @@ QColor::QColor(Spec spec)
 
 QString QColor::name() const
 {
-    QString s;
-    s.sprintf("#%02x%02x%02x", red(), green(), blue());
-    return s;
+    return name(HexRgb);
+}
+
+/*!
+    \since 5.2
+
+    Returns the name of the color in the specified \a format.
+
+    \sa setNamedColor(), NameFormat
+*/
+
+QString QColor::name(NameFormat format) const
+{
+    switch (format) {
+    case HexRgb:
+        return QString::asprintf("#%02x%02x%02x", red(), green(), blue());
+    case HexArgb:
+        return QString::asprintf("#%02x%02x%02x%02x", alpha(), red(), green(), blue());
+    }
+    return QString();
 }
 
 /*!
@@ -501,6 +521,7 @@ QString QColor::name() const
     \list
     \li #RGB (each of R, G, and B is a single hex digit)
     \li #RRGGBB
+    \li #AARRGGBB (Since 5.2)
     \li #RRRGGGBBB
     \li #RRRRGGGGBBBB
     \li A name from the list of colors defined in the list of \l{http://www.w3.org/TR/SVG/types.html#ColorKeywords}{SVG color keyword names}
@@ -524,7 +545,7 @@ void QColor::setNamedColor(const QString &name)
 /*!
    \since 4.7
 
-   Returns true if the \a name is a valid color name and can
+   Returns \c true if the \a name is a valid color name and can
    be used to construct a valid QColor object, otherwise returns
    false.
 
@@ -545,9 +566,9 @@ bool QColor::setColorFromString(const QString &name)
     }
 
     if (name.startsWith(QLatin1Char('#'))) {
-        QRgb rgb;
-        if (qt_get_hex_rgb(name.constData(), name.length(), &rgb)) {
-            setRgb(rgb);
+        QRgb rgba;
+        if (qt_get_hex_rgb(name.constData(), name.length(), &rgba)) {
+            setRgba(rgba);
             return true;
         } else {
             invalidate();
@@ -696,8 +717,8 @@ void QColor::setHsv(int h, int s, int v, int a)
     saturation, lightness, and alpha-channel (transparency) components of the
     color's HSL value.
 
-    These components can be retrieved individually using the hueHslF(),
-    saturationHslF(), lightnessF() and alphaF() functions.
+    These components can be retrieved individually using the hslHueF(),
+    hslSaturationF(), lightnessF() and alphaF() functions.
 
     \sa setHsl()
 */
@@ -726,8 +747,8 @@ void QColor::getHslF(qreal *h, qreal *s, qreal *l, qreal *a) const
     saturation, lightness, and alpha-channel (transparency) components of the
     color's HSL value.
 
-    These components can be retrieved individually using the hueHsl(),
-    saturationHsl(), lightness() and alpha() functions.
+    These components can be retrieved individually using the hslHue(),
+    hslSaturation(), lightness() and alpha() functions.
 
     \sa setHsl()
 */
@@ -2305,8 +2326,8 @@ QColor &QColor::operator=(Qt::GlobalColor color)
 }
 
 /*!
-    Returns true if this color has the same RGB and alpha values as \a color;
-    otherwise returns false.
+    Returns \c true if this color has the same RGB and alpha values as \a color;
+    otherwise returns \c false.
 */
 bool QColor::operator==(const QColor &color) const
 {
@@ -2333,8 +2354,8 @@ bool QColor::operator==(const QColor &color) const
 }
 
 /*!
-    Returns true if this color has a different RGB and alpha values from
-    \a color; otherwise returns false.
+    Returns \c true if this color has a different RGB and alpha values from
+    \a color; otherwise returns \c false.
 */
 bool QColor::operator!=(const QColor &color) const
 { return !operator==(color); }
@@ -2370,6 +2391,7 @@ void QColor::invalidate()
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QColor &c)
 {
+    QDebugStateSaver saver(dbg);
     if (!c.isValid())
         dbg.nospace() << "QColor(Invalid)";
     else if (c.spec() == QColor::Rgb)
@@ -2382,7 +2404,7 @@ QDebug operator<<(QDebug dbg, const QColor &c)
     else if (c.spec() == QColor::Hsl)
         dbg.nospace() << "QColor(AHSL " << c.alphaF() << ", " << c.hslHueF() << ", " << c.hslSaturationF() << ", " << c.lightnessF() << ')';
 
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -2466,6 +2488,41 @@ QDataStream &operator>>(QDataStream &stream, QColor &color)
 }
 #endif // QT_NO_DATASTREAM
 
+// A table of precalculated results of 0x00ff00ff/alpha use by qUnpremultiply:
+const uint qt_inv_premul_factor[256] = {
+    0, 16711935, 8355967, 5570645, 4177983, 3342387, 2785322, 2387419,
+    2088991, 1856881, 1671193, 1519266, 1392661, 1285533, 1193709, 1114129,
+    1044495, 983055, 928440, 879575, 835596, 795806, 759633, 726605,
+    696330, 668477, 642766, 618960, 596854, 576273, 557064, 539094,
+    522247, 506422, 491527, 477483, 464220, 451673, 439787, 428511,
+    417798, 407608, 397903, 388649, 379816, 371376, 363302, 355573,
+    348165, 341059, 334238, 327685, 321383, 315319, 309480, 303853,
+    298427, 293191, 288136, 283253, 278532, 273966, 269547, 265268,
+    261123, 257106, 253211, 249431, 245763, 242201, 238741, 235379,
+    232110, 228930, 225836, 222825, 219893, 217038, 214255, 211543,
+    208899, 206320, 203804, 201348, 198951, 196611, 194324, 192091,
+    189908, 187774, 185688, 183647, 181651, 179698, 177786, 175915,
+    174082, 172287, 170529, 168807, 167119, 165464, 163842, 162251,
+    160691, 159161, 157659, 156186, 154740, 153320, 151926, 150557,
+    149213, 147893, 146595, 145321, 144068, 142837, 141626, 140436,
+    139266, 138115, 136983, 135869, 134773, 133695, 132634, 131590,
+    130561, 129549, 128553, 127572, 126605, 125653, 124715, 123792,
+    122881, 121984, 121100, 120229, 119370, 118524, 117689, 116866,
+    116055, 115254, 114465, 113686, 112918, 112160, 111412, 110675,
+    109946, 109228, 108519, 107818, 107127, 106445, 105771, 105106,
+    104449, 103800, 103160, 102527, 101902, 101284, 100674, 100071,
+    99475, 98887, 98305, 97730, 97162, 96600, 96045, 95496,
+    94954, 94417, 93887, 93362, 92844, 92331, 91823, 91322,
+    90825, 90334, 89849, 89368, 88893, 88422, 87957, 87497,
+    87041, 86590, 86143, 85702, 85264, 84832, 84403, 83979,
+    83559, 83143, 82732, 82324, 81921, 81521, 81125, 80733,
+    80345, 79961, 79580, 79203, 78829, 78459, 78093, 77729,
+    77370, 77013, 76660, 76310, 75963, 75619, 75278, 74941,
+    74606, 74275, 73946, 73620, 73297, 72977, 72660, 72346,
+    72034, 71725, 71418, 71114, 70813, 70514, 70218, 69924,
+    69633, 69344, 69057, 68773, 68491, 68211, 67934, 67659,
+    67386, 67116, 66847, 66581, 66317, 66055, 65795, 65537
+};
 
 /*****************************************************************************
   QColor global functions (documentation only)
@@ -2545,6 +2602,26 @@ QDataStream &operator>>(QDataStream &stream, QColor &color)
 
     The gray value is calculated using the formula (R * 11 + G * 16 + B * 5)/32;
     the alpha-channel is ignored.
+*/
+
+/*!
+    \fn QRgb qPremultiply(QRgb rgb)
+    \since 5.3
+    \relates QColor
+
+    Converts an unpremultiplied ARGB quadruplet \a rgb into a premultiplied ARGB quadruplet.
+
+    \sa qUnpremultiply()
+*/
+
+/*!
+    \fn QRgb qUnpremultiply(QRgb rgb)
+    \since 5.3
+    \relates QColor
+
+    Converts a premultiplied ARGB quadruplet \a rgb into an unpremultiplied ARGB quadruplet.
+
+    \sa qPremultiply()
 */
 
 /*!

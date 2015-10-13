@@ -1,46 +1,40 @@
 /***************************************************************************
 **
-** Copyright (C) 2011 - 2012 Research In Motion
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2011 - 2013 BlackBerry Limited. All rights reserved.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qqnxrasterbackingstore.h"
-#include "qqnxwindow.h"
+#include "qqnxrasterwindow.h"
+#include "qqnxscreen.h"
+#include "qqnxglobal.h"
 
 #include <QtCore/QDebug>
 
@@ -56,7 +50,8 @@ QT_BEGIN_NAMESPACE
 
 QQnxRasterBackingStore::QQnxRasterBackingStore(QWindow *window)
     : QPlatformBackingStore(window),
-      m_hasUnflushedPaintOperations(false)
+      m_needsPosting(false),
+      m_scrolled(false)
 {
     qRasterBackingStoreDebug() << Q_FUNC_INFO << "w =" << window;
 
@@ -70,69 +65,38 @@ QQnxRasterBackingStore::~QQnxRasterBackingStore()
 
 QPaintDevice *QQnxRasterBackingStore::paintDevice()
 {
-    QQnxWindow *platformWindow = this->platformWindow();
-    if (platformWindow->hasBuffers())
-        return platformWindow->renderBuffer().image();
+    if (platformWindow() && platformWindow()->hasBuffers())
+        return platformWindow()->renderBuffer().image();
 
     return 0;
 }
 
 void QQnxRasterBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
 {
+    Q_UNUSED(offset)
+
     qRasterBackingStoreDebug() << Q_FUNC_INFO << "w =" << this->window();
 
     // Sometimes this method is called even though there is nothing to be
-    // flushed, for instance, after an expose event directly follows a
-    // geometry change event.
-    if (!m_hasUnflushedPaintOperations)
-            return;
+    // flushed (posted in "screen" parlance), for instance, after an expose
+    // event directly follows a geometry change event.
+    if (!m_needsPosting)
+        return;
 
     QQnxWindow *targetWindow = 0;
     if (window)
         targetWindow = static_cast<QQnxWindow *>(window->handle());
 
-    QQnxWindow *platformWindow = this->platformWindow();
-    if (!targetWindow || targetWindow == platformWindow) {
+    // we only need to flush the platformWindow backing store, since this is
+    // the buffer where all drawing operations of all windows, including the
+    // child windows, are performed; conceptually ,child windows have no buffers
+    // (actually they do have a 1x1 placeholder buffer due to libscreen limitations),
+    // since Qt will only draw to the backing store of the top-level window.
+    if (!targetWindow || targetWindow == platformWindow())
+        platformWindow()->post(region);  // update the display with newly rendered content
 
-        // visit all pending scroll operations
-        for (int i = m_scrollOpList.size() - 1; i >= 0; i--) {
-
-            // do the scroll operation
-            ScrollOp &op = m_scrollOpList[i];
-            QRegion srcArea = op.totalArea.intersected( op.totalArea.translated(-op.dx, -op.dy) );
-            platformWindow->scroll(srcArea, op.dx, op.dy);
-        }
-
-        // clear all pending scroll operations
-        m_scrollOpList.clear();
-
-        // update the display with newly rendered content
-        platformWindow->post(region);
-    } else if (targetWindow) {
-
-        // The contents of the backing store should be flushed to a different window than the
-        // window which owns the buffer.
-        // This typically happens for child windows, since child windows share a backing store with
-        // their top-level window (TLW).
-        // Simply copy the buffer over to the child window, to emulate a painting operation, and
-        // then post the window.
-        //
-        // ### Note that because of the design in the QNX QPA plugin, each window has its own buffers,
-        // even though they might share a backing store. This is unneeded overhead, but I don't think
-        // libscreen allows to have windows without buffers, or does it?
-
-        // We assume that the TLW has been flushed previously and that no changes were made to the
-        // backing store inbetween (### does Qt guarantee this?)
-
-        targetWindow->adjustBufferSize();
-        targetWindow->blitFrom(platformWindow, offset, region);
-        targetWindow->post(region);
-
-    } else {
-        qWarning() << Q_FUNC_INFO << "flush() called without a valid window!";
-    }
-
-    m_hasUnflushedPaintOperations = false;
+    m_needsPosting = false;
+    m_scrolled = false;
 }
 
 void QQnxRasterBackingStore::resize(const QSize &size, const QRegion &staticContents)
@@ -149,31 +113,14 @@ bool QQnxRasterBackingStore::scroll(const QRegion &area, int dx, int dy)
 {
     qRasterBackingStoreDebug() << Q_FUNC_INFO << "w =" << window();
 
-    // calculate entire region affected by scroll operation (src + dst)
-    QRegion totalArea = area.translated(dx, dy);
-    totalArea += area;
-    m_hasUnflushedPaintOperations = true;
+    m_needsPosting = true;
 
-    // visit all pending scroll operations
-    for (int i = m_scrollOpList.size() - 1; i >= 0; i--) {
-
-        ScrollOp &op = m_scrollOpList[i];
-        if (op.totalArea == totalArea) {
-            // same area is being scrolled again - update delta
-            op.dx += dx;
-            op.dy += dy;
-            return true;
-        } else if (op.totalArea.intersects(totalArea)) {
-            // current scroll overlaps previous scroll but is
-            // not equal in area - just paint everything
-            qWarning("QQNX: pending scroll operations overlap but not equal");
-            return false;
-        }
+    if (!m_scrolled) {
+        platformWindow()->scroll(area, dx, dy, true);
+        m_scrolled = true;
+        return true;
     }
-
-    // create new scroll operation
-    m_scrollOpList.append( ScrollOp(totalArea, dx, dy) );
-    return true;
+    return false;
 }
 
 void QQnxRasterBackingStore::beginPaint(const QRegion &region)
@@ -181,21 +128,39 @@ void QQnxRasterBackingStore::beginPaint(const QRegion &region)
     Q_UNUSED(region);
 
     qRasterBackingStoreDebug() << Q_FUNC_INFO << "w =" << window();
-    m_hasUnflushedPaintOperations = true;
+    m_needsPosting = true;
 
     platformWindow()->adjustBufferSize();
+
+    if (window()->requestedFormat().alphaBufferSize() > 0) {
+        foreach (const QRect &r, region.rects()) {
+            // Clear transparent regions
+            const int bg[] = {
+                               SCREEN_BLIT_COLOR, 0x00000000,
+                               SCREEN_BLIT_DESTINATION_X, r.x(),
+                               SCREEN_BLIT_DESTINATION_Y, r.y(),
+                               SCREEN_BLIT_DESTINATION_WIDTH, r.width(),
+                               SCREEN_BLIT_DESTINATION_HEIGHT, r.height(),
+                               SCREEN_BLIT_END
+                              };
+            Q_SCREEN_CHECKERROR(screen_fill(platformWindow()->screen()->nativeContext(),
+                                            platformWindow()->renderBuffer().nativeBuffer(), bg),
+                                "failed to clear transparent regions");
+        }
+        Q_SCREEN_CHECKERROR(screen_flush_blits(platformWindow()->screen()->nativeContext(),
+                    SCREEN_WAIT_IDLE), "failed to flush blits");
+    }
 }
 
-void QQnxRasterBackingStore::endPaint(const QRegion &region)
+void QQnxRasterBackingStore::endPaint()
 {
-    Q_UNUSED(region);
     qRasterBackingStoreDebug() << Q_FUNC_INFO << "w =" << window();
 }
 
-QQnxWindow *QQnxRasterBackingStore::platformWindow() const
+QQnxRasterWindow *QQnxRasterBackingStore::platformWindow() const
 {
   Q_ASSERT(m_window->handle());
-  return static_cast<QQnxWindow*>(m_window->handle());
+  return static_cast<QQnxRasterWindow*>(m_window->handle());
 }
 
 QT_END_NAMESPACE

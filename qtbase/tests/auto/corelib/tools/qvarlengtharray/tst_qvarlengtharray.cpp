@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -59,6 +51,16 @@ private slots:
     void first();
     void last();
     void squeeze();
+    void indexOf();
+    void lastIndexOf();
+    void contains();
+    void clear();
+    void initializeListInt();
+    void initializeListMovable();
+    void initializeListComplex();
+private:
+    template<typename T>
+    void initializeList();
 };
 
 int fooCtor = 0;
@@ -338,11 +340,23 @@ struct MyPrimitive
 struct MyMovable
     : MyBase
 {
+    MyMovable(char input = 'j') : i(input) {}
+    bool operator==(const MyMovable &other) const
+    {
+        return i == other.i;
+    }
+    char i;
 };
 
 struct MyComplex
     : MyBase
 {
+    MyComplex(char input = 'j') : i(input) {}
+    bool operator==(const MyComplex &other) const
+    {
+        return i == other.i;
+    }
+    char i;
 };
 
 QT_BEGIN_NAMESPACE
@@ -675,6 +689,147 @@ void tst_QVarLengthArray::squeeze()
     list.resize(sizeOnHeap);
     list.squeeze();
     QCOMPARE(list.capacity(), sizeOnHeap);
+}
+
+void tst_QVarLengthArray::indexOf()
+{
+    QVarLengthArray<QString> myvec;
+    myvec << "A" << "B" << "C" << "B" << "A";
+
+    QVERIFY(myvec.indexOf("B") == 1);
+    QVERIFY(myvec.indexOf("B", 1) == 1);
+    QVERIFY(myvec.indexOf("B", 2) == 3);
+    QVERIFY(myvec.indexOf("X") == -1);
+    QVERIFY(myvec.indexOf("X", 2) == -1);
+
+    // add an X
+    myvec << "X";
+    QVERIFY(myvec.indexOf("X") == 5);
+    QVERIFY(myvec.indexOf("X", 5) == 5);
+    QVERIFY(myvec.indexOf("X", 6) == -1);
+
+    // remove first A
+    myvec.remove(0);
+    QVERIFY(myvec.indexOf("A") == 3);
+    QVERIFY(myvec.indexOf("A", 3) == 3);
+    QVERIFY(myvec.indexOf("A", 4) == -1);
+}
+
+void tst_QVarLengthArray::lastIndexOf()
+{
+    QVarLengthArray<QString> myvec;
+    myvec << "A" << "B" << "C" << "B" << "A";
+
+    QVERIFY(myvec.lastIndexOf("B") == 3);
+    QVERIFY(myvec.lastIndexOf("B", 2) == 1);
+    QVERIFY(myvec.lastIndexOf("X") == -1);
+    QVERIFY(myvec.lastIndexOf("X", 2) == -1);
+
+    // add an X
+    myvec << "X";
+    QVERIFY(myvec.lastIndexOf("X") == 5);
+    QVERIFY(myvec.lastIndexOf("X", 5) == 5);
+    QVERIFY(myvec.lastIndexOf("X", 3) == -1);
+
+    // remove first A
+    myvec.remove(0);
+    QVERIFY(myvec.lastIndexOf("A") == 3);
+    QVERIFY(myvec.lastIndexOf("A", 3) == 3);
+    QVERIFY(myvec.lastIndexOf("A", 2) == -1);
+}
+
+void tst_QVarLengthArray::contains()
+{
+    QVarLengthArray<QString> myvec;
+    myvec << "aaa" << "bbb" << "ccc";
+
+    QVERIFY(myvec.contains(QLatin1String("aaa")));
+    QVERIFY(myvec.contains(QLatin1String("bbb")));
+    QVERIFY(myvec.contains(QLatin1String("ccc")));
+    QVERIFY(!myvec.contains(QLatin1String("I don't exist")));
+
+    // add it and make sure it does :)
+    myvec.append(QLatin1String("I don't exist"));
+    QVERIFY(myvec.contains(QLatin1String("I don't exist")));
+}
+
+void tst_QVarLengthArray::clear()
+{
+    QVarLengthArray<QString, 5> myvec;
+
+    for (int i = 0; i < 10; ++i)
+        myvec << "aaa";
+
+    QCOMPARE(myvec.size(), 10);
+    QVERIFY(myvec.capacity() >= myvec.size());
+    const int oldCapacity = myvec.capacity();
+    myvec.clear();
+    QCOMPARE(myvec.size(), 0);
+    QCOMPARE(myvec.capacity(), oldCapacity);
+}
+
+void tst_QVarLengthArray::initializeListInt()
+{
+    initializeList<int>();
+}
+
+void tst_QVarLengthArray::initializeListMovable()
+{
+    const int instancesCount = MyMovable::liveCount;
+    initializeList<MyMovable>();
+    QCOMPARE(MyMovable::liveCount, instancesCount);
+}
+
+void tst_QVarLengthArray::initializeListComplex()
+{
+    const int instancesCount = MyComplex::liveCount;
+    initializeList<MyComplex>();
+    QCOMPARE(MyComplex::liveCount, instancesCount);
+}
+
+template<typename T>
+void tst_QVarLengthArray::initializeList()
+{
+#ifdef Q_COMPILER_INITIALIZER_LISTS
+    T val1(110);
+    T val2(105);
+    T val3(101);
+    T val4(114);
+
+    // QVarLengthArray(std::initializer_list<>)
+    QVarLengthArray<T> v1 {val1, val2, val3};
+    QCOMPARE(v1, QVarLengthArray<T>() << val1 << val2 << val3);
+    QCOMPARE(v1, (QVarLengthArray<T> {val1, val2, val3}));
+
+    QVarLengthArray<QVarLengthArray<T>, 4> v2{ v1, {val4}, QVarLengthArray<T>(), {val1, val2, val3} };
+    QVarLengthArray<QVarLengthArray<T>, 4> v3;
+    v3 << v1 << (QVarLengthArray<T>() << val4) << QVarLengthArray<T>() << v1;
+    QCOMPARE(v3, v2);
+
+    QVarLengthArray<T> v4({});
+    QCOMPARE(v4.size(), 0);
+
+    // operator=(std::initializer_list<>)
+
+    QVarLengthArray<T> v5({val2, val1});
+    v1 = { val1, val2 }; // make array smaller
+    v4 = { val1, val2 }; // make array bigger
+    v5 = { val1, val2 }; // same size
+    QCOMPARE(v1, QVarLengthArray<T>() << val1 << val2);
+    QCOMPARE(v4, v1);
+    QCOMPARE(v5, v1);
+
+    QVarLengthArray<T, 1> v6 = { val1 };
+    v6 = { val1, val2 }; // force allocation on heap
+    QCOMPARE(v6.size(), 2);
+    QCOMPARE(v6.first(), val1);
+    QCOMPARE(v6.last(), val2);
+
+    v6 = {}; // assign empty
+    QCOMPARE(v6.size(), 0);
+#else
+    QSKIP("This tests requires a compiler that supports initializer lists.");
+#endif
 }
 
 QTEST_APPLESS_MAIN(tst_QVarLengthArray)

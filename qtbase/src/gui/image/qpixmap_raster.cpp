@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -135,9 +127,14 @@ bool QRasterPlatformPixmap::fromData(const uchar *buffer, uint len, const char *
 void QRasterPlatformPixmap::fromImage(const QImage &sourceImage,
                                   Qt::ImageConversionFlags flags)
 {
-    Q_UNUSED(flags);
     QImage image = sourceImage;
     createPixmapForImage(image, flags, /* inplace = */false);
+}
+
+void QRasterPlatformPixmap::fromImageInPlace(QImage &sourceImage,
+                                             Qt::ImageConversionFlags flags)
+{
+    createPixmapForImage(sourceImage, flags, /* inplace = */true);
 }
 
 void QRasterPlatformPixmap::fromImageReader(QImageReader *imageReader,
@@ -182,7 +179,7 @@ void QRasterPlatformPixmap::fill(const QColor &color)
         if (alpha != 255) {
             if (!image.hasAlphaChannel()) {
                 QImage::Format toFormat;
-#if !(defined(QT_COMPILER_SUPPORTS_NEON) || defined(__SSE2__))
+#if !(defined(__ARM_NEON__) || defined(__SSE2__))
                 if (image.format() == QImage::Format_RGB16)
                     toFormat = QImage::Format_ARGB8565_Premultiplied;
                 else if (image.format() == QImage::Format_RGB666)
@@ -203,12 +200,17 @@ void QRasterPlatformPixmap::fill(const QColor &color)
                 }
             }
         }
-        pixel = PREMUL(color.rgba());
+        pixel = qPremultiply(color.rgba());
         const QPixelLayout *layout = &qPixelLayouts[image.format()];
         layout->convertFromARGB32PM(&pixel, &pixel, 1, layout, 0);
-    } else {
+    } else if (image.format() == QImage::Format_Alpha8) {
+        pixel = qAlpha(color.rgba());
+    } else if (image.format() == QImage::Format_Grayscale8) {
+        pixel = qGray(color.rgba());
+    } else
+    {
         pixel = 0;
-        // ### what about 8 bits
+        // ### what about 8 bit indexed?
     }
 
     image.fill(pixel);
@@ -311,7 +313,7 @@ void QRasterPlatformPixmap::createPixmapForImage(QImage &sourceImage, Qt::ImageC
             QImage::Format opaqueFormat = QNativeImage::systemFormat();
             QImage::Format alphaFormat = QImage::Format_ARGB32_Premultiplied;
 
-#if !defined(QT_COMPILER_SUPPORTS_NEON) && !defined(__SSE2__)
+#if !defined(__ARM_NEON__) && !defined(__SSE2__)
             switch (opaqueFormat) {
             case QImage::Format_RGB16:
                 alphaFormat = QImage::Format_ARGB8565_Premultiplied;
@@ -338,6 +340,7 @@ void QRasterPlatformPixmap::createPixmapForImage(QImage &sourceImage, Qt::ImageC
     if (format == QImage::Format_RGB32 && (sourceImage.format() == QImage::Format_ARGB32
         || sourceImage.format() == QImage::Format_ARGB32_Premultiplied))
     {
+        inPlace = inPlace && sourceImage.isDetached();
         image = sourceImage;
         if (!inPlace)
             image.detach();
@@ -358,10 +361,12 @@ void QRasterPlatformPixmap::createPixmapForImage(QImage &sourceImage, Qt::ImageC
     }
     is_null = (w <= 0 || h <= 0);
 
-    image.d->devicePixelRatio = sourceImage.devicePixelRatio();
+    if (image.d)
+        image.d->devicePixelRatio = sourceImage.devicePixelRatio();
     //ensure the pixmap and the image resulting from toImage() have the same cacheKey();
     setSerialNumber(image.cacheKey() >> 32);
-    setDetachNumber(image.d->detach_no);
+    if (image.d)
+        setDetachNumber(image.d->detach_no);
 }
 
 QImage* QRasterPlatformPixmap::buffer()

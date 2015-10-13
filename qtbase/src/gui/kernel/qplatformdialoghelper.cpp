@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -48,6 +40,8 @@
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
 
+#include <algorithm>
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -60,17 +54,69 @@ QT_BEGIN_NAMESPACE
 
 */
 
-/*!
-    \enum QPlatformDialogHelper::StyleHint
+static const int buttonRoleLayouts[2][5][14] =
+{
+    // Qt::Horizontal
+    {
+        // WinLayout
+        { QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::Stretch, QPlatformDialogHelper::YesRole, QPlatformDialogHelper::AcceptRole,
+          QPlatformDialogHelper::AlternateRole, QPlatformDialogHelper::DestructiveRole, QPlatformDialogHelper::NoRole,
+          QPlatformDialogHelper::ActionRole, QPlatformDialogHelper::RejectRole, QPlatformDialogHelper::ApplyRole,
+          QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL },
 
-    This enum type specifies platform-specific style hints.
+        // MacLayout
+        { QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::ApplyRole, QPlatformDialogHelper::ActionRole,
+          QPlatformDialogHelper::Stretch, QPlatformDialogHelper::DestructiveRole | QPlatformDialogHelper::Reverse,
+          QPlatformDialogHelper::AlternateRole | QPlatformDialogHelper::Reverse, QPlatformDialogHelper::RejectRole | QPlatformDialogHelper::Reverse,
+          QPlatformDialogHelper::AcceptRole | QPlatformDialogHelper::Reverse, QPlatformDialogHelper::NoRole | QPlatformDialogHelper::Reverse,
+          QPlatformDialogHelper::YesRole | QPlatformDialogHelper::Reverse, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL },
 
-    \value SnapToDefaultButton Snap the mouse to the center of the default
-                               button. There is corresponding system
-                               setting on Windows.
+        // KdeLayout
+        { QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::Stretch, QPlatformDialogHelper::YesRole,
+          QPlatformDialogHelper::NoRole, QPlatformDialogHelper::ActionRole, QPlatformDialogHelper::AcceptRole, QPlatformDialogHelper::AlternateRole,
+          QPlatformDialogHelper::ApplyRole, QPlatformDialogHelper::DestructiveRole, QPlatformDialogHelper::RejectRole, QPlatformDialogHelper::EOL },
 
-    \sa styleHint()
-*/
+        // GnomeLayout
+        { QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::Stretch, QPlatformDialogHelper::ActionRole,
+          QPlatformDialogHelper::ApplyRole | QPlatformDialogHelper::Reverse, QPlatformDialogHelper::DestructiveRole | QPlatformDialogHelper::Reverse,
+          QPlatformDialogHelper::AlternateRole | QPlatformDialogHelper::Reverse, QPlatformDialogHelper::RejectRole | QPlatformDialogHelper::Reverse,
+          QPlatformDialogHelper::AcceptRole | QPlatformDialogHelper::Reverse, QPlatformDialogHelper::NoRole | QPlatformDialogHelper::Reverse,
+          QPlatformDialogHelper::YesRole | QPlatformDialogHelper::Reverse, QPlatformDialogHelper::EOL },
+
+        // MacModelessLayout
+        { QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::ApplyRole, QPlatformDialogHelper::ActionRole, QPlatformDialogHelper::Stretch,
+          QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL,
+          QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL }
+    },
+
+    // Qt::Vertical
+    {
+        // WinLayout
+        { QPlatformDialogHelper::ActionRole, QPlatformDialogHelper::YesRole, QPlatformDialogHelper::AcceptRole, QPlatformDialogHelper::AlternateRole,
+          QPlatformDialogHelper::DestructiveRole, QPlatformDialogHelper::NoRole, QPlatformDialogHelper::RejectRole, QPlatformDialogHelper::ApplyRole, QPlatformDialogHelper::ResetRole,
+          QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::Stretch, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL },
+
+        // MacLayout
+        { QPlatformDialogHelper::YesRole, QPlatformDialogHelper::NoRole, QPlatformDialogHelper::AcceptRole, QPlatformDialogHelper::RejectRole,
+          QPlatformDialogHelper::AlternateRole, QPlatformDialogHelper::DestructiveRole, QPlatformDialogHelper::Stretch, QPlatformDialogHelper::ActionRole, QPlatformDialogHelper::ApplyRole,
+          QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL },
+
+        // KdeLayout
+        { QPlatformDialogHelper::AcceptRole, QPlatformDialogHelper::AlternateRole, QPlatformDialogHelper::ApplyRole, QPlatformDialogHelper::ActionRole,
+          QPlatformDialogHelper::YesRole, QPlatformDialogHelper::NoRole, QPlatformDialogHelper::Stretch, QPlatformDialogHelper::ResetRole,
+          QPlatformDialogHelper::DestructiveRole, QPlatformDialogHelper::RejectRole, QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::EOL },
+
+        // GnomeLayout
+        { QPlatformDialogHelper::YesRole, QPlatformDialogHelper::NoRole, QPlatformDialogHelper::AcceptRole, QPlatformDialogHelper::RejectRole,
+          QPlatformDialogHelper::AlternateRole, QPlatformDialogHelper::DestructiveRole, QPlatformDialogHelper::ApplyRole, QPlatformDialogHelper::ActionRole, QPlatformDialogHelper::Stretch,
+          QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL },
+
+        // MacModelessLayout
+        { QPlatformDialogHelper::ActionRole, QPlatformDialogHelper::ApplyRole, QPlatformDialogHelper::ResetRole, QPlatformDialogHelper::Stretch,
+          QPlatformDialogHelper::HelpRole, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL,
+          QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL, QPlatformDialogHelper::EOL }
+    }
+};
 
 QPlatformDialogHelper::QPlatformDialogHelper()
 {
@@ -87,10 +133,7 @@ QVariant QPlatformDialogHelper::styleHint(StyleHint hint) const
 
 QVariant  QPlatformDialogHelper::defaultStyleHint(QPlatformDialogHelper::StyleHint hint)
 {
-    switch (hint) {
-    case QPlatformDialogHelper::SnapToDefaultButton:
-        return QVariant(false);
-    }
+    Q_UNUSED(hint);
     return QVariant();
 }
 
@@ -198,7 +241,7 @@ QColorDialogStaticData::QColorDialogStaticData() : customSet(false)
         for (int r = 0;  r < 4; ++r)
             for (int b = 0; b < 3; ++b)
                 standardRgb[i++] = qRgb(r * 255 / 3, g * 255 / 3, b * 255 / 2);
-    qFill(customRgb, customRgb + CustomColorCount, 0xffffffff);
+    std::fill(customRgb, customRgb + CustomColorCount, 0xffffffff);
     readSettings();
 }
 
@@ -374,11 +417,12 @@ public:
     QDir::Filters filters;
     QList<QUrl> sidebarUrls;
     QStringList nameFilters;
+    QStringList mimeTypeFilters;
     QString defaultSuffix;
     QStringList history;
-    QString initialDirectory;
+    QUrl initialDirectory;
     QString initiallySelectedNameFilter;
-    QStringList initiallySelectedFiles;
+    QList<QUrl> initiallySelectedFiles;
 };
 
 QFileDialogOptions::QFileDialogOptions() : d(new QFileDialogOptionsPrivate)
@@ -492,9 +536,21 @@ QStringList QFileDialogOptions::nameFilters() const
     return d->nameFilters;
 }
 
+void QFileDialogOptions::setMimeTypeFilters(const QStringList &filters)
+{
+    d->mimeTypeFilters = filters;
+}
+
+QStringList QFileDialogOptions::mimeTypeFilters() const
+{
+    return d->mimeTypeFilters;
+}
+
 void QFileDialogOptions::setDefaultSuffix(const QString &suffix)
 {
     d->defaultSuffix = suffix;
+    if (d->defaultSuffix.size() > 1 && d->defaultSuffix.startsWith(QLatin1Char('.')))
+        d->defaultSuffix.remove(0, 1); // Silently change ".txt" -> "txt".
 }
 
 QString QFileDialogOptions::defaultSuffix() const
@@ -528,12 +584,12 @@ bool QFileDialogOptions::isLabelExplicitlySet(DialogLabel label)
     return label >= 0 && label < DialogLabelCount && !d->labels[label].isEmpty();
 }
 
-QString QFileDialogOptions::initialDirectory() const
+QUrl QFileDialogOptions::initialDirectory() const
 {
     return d->initialDirectory;
 }
 
-void QFileDialogOptions::setInitialDirectory(const QString &directory)
+void QFileDialogOptions::setInitialDirectory(const QUrl &directory)
 {
     d->initialDirectory = directory;
 }
@@ -548,14 +604,19 @@ void QFileDialogOptions::setInitiallySelectedNameFilter(const QString &filter)
     d->initiallySelectedNameFilter = filter;
 }
 
-QStringList QFileDialogOptions::initiallySelectedFiles() const
+QList<QUrl> QFileDialogOptions::initiallySelectedFiles() const
 {
     return d->initiallySelectedFiles;
 }
 
-void QFileDialogOptions::setInitiallySelectedFiles(const QStringList &files)
+void QFileDialogOptions::setInitiallySelectedFiles(const QList<QUrl> &files)
 {
     d->initiallySelectedFiles = files;
+}
+
+bool QPlatformFileDialogHelper::isSupportedUrl(const QUrl &url) const
+{
+    return url.isLocalFile();
 }
 
 /*!
@@ -589,6 +650,179 @@ QStringList QPlatformFileDialogHelper::cleanFilterList(const QString &filter)
     if (i >= 0)
         f = regexp.cap(2);
     return f.split(QLatin1Char(' '), QString::SkipEmptyParts);
+}
+
+// Message dialog
+
+class QMessageDialogOptionsPrivate : public QSharedData
+{
+public:
+    QMessageDialogOptionsPrivate() :
+        icon(QMessageDialogOptions::NoIcon),
+        buttons(QPlatformDialogHelper::Ok)
+    {}
+
+    QString windowTitle;
+    QMessageDialogOptions::Icon icon;
+    QString text;
+    QString informativeText;
+    QString detailedText;
+    QPlatformDialogHelper::StandardButtons buttons;
+};
+
+QMessageDialogOptions::QMessageDialogOptions() : d(new QMessageDialogOptionsPrivate)
+{
+}
+
+QMessageDialogOptions::QMessageDialogOptions(const QMessageDialogOptions &rhs) : d(rhs.d)
+{
+}
+
+QMessageDialogOptions &QMessageDialogOptions::operator=(const QMessageDialogOptions &rhs)
+{
+    if (this != &rhs)
+        d = rhs.d;
+    return *this;
+}
+
+QMessageDialogOptions::~QMessageDialogOptions()
+{
+}
+
+QString QMessageDialogOptions::windowTitle() const
+{
+    return d->windowTitle;
+}
+
+void QMessageDialogOptions::setWindowTitle(const QString &title)
+{
+    d->windowTitle = title;
+}
+
+QMessageDialogOptions::Icon QMessageDialogOptions::icon() const
+{
+    return d->icon;
+}
+
+void QMessageDialogOptions::setIcon(Icon icon)
+{
+    d->icon = icon;
+}
+
+QString QMessageDialogOptions::text() const
+{
+    return d->text;
+}
+
+void QMessageDialogOptions::setText(const QString &text)
+{
+    d->text = text;
+}
+
+QString QMessageDialogOptions::informativeText() const
+{
+    return d->informativeText;
+}
+
+void QMessageDialogOptions::setInformativeText(const QString &informativeText)
+{
+    d->informativeText = informativeText;
+}
+
+QString QMessageDialogOptions::detailedText() const
+{
+    return d->detailedText;
+}
+
+void QMessageDialogOptions::setDetailedText(const QString &detailedText)
+{
+    d->detailedText = detailedText;
+}
+
+void QMessageDialogOptions::setStandardButtons(QPlatformDialogHelper::StandardButtons buttons)
+{
+    d->buttons = buttons;
+}
+
+QPlatformDialogHelper::StandardButtons QMessageDialogOptions::standardButtons() const
+{
+    return d->buttons;
+}
+
+QPlatformDialogHelper::ButtonRole QPlatformDialogHelper::buttonRole(QPlatformDialogHelper::StandardButton button)
+{
+    switch (button) {
+    case Ok:
+    case Save:
+    case Open:
+    case SaveAll:
+    case Retry:
+    case Ignore:
+        return AcceptRole;
+
+    case Cancel:
+    case Close:
+    case Abort:
+        return RejectRole;
+
+    case Discard:
+        return DestructiveRole;
+
+    case Help:
+        return HelpRole;
+
+    case Apply:
+        return ApplyRole;
+
+    case Yes:
+    case YesToAll:
+        return YesRole;
+
+    case No:
+    case NoToAll:
+        return NoRole;
+
+    case RestoreDefaults:
+    case Reset:
+        return ResetRole;
+
+    default:
+        break;
+    }
+    return InvalidRole;
+}
+
+const int *QPlatformDialogHelper::buttonLayout(Qt::Orientation orientation, ButtonLayout policy)
+{
+    if (policy == UnknownLayout) {
+#if defined (Q_OS_OSX)
+        policy = MacLayout;
+#elif defined (Q_OS_LINUX) || defined (Q_OS_UNIX)
+        policy = KdeLayout;
+#else
+        policy = WinLayout;
+#endif
+    }
+    return buttonRoleLayouts[orientation == Qt::Vertical][policy];
+}
+
+/*!
+    \class QPlatformMessageDialogHelper
+    \since 5.0
+    \internal
+    \ingroup qpa
+
+    \brief The QPlatformMessageDialogHelper class allows for platform-specific customization of Message dialogs.
+
+*/
+const QSharedPointer<QMessageDialogOptions> &QPlatformMessageDialogHelper::options() const
+{
+    return m_options;
+}
+
+void QPlatformMessageDialogHelper::setOptions(const QSharedPointer<QMessageDialogOptions> &options)
+{
+    m_options = options;
 }
 
 QT_END_NAMESPACE

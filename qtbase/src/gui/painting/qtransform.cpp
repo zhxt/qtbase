@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -125,9 +117,9 @@ QT_BEGIN_NAMESPACE
     transformed into a \e polygon (mapped to the coordinate system
     defined by \e this matrix), using the mapToPolygon() function.
 
-    QTransform provides the isIdentity() function which returns true if
+    QTransform provides the isIdentity() function which returns \c true if
     the matrix is the identity matrix, and the isInvertible() function
-    which returns true if the matrix is non-singular (i.e. AB = BA =
+    which returns \c true if the matrix is non-singular (i.e. AB = BA =
     I). The inverted() function returns an inverted copy of \e this
     matrix if it is invertible (otherwise it returns the identity
     matrix), and adjoint() returns the matrix's classical adjoint.
@@ -258,6 +250,7 @@ QTransform::QTransform()
     , m_13(0), m_23(0), m_33(1)
     , m_type(TxNone)
     , m_dirty(TxNone)
+    , d(Q_NULLPTR)
 {
 }
 
@@ -276,6 +269,7 @@ QTransform::QTransform(qreal h11, qreal h12, qreal h13,
     , m_13(h13), m_23(h23), m_33(h33)
     , m_type(TxNone)
     , m_dirty(TxProject)
+    , d(Q_NULLPTR)
 {
 }
 
@@ -292,6 +286,7 @@ QTransform::QTransform(qreal h11, qreal h12, qreal h21,
     , m_13(0), m_23(0), m_33(1)
     , m_type(TxNone)
     , m_dirty(TxShear)
+    , d(Q_NULLPTR)
 {
 }
 
@@ -307,6 +302,7 @@ QTransform::QTransform(const QMatrix &mtx)
       m_13(0), m_23(0), m_33(1)
     , m_type(TxNone)
     , m_dirty(TxShear)
+    , d(Q_NULLPTR)
 {
 }
 
@@ -763,8 +759,8 @@ QTransform & QTransform::rotateRadians(qreal a, Qt::Axis axis)
 
 /*!
     \fn bool QTransform::operator==(const QTransform &matrix) const
-    Returns true if this matrix is equal to the given \a matrix,
-    otherwise returns false.
+    Returns \c true if this matrix is equal to the given \a matrix,
+    otherwise returns \c false.
 */
 bool QTransform::operator==(const QTransform &o) const
 {
@@ -781,8 +777,8 @@ bool QTransform::operator==(const QTransform &o) const
 
 /*!
     \fn bool QTransform::operator!=(const QTransform &matrix) const
-    Returns true if this matrix is not equal to the given \a matrix,
-    otherwise returns false.
+    Returns \c true if this matrix is not equal to the given \a matrix,
+    otherwise returns \c false.
 */
 bool QTransform::operator!=(const QTransform &o) const
 {
@@ -1082,7 +1078,7 @@ QDataStream & operator>>(QDataStream &s, QTransform &t)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QTransform &m)
 {
-    static const char *typeStr[] =
+    static const char *const typeStr[] =
     {
         "TxNone",
         "TxTranslate",
@@ -1095,6 +1091,7 @@ QDebug operator<<(QDebug dbg, const QTransform &m)
         "TxProject"
     };
 
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QTransform(type=" << typeStr[m.type()] << ','
                   << " 11=" << m.m11()
                   << " 12=" << m.m12()
@@ -1107,7 +1104,7 @@ QDebug operator<<(QDebug dbg, const QTransform &m)
                   << " 33=" << m.m33()
                   << ')';
 
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -1718,7 +1715,7 @@ QPolygon QTransform::mapToPolygon(const QRect &rect) const
 
 /*!
     Creates a transformation matrix, \a trans, that maps a unit square
-    to a four-sided polygon, \a quad. Returns true if the transformation
+    to a four-sided polygon, \a quad. Returns \c true if the transformation
     is constructed or false if such a transformation does not exist.
 
     \sa quadToSquare(), quadToQuad()
@@ -1783,7 +1780,7 @@ bool QTransform::squareToQuad(const QPolygonF &quad, QTransform &trans)
     \fn bool QTransform::quadToSquare(const QPolygonF &quad, QTransform &trans)
 
     Creates a transformation matrix, \a trans, that maps a four-sided polygon,
-    \a quad, to a unit square. Returns true if the transformation is constructed
+    \a quad, to a unit square. Returns \c true if the transformation is constructed
     or false if such a transformation does not exist.
 
     \sa squareToQuad(), quadToQuad()
@@ -1802,7 +1799,7 @@ bool QTransform::quadToSquare(const QPolygonF &quad, QTransform &trans)
 /*!
     Creates a transformation matrix, \a trans, that maps a four-sided
     polygon, \a one, to another four-sided polygon, \a two.
-    Returns true if the transformation is possible; otherwise returns
+    Returns \c true if the transformation is possible; otherwise returns
     false.
 
     This is a convenience method combining quadToSquare() and
@@ -2098,7 +2095,7 @@ QTransform::operator QVariant() const
 /*!
     \fn bool QTransform::isInvertible() const
 
-    Returns true if the matrix is invertible, otherwise returns false.
+    Returns \c true if the matrix is invertible, otherwise returns \c false.
 
     \sa inverted()
 */
@@ -2221,8 +2218,8 @@ QTransform::operator QVariant() const
 /*!
     \fn bool QTransform::isIdentity() const
 
-    Returns true if the matrix is the identity matrix, otherwise
-    returns false.
+    Returns \c true if the matrix is the identity matrix, otherwise
+    returns \c false.
 
     \sa reset()
 */
@@ -2230,15 +2227,15 @@ QTransform::operator QVariant() const
 /*!
     \fn bool QTransform::isAffine() const
 
-    Returns true if the matrix represent an affine transformation,
-    otherwise returns false.
+    Returns \c true if the matrix represent an affine transformation,
+    otherwise returns \c false.
 */
 
 /*!
     \fn bool QTransform::isScaling() const
 
-    Returns true if the matrix represents a scaling
-    transformation, otherwise returns false.
+    Returns \c true if the matrix represents a scaling
+    transformation, otherwise returns \c false.
 
     \sa reset()
 */
@@ -2246,8 +2243,8 @@ QTransform::operator QVariant() const
 /*!
     \fn bool QTransform::isRotating() const
 
-    Returns true if the matrix represents some kind of a
-    rotating transformation, otherwise returns false.
+    Returns \c true if the matrix represents some kind of a
+    rotating transformation, otherwise returns \c false.
 
     \note A rotation transformation of 180 degrees and/or 360 degrees is treated as a scaling transformation.
 
@@ -2257,8 +2254,8 @@ QTransform::operator QVariant() const
 /*!
     \fn bool QTransform::isTranslating() const
 
-    Returns true if the matrix represents a translating
-    transformation, otherwise returns false.
+    Returns \c true if the matrix represents a translating
+    transformation, otherwise returns \c false.
 
     \sa reset()
 */
@@ -2269,7 +2266,7 @@ QTransform::operator QVariant() const
     \relates QTransform
     \since 4.6
 
-    Returns true if \a t1 and \a t2 are equal, allowing for a small
+    Returns \c true if \a t1 and \a t2 are equal, allowing for a small
     fuzziness factor for floating-point comparisons; false otherwise.
 */
 
@@ -2293,13 +2290,30 @@ bool qt_scaleForTransform(const QTransform &transform, qreal *scale)
         return qFuzzyCompare(xScale, yScale);
     }
 
-    const qreal xScale = transform.m11() * transform.m11()
+    // rotate then scale: compare columns
+    const qreal xScale1 = transform.m11() * transform.m11()
                          + transform.m21() * transform.m21();
-    const qreal yScale = transform.m12() * transform.m12()
+    const qreal yScale1 = transform.m12() * transform.m12()
                          + transform.m22() * transform.m22();
-    if (scale)
-        *scale = qSqrt(qMax(xScale, yScale));
-    return type == QTransform::TxRotate && qFuzzyCompare(xScale, yScale);
+
+    // scale then rotate: compare rows
+    const qreal xScale2 = transform.m11() * transform.m11()
+                         + transform.m12() * transform.m12();
+    const qreal yScale2 = transform.m21() * transform.m21()
+                         + transform.m22() * transform.m22();
+
+    // decide the order of rotate and scale operations
+    if (qAbs(xScale1 - yScale1) > qAbs(xScale2 - yScale2)) {
+        if (scale)
+            *scale = qSqrt(qMax(xScale1, yScale1));
+
+        return type == QTransform::TxRotate && qFuzzyCompare(xScale1, yScale1);
+    } else {
+        if (scale)
+            *scale = qSqrt(qMax(xScale2, yScale2));
+
+        return type == QTransform::TxRotate && qFuzzyCompare(xScale2, yScale2);
+    }
 }
 
 QT_END_NAMESPACE

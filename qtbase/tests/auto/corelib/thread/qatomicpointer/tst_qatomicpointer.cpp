@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -70,6 +62,8 @@ private slots:
 
     void constAndVolatile();
     void forwardDeclared();
+
+    void operators();
 private:
     static void warningFreeHelper();
 };
@@ -662,6 +656,57 @@ void tst_QAtomicPointer::forwardDeclared()
     Q_UNUSED(ptr);
     Q_UNUSED(cfd);
     QVERIFY(true);
+}
+
+template <typename T> static void operators_helper()
+{
+    typedef T *Ptr;
+    T array[3] = {};
+    Ptr zero = array;
+    Ptr one = array + 1;
+    Ptr two = array + 2;
+
+    {
+        // Test that QBasicAtomicPointer also has operator= and cast operators
+        // We've been using them for QAtomicPointer<T> elsewhere
+        QBasicAtomicPointer<T> atomic = Q_BASIC_ATOMIC_INITIALIZER(0);
+        atomic = one;
+        QCOMPARE(Ptr(atomic), one);
+    }
+
+    QAtomicPointer<T> atomic = zero;
+    Ptr x = ++atomic;
+    QCOMPARE(Ptr(atomic), x);
+    QCOMPARE(Ptr(atomic), one);
+
+    x = atomic++;
+    QCOMPARE(Ptr(atomic), x + 1);
+    QCOMPARE(Ptr(atomic), two);
+
+    x = atomic--;
+    QCOMPARE(Ptr(atomic), x - 1);
+    QCOMPARE(Ptr(atomic), one);
+
+    x = --atomic;
+    QCOMPARE(Ptr(atomic), x);
+    QCOMPARE(Ptr(atomic), zero);
+
+    x = (atomic += 1);
+    QCOMPARE(Ptr(atomic), x);
+    QCOMPARE(Ptr(atomic), one);
+
+    x = (atomic -= 1);
+    QCOMPARE(Ptr(atomic), x);
+    QCOMPARE(Ptr(atomic), zero);
+}
+
+struct Big { double d[10]; };
+void tst_QAtomicPointer::operators()
+{
+    operators_helper<char>();
+    operators_helper<int>();
+    operators_helper<double>();
+    operators_helper<Big>();
 }
 
 QTEST_APPLESS_MAIN(tst_QAtomicPointer)

@@ -4,7 +4,8 @@ CONFIG  += ordered
 SUBDIRS	=	lib \
                 theplugin \
 		tst
-!win32: !mac: SUBDIRS += almostplugin
+!android: !win32: !mac: SUBDIRS += almostplugin
+macx-*: contains(QT_CONFIG, private_tests): SUBDIRS += machtest
 TARGET = tst_qpluginloader
 
 # no special install rule for subdir

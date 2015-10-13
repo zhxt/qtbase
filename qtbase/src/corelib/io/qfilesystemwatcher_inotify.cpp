@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -129,15 +121,20 @@
 # define __NR_inotify_rm_watch  271
 # define __NR_inotify_init1     314
 #elif defined (__avr32__)
-# define __NR_inotify_init	240
-# define __NR_inotify_add_watch	241
-# define __NR_inotify_rm_watch	242
+# define __NR_inotify_init      240
+# define __NR_inotify_add_watch 241
+# define __NR_inotify_rm_watch  242
 // no inotify_init1 for AVR32
 #elif defined (__mc68000__)
 # define __NR_inotify_init      284
 # define __NR_inotify_add_watch 285
 # define __NR_inotify_rm_watch  286
 # define __NR_inotify_init1     328
+#elif defined (__aarch64__)
+# define __NR_inotify_init1     26
+# define __NR_inotify_add_watch 27
+# define __NR_inotify_rm_watch  28
+// no inotify_init for aarch64
 #else
 # error "This architecture is not supported. Please see http://www.qt-project.org/"
 #endif
@@ -155,7 +152,11 @@ static inline int syscall(...) { return -1; }
 
 static inline int inotify_init()
 {
+#ifdef __NR_inotify_init
     return syscall(__NR_inotify_init);
+#else
+    return syscall(__NR_inotify_init1, 0);
+#endif
 }
 
 static inline int inotify_add_watch(int fd, const char *name, __u32 mask)
@@ -220,7 +221,7 @@ QT_BEGIN_NAMESPACE
 
 QInotifyFileSystemWatcherEngine *QInotifyFileSystemWatcherEngine::create(QObject *parent)
 {
-    register int fd = -1;
+    int fd = -1;
 #ifdef IN_CLOEXEC
     fd = inotify_init1(IN_CLOEXEC);
 #endif
@@ -365,11 +366,11 @@ void QInotifyFileSystemWatcherEngine::readFromInotify()
         // qDebug() << "inotify event, wd" << event.wd << "mask" << hex << event.mask;
 
         int id = event.wd;
-        QString path = idToPath.value(id);
+        QString path = getPathFromID(id);
         if (path.isEmpty()) {
             // perhaps a directory?
             id = -id;
-            path = idToPath.value(id);
+            path = getPathFromID(id);
             if (path.isEmpty())
                 continue;
         }
@@ -378,8 +379,9 @@ void QInotifyFileSystemWatcherEngine::readFromInotify()
 
         if ((event.mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT)) != 0) {
             pathToID.remove(path);
-            idToPath.remove(id);
-            inotify_rm_watch(inotifyFd, event.wd);
+            idToPath.remove(id, getPathFromID(id));
+            if (!idToPath.contains(id))
+                inotify_rm_watch(inotifyFd, event.wd);
 
             if (id < 0)
                 emit directoryChanged(path, true);
@@ -392,6 +394,18 @@ void QInotifyFileSystemWatcherEngine::readFromInotify()
                 emit fileChanged(path, false);
         }
     }
+}
+
+QString QInotifyFileSystemWatcherEngine::getPathFromID(int id) const
+{
+    QHash<int, QString>::const_iterator i = idToPath.find(id);
+    while (i != idToPath.constEnd() && i.key() == id) {
+        if ((i + 1) == idToPath.constEnd() || (i + 1).key() != id) {
+            return i.value();
+        }
+        ++i;
+    }
+    return QString();
 }
 
 QT_END_NAMESPACE

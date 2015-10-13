@@ -7,7 +7,7 @@ DEFINES  = UNICODE QT_NO_CODECS QT_NO_TEXTCODEC QT_NO_UNICODETABLES QT_LITE_COMP
 DEFINES  += QT_BOOTSTRAPPED QT_BUILD_CONFIGURE
 
 win32 : LIBS += -lole32 -ladvapi32
-win32-g++* : LIBS += -luuid
+mingw : LIBS += -luuid
 
 win32-msvc* {
     QMAKE_CFLAGS_RELEASE -= -MD
@@ -109,6 +109,7 @@ SOURCES  = main.cpp configureapp.cpp environment.cpp tools.cpp \
            $$QT_SOURCE_TREE/src/corelib/io/qfsfileengine_win.cpp \
            $$QT_SOURCE_TREE/src/corelib/io/qfsfileengine_iterator.cpp \
            $$QT_SOURCE_TREE/src/corelib/io/qiodevice.cpp \
+           $$QT_SOURCE_TREE/src/corelib/io/qdebug.cpp \
            $$QT_SOURCE_TREE/src/corelib/io/qtextstream.cpp \
            $$QT_SOURCE_TREE/src/corelib/io/qtemporaryfile.cpp \
            $$QT_SOURCE_TREE/src/corelib/io/qstandardpaths.cpp \
@@ -119,6 +120,7 @@ SOURCES  = main.cpp configureapp.cpp environment.cpp tools.cpp \
            $$QT_SOURCE_TREE/src/corelib/tools/qmap.cpp \
            $$QT_SOURCE_TREE/src/corelib/tools/qregexp.cpp \
            $$QT_SOURCE_TREE/src/corelib/tools/qstring.cpp \
+           $$QT_SOURCE_TREE/src/corelib/tools/qstring_compat.cpp \
            $$QT_SOURCE_TREE/src/corelib/tools/qstringlist.cpp \
            $$QT_SOURCE_TREE/src/corelib/tools/qvsnprintf.cpp \
            $$QT_SOURCE_TREE/src/corelib/kernel/qvariant.cpp \
@@ -130,5 +132,3 @@ SOURCES  = main.cpp configureapp.cpp environment.cpp tools.cpp \
            $$QT_SOURCE_TREE/src/corelib/plugin/quuid.cpp \
            $$QT_SOURCE_TREE/src/corelib/tools/qcryptographichash.cpp \
            $$QT_SOURCE_TREE/tools/shared/windows/registry.cpp
-
-DEFINES += COMMERCIAL_VERSION

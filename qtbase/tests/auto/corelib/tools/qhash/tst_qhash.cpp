@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +35,8 @@
 
 #include <qhash.h>
 #include <qmap.h>
+
+#include <algorithm>
 
 class tst_QHash : public QObject
 {
@@ -63,7 +57,6 @@ private slots:
     void operator_eq(); // copied from tst_QMap
     void rehash_isnt_quadratic();
     void dont_need_default_constructor();
-    void qhash();
     void qmultihash_specific();
 
     void compare();
@@ -75,10 +68,16 @@ private slots:
     void const_shared_null();
     void twoArguments_qHash();
     void initializerList();
-
-    void qthash_data();
-    void qthash();
+    void eraseValidIteratorOnSharedHash();
 };
+
+struct IdentityTracker {
+    int value, id;
+};
+
+inline uint qHash(IdentityTracker key) { return qHash(key.value); }
+inline bool operator==(IdentityTracker lhs, IdentityTracker rhs) { return lhs.value == rhs.value; }
+
 
 struct Foo {
     static int count;
@@ -438,6 +437,32 @@ void tst_QHash::insert1()
             QHash<int, int*> hash;
             QVERIFY(((const QHash<int,int*>*) &hash)->operator[](7) == 0);
         }
+    }
+    {
+        QHash<IdentityTracker, int> hash;
+        QCOMPARE(hash.size(), 0);
+        const int dummy = -1;
+        IdentityTracker id00 = {0, 0}, id01 = {0, 1}, searchKey = {0, dummy};
+        QCOMPARE(hash.insert(id00, id00.id).key().id, id00.id);
+        QCOMPARE(hash.size(), 1);
+        QCOMPARE(hash.insert(id01, id01.id).key().id, id00.id); // first key inserted is kept
+        QCOMPARE(hash.size(), 1);
+        QCOMPARE(hash.find(searchKey).value(), id01.id);  // last-inserted value
+        QCOMPARE(hash.find(searchKey).key().id, id00.id); // but first-inserted key
+    }
+    {
+        QMultiHash<IdentityTracker, int> hash;
+        QCOMPARE(hash.size(), 0);
+        const int dummy = -1;
+        IdentityTracker id00 = {0, 0}, id01 = {0, 1}, searchKey = {0, dummy};
+        QCOMPARE(hash.insert(id00, id00.id).key().id, id00.id);
+        QCOMPARE(hash.size(), 1);
+        QCOMPARE(hash.insert(id01, id01.id).key().id, id01.id);
+        QCOMPARE(hash.size(), 2);
+        QMultiHash<IdentityTracker, int>::const_iterator pos = hash.constFind(searchKey);
+        QCOMPARE(pos.value(), pos.key().id); // key fits to value it was inserted with
+        ++pos;
+        QCOMPARE(pos.value(), pos.key().id); // key fits to value it was inserted with
     }
 }
 
@@ -979,69 +1004,6 @@ void tst_QHash::dont_need_default_constructor()
     }
 }
 
-void tst_QHash::qhash()
-{
-    {
-        QBitArray a1;
-        QBitArray a2;
-        QVERIFY(qHash(a1) == 0);
-
-        a1.resize(1);
-        a1.setBit(0, true);
-
-        a2.resize(1);
-        a2.setBit(0, false);
-
-        uint h1 = qHash(a1);
-        uint h2 = qHash(a2);
-
-        QVERIFY(h1 != h2);
-
-        a2.setBit(0, true);
-        QVERIFY(h1 == qHash(a2));
-
-        a1.fill(true, 8);
-        a1.resize(7);
-
-        h1 = qHash(a1);
-
-        a2.fill(true, 7);
-        h2 = qHash(a2);
-
-        QVERIFY(h1 == h2);
-
-        a2.setBit(0, false);
-        uint h3 = qHash(a2);
-        QVERIFY(h2 != h3);
-
-        a2.setBit(0, true);
-        QVERIFY(h2 == qHash(a2));
-
-        a2.setBit(6, false);
-        uint h4 = qHash(a2);
-        QVERIFY(h2 != h4);
-
-        a2.setBit(6, true);
-        QVERIFY(h2 == qHash(a2));
-
-        QVERIFY(h3 != h4);
-    }
-
-    {
-        QPair<int, int> p12(1, 2);
-        QPair<int, int> p21(2, 1);
-
-        QVERIFY(qHash(p12) == qHash(p12));
-        QVERIFY(qHash(p21) == qHash(p21));
-        QVERIFY(qHash(p12) != qHash(p21));
-
-        QPair<int, int> pA(0x12345678, 0x12345678);
-        QPair<int, int> pB(0x12345675, 0x12345675);
-
-        QVERIFY(qHash(pA) != qHash(pB));
-    }
-}
-
 void tst_QHash::qmultihash_specific()
 {
     QMultiHash<int, int> hash1;
@@ -1151,7 +1113,7 @@ template <typename T>
 QList<T> sorted(const QList<T> &list)
 {
     QList<T> res = list;
-    qSort(res);
+    std::sort(res.begin(), res.end());
     return res;
 }
 
@@ -1199,12 +1161,14 @@ void tst_QHash::noNeedlessRehashes()
 
 void tst_QHash::const_shared_null()
 {
+    QHash<int, QString> hash2;
+#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
     QHash<int, QString> hash1;
     hash1.setSharable(false);
     QVERIFY(hash1.isDetached());
 
-    QHash<int, QString> hash2;
     hash2.setSharable(true);
+#endif
     QVERIFY(!hash2.isDetached());
 }
 
@@ -1307,10 +1271,15 @@ void tst_QHash::twoArguments_qHash()
 void tst_QHash::initializerList()
 {
 #ifdef Q_COMPILER_INITIALIZER_LISTS
-    QHash<int, QString> hash{{1, "hello"}, {2, "initializer_list"}};
+    QHash<int, QString> hash = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
     QCOMPARE(hash.count(), 2);
-    QVERIFY(hash[1] == "hello");
-    QVERIFY(hash[2] == "initializer_list");
+    QCOMPARE(hash[1], QString("hello"));
+    QCOMPARE(hash[2], QString("initializer_list"));
+
+    // note the difference to std::unordered_map:
+    // std::unordered_map<int, QString> stdh = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
+    // QCOMPARE(stdh.size(), 2UL);
+    // QCOMPARE(stdh[1], QString("bar"));
 
     QMultiHash<QString, int> multiHash{{"il", 1}, {"il", 2}, {"il", 3}};
     QCOMPARE(multiHash.count(), 3);
@@ -1333,23 +1302,33 @@ void tst_QHash::initializerList()
 #endif
 }
 
-void tst_QHash::qthash_data()
+void tst_QHash::eraseValidIteratorOnSharedHash()
 {
-    QTest::addColumn<QString>("key");
-    QTest::addColumn<uint>("hash");
+    QHash<int, int> a, b;
+    a.insert(10, 10);
+    a.insertMulti(10, 25);
+    a.insertMulti(10, 30);
+    a.insert(20, 20);
+    a.insert(40, 40);
 
-    QTest::newRow("null") << QString() << 0u;
-    QTest::newRow("empty") << QStringLiteral("") << 0u;
-    QTest::newRow("abcdef") << QStringLiteral("abcdef") << 108567222u;
-    QTest::newRow("tqbfjotld") << QStringLiteral("The quick brown fox jumps over the lazy dog") << 140865879u;
-    QTest::newRow("42") << QStringLiteral("42") << 882u;
-}
+    QHash<int, int>::iterator i = a.begin();
+    while (i.value() != 25)
+        ++i;
 
-void tst_QHash::qthash()
-{
-    QFETCH(QString, key);
-    const uint result = qt_hash(key);
-    QTEST(result, "hash");
+    b = a;
+    a.erase(i);
+
+    QCOMPARE(b.size(), 5);
+    QCOMPARE(a.size(), 4);
+
+    for (i = a.begin(); i != a.end(); ++i)
+        QVERIFY(i.value() != 25);
+
+    int itemsWith10 = 0;
+    for (i = b.begin(); i != b.end(); ++i)
+        itemsWith10 += (i.key() == 10);
+
+    QCOMPARE(itemsWith10, 3);
 }
 
 QTEST_APPLESS_MAIN(tst_QHash)

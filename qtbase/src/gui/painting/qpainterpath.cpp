@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -226,7 +218,7 @@ static void qt_debug_path(const QPainterPath &path)
     Below is a code snippet that shows how a QPainterPath object can
     be used:
 
-    \table 100%
+    \table 70%
     \row
     \li \inlineimage qpainterpath-construction.png
     \li
@@ -395,8 +387,8 @@ static void qt_debug_path(const QPainterPath &path)
     \fn bool QPainterPath::Element::operator==(const Element &other) const
     \since 4.2
 
-    Returns true if this element is equal to \a other;
-    otherwise returns false.
+    Returns \c true if this element is equal to \a other;
+    otherwise returns \c false.
 
     \sa operator!=()
 */
@@ -405,8 +397,8 @@ static void qt_debug_path(const QPainterPath &path)
     \fn bool QPainterPath::Element::operator!=(const Element &other) const
     \since 4.2
 
-    Returns true if this element is not equal to \a other;
-    otherwise returns false.
+    Returns \c true if this element is not equal to \a other;
+    otherwise returns \c false.
 
     \sa operator==()
 */
@@ -414,7 +406,7 @@ static void qt_debug_path(const QPainterPath &path)
 /*!
     \fn bool QPainterPath::Element::isCurveTo () const
 
-    Returns true if the element is a curve, otherwise returns false.
+    Returns \c true if the element is a curve, otherwise returns \c false.
 
     \sa type, QPainterPath::CurveToElement
 */
@@ -422,7 +414,7 @@ static void qt_debug_path(const QPainterPath &path)
 /*!
     \fn bool QPainterPath::Element::isLineTo () const
 
-    Returns true if the element is a line, otherwise returns false.
+    Returns \c true if the element is a line, otherwise returns \c false.
 
     \sa type, QPainterPath::LineToElement
 */
@@ -430,8 +422,8 @@ static void qt_debug_path(const QPainterPath &path)
 /*!
     \fn bool QPainterPath::Element::isMoveTo () const
 
-    Returns true if the element is moving the current position,
-    otherwise returns false.
+    Returns \c true if the element is moving the current position,
+    otherwise returns \c false.
 
     \sa type, QPainterPath::MoveToElement
 */
@@ -529,7 +521,7 @@ void QPainterPath::setElementPositionAt(int i, qreal x, qreal y)
 /*!
     Constructs an empty QPainterPath object.
 */
-QPainterPath::QPainterPath()
+QPainterPath::QPainterPath() Q_DECL_NOEXCEPT
     : d_ptr(0)
 {
 }
@@ -606,6 +598,14 @@ QPainterPath &QPainterPath::operator=(const QPainterPath &other)
     }
     return *this;
 }
+
+/*!
+    \fn QPainterPath &QPainterPath::operator=(QPainterPath &&other)
+
+    Move-assigns \a other to this QPainterPath instance.
+
+    \since 5.2
+*/
 
 /*!
     \fn void QPainterPath::swap(QPainterPath &other)
@@ -1477,8 +1477,8 @@ QRectF QPainterPath::controlPointRect() const
 /*!
     \fn bool QPainterPath::isEmpty() const
 
-    Returns true if either there are no elements in this path, or if the only
-    element is a MoveToElement; otherwise returns false.
+    Returns \c true if either there are no elements in this path, or if the only
+    element is a MoveToElement; otherwise returns \c false.
 
     \sa elementCount()
 */
@@ -1636,7 +1636,8 @@ QList<QPolygonF> QPainterPath::toFillPolygons(const QTransform &matrix) const
     if (count == 0)
         return polys;
 
-    QList<QRectF> bounds;
+    QVector<QRectF> bounds;
+    bounds.reserve(count);
     for (int i=0; i<count; ++i)
         bounds += subpaths.at(i).boundingRect();
 
@@ -1730,8 +1731,8 @@ QList<QPolygonF> QPainterPath::toFillPolygons(const QMatrix &matrix) const
 
 //same as qt_polygon_isect_line in qpolygon.cpp
 static void qt_painterpath_isect_line(const QPointF &p1,
-				      const QPointF &p2,
-				      const QPointF &pos,
+                                      const QPointF &p2,
+                                      const QPointF &pos,
                                       int *winding)
 {
     qreal x1 = p1.x();
@@ -1798,8 +1799,8 @@ static void qt_painterpath_isect_curve(const QBezier &bezier, const QPointF &pt,
 /*!
     \fn bool QPainterPath::contains(const QPointF &point) const
 
-    Returns true if the given \a point is inside the path, otherwise
-    returns false.
+    Returns \c true if the given \a point is inside the path, otherwise
+    returns \c false.
 
     \sa intersects()
 */
@@ -1974,7 +1975,7 @@ static bool qt_isect_curve_vertical(const QBezier &bezier, qreal x, qreal y1, qr
 }
 
 /*
-    Returns true if any lines or curves cross the four edges in of rect
+    Returns \c true if any lines or curves cross the four edges in of rect
 */
 static bool qt_painterpath_check_crossing(const QPainterPath *path, const QRectF &rect)
 {
@@ -2032,8 +2033,8 @@ static bool qt_painterpath_check_crossing(const QPainterPath *path, const QRectF
 /*!
     \fn bool QPainterPath::intersects(const QRectF &rectangle) const
 
-    Returns true if any point in the given \a rectangle intersects the
-    path; otherwise returns false.
+    Returns \c true if any point in the given \a rectangle intersects the
+    path; otherwise returns \c false.
 
     There is an intersection if any of the lines making up the
     rectangle crosses a part of the path or if any part of the
@@ -2141,8 +2142,8 @@ QPainterPath QPainterPath::translated(qreal dx, qreal dy) const
 /*!
     \fn bool QPainterPath::contains(const QRectF &rectangle) const
 
-    Returns true if the given \a rectangle is inside the path,
-    otherwise returns false.
+    Returns \c true if the given \a rectangle is inside the path,
+    otherwise returns \c false.
 */
 bool QPainterPath::contains(const QRectF &rect) const
 {
@@ -2225,7 +2226,7 @@ static inline bool epsilonCompare(const QPointF &a, const QPointF &b, const QSiz
 }
 
 /*!
-    Returns true if this painterpath is equal to the given \a path.
+    Returns \c true if this painterpath is equal to the given \a path.
 
     Note that comparing paths may involve a per element comparison
     which can be slow for complex paths.
@@ -2260,7 +2261,7 @@ bool QPainterPath::operator==(const QPainterPath &path) const
 }
 
 /*!
-    Returns true if this painter path differs from the given \a path.
+    Returns \c true if this painter path differs from the given \a path.
 
     Note that comparing paths may involve a per element comparison
     which can be slow for complex paths.
@@ -2540,6 +2541,26 @@ QPainterPathStrokerPrivate::QPainterPathStrokerPrivate()
 QPainterPathStroker::QPainterPathStroker()
     : d_ptr(new QPainterPathStrokerPrivate)
 {
+}
+
+/*!
+   Creates a new stroker based on \a pen.
+
+   \since 5.3
+ */
+QPainterPathStroker::QPainterPathStroker(const QPen &pen)
+    : d_ptr(new QPainterPathStrokerPrivate)
+{
+    setWidth(pen.widthF());
+    setCapStyle(pen.capStyle());
+    setJoinStyle(pen.joinStyle());
+    setMiterLimit(pen.miterLimit());
+    setDashOffset(pen.dashOffset());
+
+    if (pen.style() == Qt::CustomDashLine)
+        setDashPattern(pen.dashPattern());
+    else
+        setDashPattern(pen.style());
 }
 
 /*!
@@ -3036,20 +3057,19 @@ qreal QPainterPath::slopeAtPercent(qreal t) const
     //tangent line
     qreal slope = 0;
 
-#define SIGN(x) ((x < 0)?-1:1)
     if (m1)
         slope = m2/m1;
     else {
-        //windows doesn't define INFINITY :(
-#ifdef INFINITY
-        slope = INFINITY*SIGN(m2);
-#else
-        if (sizeof(qreal) == sizeof(double)) {
-            return 1.79769313486231570e+308;
+        if (std::numeric_limits<qreal>::has_infinity) {
+            slope = (m2  < 0) ? -std::numeric_limits<qreal>::infinity()
+                              : std::numeric_limits<qreal>::infinity();
         } else {
-            return ((qreal)3.40282346638528860e+38);
+            if (sizeof(qreal) == sizeof(double)) {
+                return 1.79769313486231570e+308;
+            } else {
+                return ((qreal)3.40282346638528860e+38);
+            }
         }
-#endif
     }
 
     return slope;
@@ -3322,8 +3342,8 @@ QPainterPath QPainterPath::simplified() const
 /*!
   \since 4.3
 
-  Returns true if the current path intersects at any point the given path \a p.
-  Also returns true if the current path contains or is contained by any part of \a p.
+  Returns \c true if the current path intersects at any point the given path \a p.
+  Also returns \c true if the current path contains or is contained by any part of \a p.
 
   Set operations on paths will treat the paths as areas. Non-closed
   paths will be treated as implicitly closed.
@@ -3343,8 +3363,8 @@ bool QPainterPath::intersects(const QPainterPath &p) const
 /*!
   \since 4.3
 
-  Returns true if the given path \a p is contained within
-  the current path. Returns false if any edges of the current path and
+  Returns \c true if the given path \a p is contained within
+  the current path. Returns \c false if any edges of the current path and
   \a p intersect.
 
   Set operations on paths will treat the paths as areas. Non-closed

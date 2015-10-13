@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,8 +36,10 @@
 
 #ifndef QT_NO_LINEEDIT
 
+#include "qvariant.h"
 #include "qabstractitemview.h"
 #include "qdrag.h"
+#include "qwidgetaction.h"
 #include "qclipboard.h"
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
@@ -54,6 +48,7 @@
 #include "qinputmethod.h"
 #include "qlist.h"
 #endif
+#include <qpropertyanimation.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -82,7 +77,7 @@ QRect QLineEditPrivate::cursorRect() const
 
 #ifndef QT_NO_COMPLETER
 
-void QLineEditPrivate::_q_completionHighlighted(QString newText)
+void QLineEditPrivate::_q_completionHighlighted(const QString &newText)
 {
     Q_Q(QLineEdit);
     if (control->completer()->completionMode() != QCompleter::InlineCompletion) {
@@ -92,7 +87,12 @@ void QLineEditPrivate::_q_completionHighlighted(QString newText)
         QString text = control->text();
         q->setText(text.left(c) + newText.mid(c));
         control->moveCursor(control->end(), false);
-        control->moveCursor(c, true);
+#ifndef Q_OS_ANDROID
+        const bool mark = true;
+#else
+        const bool mark = (imHints & Qt::ImhNoPredictiveText);
+#endif
+        control->moveCursor(c, mark);
     }
 }
 
@@ -135,7 +135,7 @@ void QLineEditPrivate::_q_selectionChanged()
 {
     Q_Q(QLineEdit);
     if (control->preeditAreaText().isEmpty()) {
-        QStyleOptionFrameV2 opt;
+        QStyleOptionFrame opt;
         q->initStyleOption(&opt);
         bool showCursor = control->hasSelectedText() ?
                           q->style()->styleHint(QStyle::SH_BlinkCursorWhenTextSelected, &opt, q):
@@ -188,15 +188,19 @@ void QLineEditPrivate::init(const QString& txt)
     QObject::connect(control, SIGNAL(selectionChanged()),
             q, SLOT(update()));
 
+    QObject::connect(control, SIGNAL(selectionChanged()),
+            q, SLOT(updateMicroFocus()));
+
     QObject::connect(control, SIGNAL(displayTextChanged(QString)),
             q, SLOT(update()));
 
     QObject::connect(control, SIGNAL(updateNeeded(QRect)),
             q, SLOT(_q_updateNeeded(QRect)));
 
-    QStyleOptionFrameV2 opt;
+    QStyleOptionFrame opt;
     q->initStyleOption(&opt);
     control->setPasswordCharacter(q->style()->styleHint(QStyle::SH_LineEdit_PasswordCharacter, &opt, q));
+    control->setPasswordMaskDelay(q->style()->styleHint(QStyle::SH_LineEdit_PasswordMaskDelay, &opt, q));
 #ifndef QT_NO_CURSOR
     q->setCursor(Qt::IBeamCursor);
 #endif
@@ -216,12 +220,12 @@ void QLineEditPrivate::init(const QString& txt)
 QRect QLineEditPrivate::adjustedContentsRect() const
 {
     Q_Q(const QLineEdit);
-    QStyleOptionFrameV2 opt;
+    QStyleOptionFrame opt;
     q->initStyleOption(&opt);
     QRect r = q->style()->subElementRect(QStyle::SE_LineEditContents, &opt, q);
-    r.setX(r.x() + leftTextMargin);
+    r.setX(r.x() + effectiveLeftTextMargin());
     r.setY(r.y() + topTextMargin);
-    r.setRight(r.right() - rightTextMargin);
+    r.setRight(r.right() - effectiveRightTextMargin());
     r.setBottom(r.bottom() - bottomTextMargin);
     return r;
 }
@@ -249,7 +253,7 @@ void QLineEditPrivate::resetInputMethod()
 {
     Q_Q(QLineEdit);
     if (q->hasFocus() && qApp) {
-        qApp->inputMethod()->reset();
+        QGuiApplication::inputMethod()->reset();
     }
 }
 
@@ -269,7 +273,7 @@ bool QLineEditPrivate::sendMouseEventToInputContext( QMouseEvent *e )
 
         if (mousePos >= 0) {
             if (e->type() == QEvent::MouseButtonRelease)
-                qApp->inputMethod()->invokeAction(QInputMethod::Click, mousePos);
+                QGuiApplication::inputMethod()->invokeAction(QInputMethod::Click, mousePos);
 
             return true;
         }
@@ -296,6 +300,217 @@ void QLineEditPrivate::drag()
 }
 
 #endif // QT_NO_DRAGANDDROP
+
+QLineEditIconButton::QLineEditIconButton(QWidget *parent)
+    : QToolButton(parent)
+    , m_opacity(0)
+{
+    setFocusPolicy(Qt::NoFocus);
+}
+
+void QLineEditIconButton::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    // Note isDown should really use the active state but in most styles
+    // this has no proper feedback
+    QIcon::Mode state = QIcon::Disabled;
+    if (isEnabled())
+        state = isDown() ? QIcon::Selected : QIcon::Normal;
+    const QPixmap iconPixmap = icon().pixmap(QSize(IconButtonSize, IconButtonSize),
+                                             state, QIcon::Off);
+    QRect pixmapRect = QRect(QPoint(0, 0), iconPixmap.size() / iconPixmap.devicePixelRatio());
+    pixmapRect.moveCenter(rect().center());
+    painter.setOpacity(m_opacity);
+    painter.drawPixmap(pixmapRect, iconPixmap);
+}
+
+void QLineEditIconButton::actionEvent(QActionEvent *e)
+{
+    switch (e->type()) {
+    case QEvent::ActionChanged: {
+        const QAction *action = e->action();
+        if (isVisible() != action->isVisible()) {
+            setVisible(action->isVisible());
+            if (QLineEdit *le = qobject_cast<QLineEdit *>(parentWidget()))
+                static_cast<QLineEditPrivate *>(qt_widget_private(le))->positionSideWidgets();
+        }
+    }
+        break;
+    default:
+        break;
+    }
+    QToolButton::actionEvent(e);
+}
+
+void QLineEditIconButton::setOpacity(qreal value)
+{
+    if (!qFuzzyCompare(m_opacity, value)) {
+        m_opacity = value;
+        updateCursor();
+        update();
+    }
+}
+
+#ifndef QT_NO_ANIMATION
+void QLineEditIconButton::startOpacityAnimation(qreal endValue)
+{
+    QPropertyAnimation *animation = new QPropertyAnimation(this, QByteArrayLiteral("opacity"));
+    animation->setDuration(160);
+    animation->setEndValue(endValue);
+    animation->start(QAbstractAnimation::DeleteWhenStopped);
+}
+#endif
+
+void QLineEditIconButton::updateCursor()
+{
+#ifndef QT_NO_CURSOR
+    setCursor(qFuzzyCompare(m_opacity, 1.0) || !parentWidget() ? QCursor(Qt::ArrowCursor) : parentWidget()->cursor());
+#endif
+}
+
+void QLineEditPrivate::_q_textChanged(const QString &text)
+{
+    if (hasSideWidgets()) {
+        const int newTextSize = text.size();
+        if (!newTextSize || !lastTextSize) {
+            lastTextSize = newTextSize;
+#ifndef QT_NO_ANIMATION
+            const bool fadeIn = newTextSize > 0;
+            foreach (const SideWidgetEntry &e, leadingSideWidgets) {
+                if (e.flags & SideWidgetFadeInWithText)
+                   static_cast<QLineEditIconButton *>(e.widget)->animateShow(fadeIn);
+            }
+            foreach (const SideWidgetEntry &e, trailingSideWidgets) {
+                if (e.flags & SideWidgetFadeInWithText)
+                   static_cast<QLineEditIconButton *>(e.widget)->animateShow(fadeIn);
+            }
+#endif
+        }
+    }
+}
+
+void QLineEditPrivate::_q_clearButtonClicked()
+{
+    Q_Q(QLineEdit);
+    if (!q->text().isEmpty()) {
+        q->clear();
+        emit q->textEdited(QString());
+    }
+}
+
+QSize QLineEditPrivate::iconSize() const
+{
+    if (!m_iconSize.isValid()) // This might require style-specific handling (pixel metric).
+        m_iconSize = QSize(QLineEditIconButton::IconButtonSize + 6, QLineEditIconButton::IconButtonSize + 2);
+    return m_iconSize;
+}
+
+QIcon QLineEditPrivate::clearButtonIcon() const
+{
+    Q_Q(const QLineEdit);
+    QStyleOptionFrame styleOption;
+    q->initStyleOption(&styleOption);
+    return QIcon(q->style()->standardPixmap(QStyle::SP_LineEditClearButton, &styleOption, q));
+}
+
+void QLineEditPrivate::setClearButtonEnabled(bool enabled)
+{
+    foreach (const SideWidgetEntry &e, trailingSideWidgets) {
+        if (e.flags & SideWidgetClearButton) {
+            e.action->setEnabled(enabled);
+            break;
+        }
+    }
+}
+
+void QLineEditPrivate::positionSideWidgets()
+{
+    Q_Q(QLineEdit);
+    if (hasSideWidgets()) {
+        const QRect contentRect = q->rect();
+        const QSize iconSize = QLineEditPrivate::iconSize();
+        const int delta = QLineEditIconButton::IconMargin + iconSize.width();
+        QRect widgetGeometry(QPoint(QLineEditIconButton::IconMargin, (contentRect.height() - iconSize.height()) / 2), iconSize);
+        foreach (const SideWidgetEntry &e, leftSideWidgetList()) {
+            e.widget->setGeometry(widgetGeometry);
+            if (e.widget->isVisible())
+                widgetGeometry.moveLeft(widgetGeometry.left() + delta);
+        }
+        widgetGeometry.moveLeft(contentRect.width() - iconSize.width() - QLineEditIconButton::IconMargin);
+        foreach (const SideWidgetEntry &e, rightSideWidgetList()) {
+            e.widget->setGeometry(widgetGeometry);
+            if (e.widget->isVisible())
+                widgetGeometry.moveLeft(widgetGeometry.left() - delta);
+        }
+    }
+}
+
+QLineEditPrivate::PositionIndexPair QLineEditPrivate::findSideWidget(const QAction *a) const
+{
+    for (int i = 0; i < leadingSideWidgets.size(); ++i) {
+        if (a == leadingSideWidgets.at(i).action)
+            return PositionIndexPair(QLineEdit::LeadingPosition, i);
+    }
+    for (int i = 0; i < trailingSideWidgets.size(); ++i) {
+        if (a == trailingSideWidgets.at(i).action)
+            return PositionIndexPair(QLineEdit::TrailingPosition, i);
+    }
+    return PositionIndexPair(QLineEdit::LeadingPosition, -1);
+}
+
+QWidget *QLineEditPrivate::addAction(QAction *newAction, QAction *before, QLineEdit::ActionPosition position, int flags)
+{
+    Q_Q(QLineEdit);
+    if (!newAction)
+        return 0;
+    if (!hasSideWidgets()) { // initial setup.
+        QObject::connect(q, SIGNAL(textChanged(QString)), q, SLOT(_q_textChanged(QString)));
+        lastTextSize = q->text().size();
+    }
+    QWidget *w = 0;
+    // Store flags about QWidgetAction here since removeAction() may be called from ~QAction,
+    // in which a qobject_cast<> no longer works.
+    if (QWidgetAction *widgetAction = qobject_cast<QWidgetAction *>(newAction)) {
+        if ((w = widgetAction->requestWidget(q)))
+            flags |= SideWidgetCreatedByWidgetAction;
+    }
+    if (!w) {
+        QLineEditIconButton *toolButton = new QLineEditIconButton(q);
+        toolButton->setIcon(newAction->icon());
+        toolButton->setOpacity(lastTextSize > 0 || !(flags & SideWidgetFadeInWithText) ? 1 : 0);
+        if (flags & SideWidgetClearButton)
+            QObject::connect(toolButton, SIGNAL(clicked()), q, SLOT(_q_clearButtonClicked()));
+        toolButton->setDefaultAction(newAction);
+        w = toolButton;
+    }
+    // If there is a 'before' action, it takes preference
+    PositionIndexPair positionIndex = before ? findSideWidget(before) : PositionIndexPair(position, -1);
+    SideWidgetEntryList &list = positionIndex.first == QLineEdit::TrailingPosition ? trailingSideWidgets : leadingSideWidgets;
+    if (positionIndex.second < 0)
+        positionIndex.second = list.size();
+    list.insert(positionIndex.second, SideWidgetEntry(w, newAction, flags));
+    positionSideWidgets();
+    w->show();
+    return w;
+}
+
+void QLineEditPrivate::removeAction(QAction *action)
+{
+    Q_Q(QLineEdit);
+    const PositionIndexPair positionIndex = findSideWidget(action);
+    if (positionIndex.second == -1)
+        return;
+     SideWidgetEntryList &list = positionIndex.first == QLineEdit::TrailingPosition ? trailingSideWidgets : leadingSideWidgets;
+     SideWidgetEntry entry = list.takeAt(positionIndex.second);
+     if (entry.flags & SideWidgetCreatedByWidgetAction)
+         static_cast<QWidgetAction *>(entry.action)->releaseWidget(entry.widget);
+     else
+         delete entry.widget;
+     positionSideWidgets();
+     if (!hasSideWidgets()) // Last widget, remove connection
+         QObject::disconnect(q, SIGNAL(textChanged(QString)), q, SLOT(_q_textChanged(QString)));
+     q->update();
+}
 
 QT_END_NAMESPACE
 

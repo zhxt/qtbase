@@ -1,9 +1,8 @@
 CONFIG += testcase
 
 SOURCES += tst_qsslsocket.cpp
-!wince*:win32:LIBS += -lws2_32
-QT += core-private network-private testlib
-QT -= gui
+win32:!wince: LIBS += -lws2_32
+QT = core core-private network-private testlib
 
 TARGET = tst_qsslsocket
 
@@ -31,7 +30,4 @@ wince* {
     DEFINES += SRCDIR=\\\"$$PWD/\\\"
 }
 
-linux-*:system(". /etc/lsb-release && [ $DISTRIB_CODENAME = oneiric ]"):DEFINES+=UBUNTU_ONEIRIC  # QTBUG-24234
-
 requires(contains(QT_CONFIG,private_tests))
-DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0

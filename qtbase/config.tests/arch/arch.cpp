@@ -1,80 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Intel Corporation
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the FOO module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #define QGLOBAL_H
-#include "../../src/corelib/global/qprocessordetection.h"
+#include "../../src/corelib/global/archdetect.cpp"
 #include <stdio.h>
 
 extern const char msg[];
-const char msg[] = "==Qt=magic=Qt== Architecture:"
-
-#if defined(Q_PROCESSOR_ALPHA)
-"alpha"
-#elif defined(Q_PROCESSOR_ARM)
-"arm"
-#elif defined(Q_PROCESSOR_AVR32)
-"avr32"
-#elif defined(Q_PROCESSOR_BLACKFIN)
-"bfin"
-#elif defined(Q_PROCESSOR_X86_32)
-"i386"
-#elif defined(Q_PROCESSOR_X86_64)
-"x86_64"
-#elif defined(Q_PROCESSOR_IA64)
-"ia64"
-#elif defined(Q_PROCESSOR_MIPS)
-"mips"
-#elif defined(Q_PROCESSOR_POWER)
-"power"
-#elif defined(Q_PROCESSOR_S390)
-"s390"
-#elif defined(Q_PROCESSOR_SH)
-"sh"
-#elif defined(Q_PROCESSOR_SPARC)
-"sparc"
-#else
-"unknown"
-#endif
-                   ;
+const char msg[] = "==Qt=magic=Qt== Architecture:" ARCH_PROCESSOR;
 
 extern const char msg2[];
 const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
@@ -103,15 +66,43 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 " avx"
 #endif
 #ifdef __AVX2__
-// AVX 2, Intel codename "Haswell"
+// AVX 2, Intel Core 4th Generation ("Haswell")
 " avx2"
 #endif
+#ifdef __AVX512F__
+// AVX512 Foundation, Intel Xeon Phi codename "Knights Landing"
+" avx512f"
+#endif
+#ifdef __AVX512CD__
+// AVX512 Conflict Detection, Intel Xeon Phi codename "Knights Landing"
+" avx512cd"
+#endif
+#ifdef __AVX512DQ__
+// AVX512 Double & Quadword, future Intel Xeon processor
+" avx512dq"
+#endif
+#ifdef __AVX512BW__
+// AVX512 Byte & Word, future Intel Xeon processor
+" avx512bw"
+#endif
+#ifdef __AVX512ER__
+// AVX512 Exponentiation & Reciprocal, Intel Xeon Phi codename "Knights Landing"
+" avx512ef"
+#endif
+#ifdef __AVX512PF__
+// AVX512 Prefetch, Intel Xeon Phi codename "Knights Landing"
+" avx512pf"
+#endif
+#ifdef __AVX512VL__
+// AVX512 Vector Length, future Intel Xeon processor
+" avx512vl"
+#endif
 #ifdef __BMI__
-// Bit Manipulation Instructions 1, Intel codename "Haswell", AMD "Bulldozer 2"
+// Bit Manipulation Instructions 1, Intel Core 4th Generation ("Haswell"), AMD "Bulldozer 2"
 " bmi"
 #endif
 #ifdef __BMI2__
-// Bit Manipulation Instructions 2, Intel codename "Haswell"
+// Bit Manipulation Instructions 2, Intel Core 4th Generation ("Haswell")
 " bmi2"
 #endif
 #ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_16
@@ -120,11 +111,11 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 " cx16"
 #endif
 #ifdef __F16C__
-// 16-bit floating point conversion, Intel codename "Ivy Bridge"
+// 16-bit floating point conversion, Intel Core 3rd Generation ("Ivy Bridge")
 " f16c"
 #endif
 #ifdef __FMA__
-// Fused Multiply-Add with 3 arguments, Intel codename "Haswell", AMD "Bulldozer 2"
+// Fused Multiply-Add with 3 arguments, Intel Core 4th Generation ("Haswell"), AMD "Bulldozer 2"
 // a.k.a. "FMA3"
 " fma"
 #endif
@@ -133,7 +124,7 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 " fma4"
 #endif
 #ifdef __FSGSBASE__
-// rdfsgsbase, wrfsgsbase, Intel codename "Ivy Bridge"
+// rdfsgsbase, wrfsgsbase, Intel Core 3rd Generation ("Ivy Bridge")
 " fsgsbase"
 #endif
 #ifdef __LWP__
@@ -141,7 +132,7 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 " lwp"
 #endif
 #ifdef __LZCNT__
-// Leading-Zero bit count, Intel codename "Haswell"
+// Leading-Zero bit count, Intel Core 4th Generation ("Haswell")
 " lzcnt"
 #endif
 #ifdef __MMX__
@@ -166,8 +157,12 @@ const char msg2[] = "==Qt=magic=Qt== Sub-architecture:"
 " popcnt"
 #endif
 #ifdef __RDRND__
-// Random number generator, Intel codename "Ivy Bridge"
+// Random number generator, Intel Core 3rd Generation ("Ivy Bridge")
 " rdrnd"
+#endif
+#ifdef __SHA__
+// SHA-1 and SHA-256 instructions, Intel processor TBA
+" sha"
 #endif
 #if defined(__SSE__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1) || defined(_M_X64)
 // Streaming SIMD Extensions, Intel Pentium III, AMD Athlon

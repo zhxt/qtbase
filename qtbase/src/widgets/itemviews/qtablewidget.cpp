@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -510,7 +502,7 @@ void QTableModel::sort(int column, Qt::SortOrder order)
     }
 
     LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    qStableSort(sortable.begin(), sortable.end(), compare);
+    std::stable_sort(sortable.begin(), sortable.end(), compare);
 
     QVector<QTableWidgetItem*> sorted_table(tableItems.count());
     QModelIndexList from;
@@ -558,7 +550,7 @@ void QTableModel::ensureSorted(int column, Qt::SortOrder order,
     }
 
     LessThan compare = (order == Qt::AscendingOrder ? &itemLessThan : &itemGreaterThan);
-    qStableSort(sorting.begin(), sorting.end(), compare);
+    std::stable_sort(sorting.begin(), sorting.end(), compare);
 
     QModelIndexList oldPersistentIndexes = persistentIndexList();
     QModelIndexList newPersistentIndexes = oldPersistentIndexes;
@@ -1041,7 +1033,7 @@ QTableWidgetSelectionRange::~QTableWidgetSelectionRange()
   \fn bool QTableWidgetItem::isSelected() const
   \since 4.2
 
-  Returns true if the item is selected, otherwise returns false.
+  Returns \c true if the item is selected, otherwise returns \c false.
 
   \sa setSelected()
 */
@@ -1395,7 +1387,7 @@ QVariant QTableWidgetItem::data(int role) const
 }
 
 /*!
-    Returns true if the item is less than the \a other item; otherwise returns
+    Returns \c true if the item is less than the \a other item; otherwise returns
     false.
 */
 bool QTableWidgetItem::operator<(const QTableWidgetItem &other) const
@@ -2125,7 +2117,7 @@ QTableWidgetItem *QTableWidget::currentItem() const
     Sets the current item to \a item.
 
     Unless the selection mode is \l{QAbstractItemView::}{NoSelection},
-    the item is also be selected.
+    the item is also selected.
 
     \sa currentItem(), setCurrentCell()
 */
@@ -2280,7 +2272,7 @@ void QTableWidget::setCellWidget(int row, int column, QWidget *widget)
 }
 
 /*!
-  Returns true if the \a item is selected, otherwise returns false.
+  Returns \c true if the \a item is selected, otherwise returns \c false.
 
   \obsolete
 
@@ -2515,7 +2507,9 @@ void QTableWidget::removeColumn(int column)
 
 /*!
    Removes all items in the view.
-   This will also remove all selections.
+   This will also remove all selections and headers.
+   If you don't want to remove the headers, use
+   QTableWidget::clearContents().
    The table dimensions stay the same.
 */
 
@@ -2559,16 +2553,35 @@ QStringList QTableWidget::mimeTypes() const
     If the list of items is empty, 0 is returned rather than a serialized
     empty list.
 */
-QMimeData *QTableWidget::mimeData(const QList<QTableWidgetItem*>) const
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+QMimeData *QTableWidget::mimeData(const QList<QTableWidgetItem *> &items) const
+#else
+QMimeData *QTableWidget::mimeData(const QList<QTableWidgetItem*> items) const
+#endif
 {
-    return d_func()->tableModel()->internalMimeData();
+    Q_D(const QTableWidget);
+
+    QModelIndexList &cachedIndexes = d->tableModel()->cachedIndexes;
+
+    // if non empty, it's called from the model's own mimeData
+    if (cachedIndexes.isEmpty()) {
+        foreach (QTableWidgetItem *item, items)
+            cachedIndexes << indexFromItem(item);
+
+        QMimeData *result = d->tableModel()->internalMimeData();
+
+        cachedIndexes.clear();
+        return result;
+    }
+
+    return d->tableModel()->internalMimeData();
 }
 
 /*!
     Handles the \a data supplied by a drag and drop operation that ended with
     the given \a action in the given \a row and \a column.
-    Returns true if the data and action can be handled by the model;
-    otherwise returns false.
+    Returns \c true if the data and action can be handled by the model;
+    otherwise returns \c false.
 
     \sa supportedDropActions()
 */

@@ -8,8 +8,13 @@ linux: CONFIG += insignificant_test
 SOURCES += \
     tst_qglyphrun.cpp
 
+
 wince* {
-    DEFINES += SRCDIR=\\\"\\\"
+    additionalFiles.files = test.ttf
+    additionalFiles.path = ../../../shared/resources/
+    DEPLOYMENT += additionalFiles
 } else {
-    DEFINES += SRCDIR=\\\"$$PWD/\\\"
+    RESOURCES += \
+        testdata.qrc
 }
+

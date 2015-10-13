@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -199,7 +191,7 @@ QByteArray QHttpNetworkReply::readAny()
         return QByteArray();
 
     // we'll take the last buffer, so schedule another read from http
-    if (d->downstreamLimited && d->responseData.bufferCount() == 1)
+    if (d->downstreamLimited && d->responseData.bufferCount() == 1 && !isFinished())
         d->connection->d_func()->readMoreLater(this);
     return d->responseData.read();
 }
@@ -255,6 +247,17 @@ char* QHttpNetworkReply::userProvidedDownloadBuffer()
     return d->userProvidedDownloadBuffer;
 }
 
+void QHttpNetworkReply::abort()
+{
+    Q_D(QHttpNetworkReply);
+    d->state = QHttpNetworkReplyPrivate::Aborted;
+}
+
+bool QHttpNetworkReply::isAborted() const
+{
+    return d_func()->state == QHttpNetworkReplyPrivate::Aborted;
+}
+
 bool QHttpNetworkReply::isFinished() const
 {
     return d_func()->state == QHttpNetworkReplyPrivate::AllDoneState;
@@ -263,6 +266,16 @@ bool QHttpNetworkReply::isFinished() const
 bool QHttpNetworkReply::isPipeliningUsed() const
 {
     return d_func()->pipeliningUsed;
+}
+
+bool QHttpNetworkReply::isSpdyUsed() const
+{
+    return d_func()->spdyUsed;
+}
+
+void QHttpNetworkReply::setSpdyWasUsed(bool spdy)
+{
+    d_func()->spdyUsed = spdy;
 }
 
 QHttpNetworkConnection* QHttpNetworkReply::connection()
@@ -281,15 +294,26 @@ QHttpNetworkReplyPrivate::QHttpNetworkReplyPrivate(const QUrl &newUrl)
       connectionCloseEnabled(true),
       forceConnectionCloseEnabled(false),
       lastChunkRead(false),
-      currentChunkSize(0), currentChunkRead(0), readBufferMaxSize(0), connection(0),
+      currentChunkSize(0), currentChunkRead(0), readBufferMaxSize(0),
+      windowSizeDownload(65536), // 64K initial window size according to SPDY standard
+      windowSizeUpload(65536), // 64K initial window size according to SPDY standard
+      currentlyReceivedDataInWindow(0),
+      currentlyUploadedDataInWindow(0),
+      totallyUploadedData(0),
+      connection(0),
       autoDecompress(false), responseData(), requestIsPrepared(false)
-      ,pipeliningUsed(false), downstreamLimited(false)
+      ,pipeliningUsed(false), spdyUsed(false), downstreamLimited(false)
       ,userProvidedDownloadBuffer(0)
 #ifndef QT_NO_COMPRESS
       ,inflateStrm(0)
 #endif
 
 {
+    QString scheme = newUrl.scheme();
+    if (scheme == QLatin1String("preconnect-http")
+            || scheme == QLatin1String("preconnect-https"))
+        // make sure we do not close the socket after preconnecting
+        connectionCloseEnabled = false;
 }
 
 QHttpNetworkReplyPrivate::~QHttpNetworkReplyPrivate()
@@ -342,7 +366,7 @@ bool QHttpNetworkReplyPrivate::isCompressed()
 void QHttpNetworkReplyPrivate::removeAutoDecompressHeader()
 {
     // The header "Content-Encoding  = gzip" is retained.
-    // Content-Length is removed since the actual one send by the server is for compressed data
+    // Content-Length is removed since the actual one sent by the server is for compressed data
     QByteArray name("content-length");
     QList<QPair<QByteArray, QByteArray> >::Iterator it = fields.begin(),
                                                    end = fields.end();
@@ -545,15 +569,7 @@ qint64 QHttpNetworkReplyPrivate::readHeader(QAbstractSocket *socket)
             // allocate inflate state
             if (!inflateStrm)
                 inflateStrm = new z_stream;
-            inflateStrm->zalloc = Z_NULL;
-            inflateStrm->zfree = Z_NULL;
-            inflateStrm->opaque = Z_NULL;
-            inflateStrm->avail_in = 0;
-            inflateStrm->next_in = Z_NULL;
-            // "windowBits can also be greater than 15 for optional gzip decoding.
-            // Add 32 to windowBits to enable zlib and gzip decoding with automatic header detection"
-            // http://www.zlib.net/manual.html
-            int ret = inflateInit2(inflateStrm, MAX_WBITS+32);
+            int ret = initializeInflateStream();
             if (ret != Z_OK)
                 return -1;
         }
@@ -698,8 +714,28 @@ qint64 QHttpNetworkReplyPrivate::readBody(QAbstractSocket *socket, QByteDataBuff
 }
 
 #ifndef QT_NO_COMPRESS
+int QHttpNetworkReplyPrivate::initializeInflateStream()
+{
+    inflateStrm->zalloc = Z_NULL;
+    inflateStrm->zfree = Z_NULL;
+    inflateStrm->opaque = Z_NULL;
+    inflateStrm->avail_in = 0;
+    inflateStrm->next_in = Z_NULL;
+    // "windowBits can also be greater than 15 for optional gzip decoding.
+    // Add 32 to windowBits to enable zlib and gzip decoding with automatic header detection"
+    // http://www.zlib.net/manual.html
+    int ret = inflateInit2(inflateStrm, MAX_WBITS+32);
+    Q_ASSERT(ret == Z_OK);
+    return ret;
+}
+
 qint64 QHttpNetworkReplyPrivate::uncompressBodyData(QByteDataBuffer *in, QByteDataBuffer *out)
 {
+    if (!inflateStrm) { // happens when called from the SPDY protocol handler
+        inflateStrm = new z_stream;
+        initializeInflateStream();
+    }
+
     if (!inflateStrm)
         return -1;
 
@@ -888,7 +924,7 @@ qint64 QHttpNetworkReplyPrivate::getChunkSize(QAbstractSocket *socket, qint64 *c
 bool QHttpNetworkReplyPrivate::shouldEmitSignals()
 {
     // for 401 & 407 don't emit the data signals. Content along with these
-    // responses are send only if the authentication fails.
+    // responses are sent only if the authentication fails.
     return (statusCode != 401 && statusCode != 407);
 }
 

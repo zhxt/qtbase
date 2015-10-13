@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -50,14 +42,27 @@
 #include <QListWidget>
 #include <QWidgetAction>
 #include <QDesktopWidget>
+#include <QScreen>
 #include <qdialog.h>
 
 #include <qmenu.h>
 #include <qstyle.h>
+#include <QTimer>
 #include <qdebug.h>
 
 Q_DECLARE_METATYPE(Qt::Key);
 Q_DECLARE_METATYPE(Qt::KeyboardModifiers);
+
+static inline void centerOnScreen(QWidget *w, const QSize &size)
+{
+    const QPoint offset = QPoint(size.width() / 2, size.height() / 2);
+    w->move(QGuiApplication::primaryScreen()->availableGeometry().center() - offset);
+}
+
+static inline void centerOnScreen(QWidget *w)
+{
+    centerOnScreen(w, w->geometry().size());
+}
 
 class tst_QMenu : public QObject
 {
@@ -104,6 +109,10 @@ private slots:
     void QTBUG30595_rtl_submenu();
     void QTBUG20403_nested_popup_on_shortcut_trigger();
     void QTBUG_10735_crashWithDialog();
+#ifdef Q_OS_MAC
+    void QTBUG_37933_ampersands_data();
+    void QTBUG_37933_ampersands();
+#endif
 protected slots:
     void onActivated(QAction*);
     void onHighlighted(QAction*);
@@ -116,6 +125,7 @@ private:
     enum { num_builtins = 10 };
     QAction *activated, *highlighted, *builtins[num_builtins];
     QString statustip;
+    bool m_onStatusTipTimerExecuted;
 };
 
 // Testing get/set functions
@@ -142,6 +152,7 @@ void tst_QMenu::getSetCheck()
 }
 
 tst_QMenu::tst_QMenu()
+    : m_onStatusTipTimerExecuted(false)
 {
     QApplication::setEffectEnabled(Qt::UI_AnimateMenu, false);
 }
@@ -177,6 +188,7 @@ void tst_QMenu::init()
 {
     activated = highlighted = 0;
     lastMenu = 0;
+    m_onStatusTipTimerExecuted = false;
 }
 
 void tst_QMenu::createActions()
@@ -257,9 +269,12 @@ void tst_QMenu::addActionsAndClear()
 void tst_QMenu::mouseActivation()
 {
     QWidget topLevel;
+    topLevel.resize(300, 200);
+    centerOnScreen(&topLevel);
     QMenu menu(&topLevel);
     topLevel.show();
     menu.addAction("Menu Action");
+    menu.move(topLevel.geometry().topRight() + QPoint(50, 0));
     menu.show();
     QTest::mouseClick(&menu, Qt::LeftButton, 0, menu.rect().center(), 300);
     QVERIFY(!menu.isVisible());
@@ -275,7 +290,9 @@ void tst_QMenu::mouseActivation()
     QMenu submenu("Menu");
     submenu.addAction("action");
     QAction *action = menubar.addMenu(&submenu);
+    menubar.move(topLevel.geometry().topRight() + QPoint(300, 0));
     menubar.show();
+
 
     QTest::mouseClick(&menubar, Qt::LeftButton, 0, menubar.actionGeometry(action).center(), 300);
     QVERIFY(submenu.isVisible());
@@ -378,13 +395,16 @@ void tst_QMenu::focus()
 #endif
 
     QWidget window;
+    window.resize(300, 200);
     QPushButton button("Push me", &window);
+    centerOnScreen(&window);
     window.show();
     qApp->setActiveWindow(&window);
 
     QVERIFY(button.hasFocus());
     QCOMPARE(QApplication::focusWidget(), (QWidget *)&button);
     QCOMPARE(QApplication::activeWindow(), &window);
+    menu.move(window.geometry().topRight() + QPoint(50, 0));
     menu.show();
     QVERIFY(button.hasFocus());
     QCOMPARE(QApplication::focusWidget(), (QWidget *)&button);
@@ -399,6 +419,8 @@ void tst_QMenu::overrideMenuAction()
 {
     //test the override menu action by first creating an action to which we set its menu
     QMainWindow w;
+    w.resize(300, 200);
+    centerOnScreen(&w);
 
     QAction *aFileMenu = new QAction("&File", &w);
     w.menuBar()->addAction(aFileMenu);
@@ -442,6 +464,8 @@ void tst_QMenu::statusTip()
 {
     //check that the statustip of actions inserted into the menu are displayed
     QMainWindow w;
+    w.resize(300, 200);
+    centerOnScreen(&w);
     connect(w.statusBar(), SIGNAL(messageChanged(QString)), SLOT(onStatusMessageChanged(QString)));; //creates the status bar
     QToolBar tb;
     QAction a("main action", &tb);
@@ -464,8 +488,13 @@ void tst_QMenu::statusTip()
 
     //because showMenu calls QMenu::exec, we need to use a singleshot
     //to continue the test
-    QTimer::singleShot(200,this, SLOT(onStatusTipTimer()));
+    QTimer timer;
+    timer.setSingleShot(true);
+    connect(&timer, &QTimer::timeout, this, &tst_QMenu::onStatusTipTimer);
+    timer.setInterval(200);
+    timer.start();
     btn->showMenu();
+    QVERIFY(m_onStatusTipTimerExecuted);
     QVERIFY(statustip.isEmpty());
 }
 
@@ -485,6 +514,7 @@ void tst_QMenu::onStatusTipTimer()
 
     QCOMPARE(st, QString("sub action"));
     QVERIFY(menu->isVisible() == false);
+    m_onStatusTipTimerExecuted = true;
 }
 
 void tst_QMenu::widgetActionFocus()
@@ -540,10 +570,12 @@ void tst_QMenu::tearOff()
     menu->addAction("bbb");
     QVERIFY(menu->isTearOffEnabled());
 
+    widget.resize(300, 200);
+    centerOnScreen(&widget);
     widget.show();
     widget.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&widget));
-    menu->popup(QPoint(0,0));
+    menu->popup(widget.geometry().topRight() + QPoint(50, 0));
     QVERIFY(QTest::qWaitForWindowActive(menu));
     QVERIFY(!menu->isTearOffMenuVisible());
 
@@ -568,14 +600,19 @@ void tst_QMenu::layoutDirection()
 {
     QMainWindow win;
     win.setLayoutDirection(Qt::RightToLeft);
+    win.resize(300, 200);
+    centerOnScreen(&win);
 
     QMenu menu(&win);
+    menu.addAction("foo");
+    menu.move(win.geometry().topRight() + QPoint(50, 0));
     menu.show();
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     QCOMPARE(menu.layoutDirection(), Qt::RightToLeft);
     menu.close();
 
     menu.setParent(0);
+    menu.move(win.geometry().topRight() + QPoint(50, 0));
     menu.show();
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     QCOMPARE(menu.layoutDirection(), QApplication::layoutDirection());
@@ -702,6 +739,7 @@ void tst_QMenu::task256918_setFont()
     QFont f;
     f.setPointSize(30);
     action->setFont(f);
+    centerOnScreen(&menu, QSize(120, 40));
     menu.show(); //ensures that the actiongeometry are calculated
     QVERIFY(menu.actionGeometry(action).height() > f.pointSize());
 }
@@ -764,14 +802,20 @@ void tst_QMenu::task258920_mouseBorder()
     menu.setMouseTracking(true);
     QAction *action = menu.addAction("test");
 
-    menu.popup(QApplication::desktop()->availableGeometry().center());
+    const QPoint center = QApplication::desktop()->availableGeometry().center();
+#ifndef QT_NO_CURSOR
+    QCursor::setPos(center - QPoint(100, 100)); // Mac: Ensure cursor is outside
+#endif
+    menu.popup(center);
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     QTest::qWait(100);
     QRect actionRect = menu.actionGeometry(action);
-    QTest::mouseMove(&menu, actionRect.center());
+    const QPoint actionCenter = actionRect.center();
+    QTest::mouseMove(&menu, actionCenter - QPoint(-10, 0));
     QTest::qWait(30);
-    QTest::mouseMove(&menu, actionRect.center() + QPoint(10, 0));
+    QTest::mouseMove(&menu, actionCenter);
     QTest::qWait(30);
+    QTest::mouseMove(&menu, actionCenter + QPoint(10, 0));
     QTRY_COMPARE(action, menu.activeAction());
     menu.painted = false;
     QTest::mouseMove(&menu, QPoint(actionRect.center().x(), actionRect.bottom() + 1));
@@ -824,6 +868,13 @@ void PopulateOnAboutToShowTestMenu::populateMenu()
     addSeparator();
 }
 
+static inline QByteArray msgGeometryIntersects(const QRect &r1, const QRect &r2)
+{
+    QString result;
+    QDebug(&result) << r1 << "intersects" << r2;
+    return result.toLocal8Bit();
+}
+
 void tst_QMenu::pushButtonPopulateOnAboutToShow()
 {
     QPushButton b("Test PushButton");
@@ -836,7 +887,7 @@ void tst_QMenu::pushButtonPopulateOnAboutToShow()
     const QRect screen = QApplication::desktop()->screenGeometry(scrNumber);
 
     QRect desiredGeometry = b.geometry();
-    desiredGeometry.moveTopLeft(QPoint(10, screen.bottom()-b.height()-5));
+    desiredGeometry.moveTopLeft(QPoint(screen.x() + 10, screen.bottom() - b.height() - 5));
 
     b.setGeometry(desiredGeometry);
     QVERIFY(QTest::qWaitForWindowExposed(&b));
@@ -853,13 +904,13 @@ void tst_QMenu::pushButtonPopulateOnAboutToShow()
 
     QTimer::singleShot(300, buttonMenu, SLOT(hide()));
     QTest::mouseClick(&b, Qt::LeftButton, Qt::NoModifier, b.rect().center());
-    QVERIFY(!buttonMenu->geometry().intersects(b.geometry()));
+    QVERIFY2(!buttonMenu->geometry().intersects(b.geometry()), msgGeometryIntersects(buttonMenu->geometry(), b.geometry()));
 
     // note: we're assuming that, if we previously got the desired geometry, we'll get it here too
     b.move(10, screen.bottom()-buttonMenu->height()-5);
     QTimer::singleShot(300, buttonMenu, SLOT(hide()));
     QTest::mouseClick(&b, Qt::LeftButton, Qt::NoModifier, b.rect().center());
-    QVERIFY(!buttonMenu->geometry().intersects(b.geometry()));
+    QVERIFY2(!buttonMenu->geometry().intersects(b.geometry()), msgGeometryIntersects(buttonMenu->geometry(), b.geometry()));
 }
 
 void tst_QMenu::QTBUG7907_submenus_autoselect()
@@ -872,6 +923,7 @@ void tst_QMenu::QTBUG7907_submenus_autoselect()
     set1.addMenu(&subset);
     menu.addMenu(&set1);
     menu.addMenu(&set2);
+    centerOnScreen(&menu, QSize(120, 100));
     menu.show();
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     QTest::mouseClick(&menu, Qt::LeftButton, Qt::NoModifier, QPoint(5,5) );
@@ -887,6 +939,7 @@ void tst_QMenu::QTBUG7411_submenus_activate()
     sub1.addAction("foo");
     sub1.setTitle("&sub1");
     QAction *act1 = menu.addMenu(&sub1);
+    centerOnScreen(&menu, QSize(120, 100));
     menu.show();
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     menu.setActiveAction(act);
@@ -905,12 +958,12 @@ void tst_QMenu::QTBUG30595_rtl_submenu()
     sub.addAction("bar");
     sub.setTitle("&sub");
     menu.addMenu(&sub);
-    menu.move(200, 20);
+    centerOnScreen(&menu, QSize(120, 40));
     menu.show();
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     QTest::mouseClick(&menu, Qt::LeftButton, Qt::NoModifier, QPoint(5,5) );
     QTRY_VERIFY(sub.isVisible());
-    QVERIFY(sub.pos().x() < menu.pos().x());
+    QVERIFY2(sub.pos().x() < menu.pos().x(), QByteArray::number(sub.pos().x()) + QByteArrayLiteral(" not less than ") + QByteArray::number(menu.pos().x()));
 }
 
 void tst_QMenu::QTBUG20403_nested_popup_on_shortcut_trigger()
@@ -921,6 +974,7 @@ void tst_QMenu::QTBUG20403_nested_popup_on_shortcut_trigger()
     subsub1.addAction("foo");
     sub1.addMenu(&subsub1);
     menu.addMenu(&sub1);
+    centerOnScreen(&menu, QSize(120, 100));
     menu.show();
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     QTest::keyPress(&menu, Qt::Key_S);
@@ -971,15 +1025,38 @@ private:
 
 void tst_QMenu::QTBUG_10735_crashWithDialog()
 {
-#ifdef Q_OS_MAC
-    QSKIP("Test currently hangs on Mac OS X, see QTBUG-23677");
-#endif
-
     MyMenu menu;
 
     QTimer::singleShot(1000, &menu, SLOT(activateLastAction()));
     menu.activateAction(0);
 }
+
+#ifdef Q_OS_MAC
+void tst_QMenu::QTBUG_37933_ampersands_data()
+{
+    QTest::addColumn<QString>("title");
+    QTest::addColumn<QString>("visibleTitle");
+    QTest::newRow("simple") << QString("Test") << QString("Test");
+    QTest::newRow("ampersand") << QString("&Test") << QString("Test");
+    QTest::newRow("double_ampersand") << QString("&Test && more") << QString("Test & more");
+    QTest::newRow("ampersand_in_parentheses") << QString("Test(&T) (&&) more") << QString("Test (&) more");
+    QTest::newRow("ampersand_in_parentheses_after_space") << QString("Test (&T)") << QString("Test");
+    QTest::newRow("ampersand_in_parentheses_after_spaces") << QString("Test  (&T)") << QString("Test");
+    QTest::newRow("ampersand_in_parentheses_before_space") << QString("Test(&T) ") << QString("Test ");
+    QTest::newRow("only_ampersand_in_parentheses") << QString("(&T)") << QString("");
+    QTest::newRow("only_ampersand_in_parentheses_after_space") << QString(" (&T)") << QString("");
+    QTest::newRow("parentheses_after_space") << QString(" (Dummy)") << QString(" (Dummy)");
+    QTest::newRow("ampersand_after_space") << QString("About &Qt Project") << QString("About Qt Project");
+}
+
+void tst_qmenu_QTBUG_37933_ampersands();
+
+void tst_QMenu::QTBUG_37933_ampersands()
+{
+    // external in .mm file
+    tst_qmenu_QTBUG_37933_ampersands();
+}
+#endif
 
 QTEST_MAIN(tst_QMenu)
 #include "tst_qmenu.moc"

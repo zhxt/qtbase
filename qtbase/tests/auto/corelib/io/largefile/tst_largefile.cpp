@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -83,7 +75,7 @@ public:
     #elif defined(Q_OS_MAC)
         // HFS+ does not support sparse files, so we limit file size for the test
         // on Mac OS.
-        maxSizeBits = 32; // 4 GiB
+        maxSizeBits = 24; // 16 MiB
     #else
         maxSizeBits = 24; // 16 MiB
     #endif
@@ -121,9 +113,7 @@ private slots:
 
     // Map/unmap large file
     void mapFile();
-#ifndef Q_OS_MAC
     void mapOffsetOverflow();
-#endif
 
     void closeFile() { largeFile.close(); }
 
@@ -417,11 +407,11 @@ void tst_LargeFile::fdPositioning()
 
     file.close();
 
-    QCOMPARE( QT_LSEEK(fd_, QT_OFF_T(0), SEEK_SET), QT_OFF_T(0) );
-    QCOMPARE( QT_LSEEK(fd_, QT_OFF_T(position), SEEK_SET), QT_OFF_T(position) );
+    QCOMPARE( QT_OFF_T(QT_LSEEK(fd_, QT_OFF_T(0), SEEK_SET)), QT_OFF_T(0) );
+    QCOMPARE( QT_OFF_T(QT_LSEEK(fd_, QT_OFF_T(position), SEEK_SET)), QT_OFF_T(position) );
 
     QVERIFY( file.open(fd_, QIODevice::ReadOnly) );
-    QCOMPARE( QT_LSEEK(fd_, QT_OFF_T(0), SEEK_CUR), QT_OFF_T(position) );
+    QCOMPARE( QT_OFF_T(QT_LSEEK(fd_, QT_OFF_T(0), SEEK_CUR)), QT_OFF_T(position) );
     QCOMPARE( file.pos(), position );
     QVERIFY( file.seek(0) );
     QCOMPARE( file.pos(), (qint64)0 );
@@ -448,12 +438,12 @@ void tst_LargeFile::streamPositioning()
     file.close();
 
     QVERIFY( !QT_FSEEK(stream_, QT_OFF_T(0), SEEK_SET) );
-    QCOMPARE( QT_FTELL(stream_), QT_OFF_T(0) );
+    QCOMPARE( QT_OFF_T(QT_FTELL(stream_)), QT_OFF_T(0) );
     QVERIFY( !QT_FSEEK(stream_, QT_OFF_T(position), SEEK_SET) );
-    QCOMPARE( QT_FTELL(stream_), QT_OFF_T(position) );
+    QCOMPARE( QT_OFF_T(QT_FTELL(stream_)), QT_OFF_T(position) );
 
     QVERIFY( file.open(stream_, QIODevice::ReadOnly) );
-    QCOMPARE( QT_FTELL(stream_), QT_OFF_T(position) );
+    QCOMPARE( QT_OFF_T(QT_FTELL(stream_)), QT_OFF_T(position) );
     QCOMPARE( file.pos(), position );
     QVERIFY( file.seek(0) );
     QCOMPARE( file.pos(), (qint64)0 );
@@ -513,9 +503,9 @@ void tst_LargeFile::mapFile()
 }
 
 //Mac: memory-mapping beyond EOF may succeed but it could generate bus error on access
-#ifndef Q_OS_MAC
 void tst_LargeFile::mapOffsetOverflow()
 {
+#ifndef Q_OS_MAC
     // Out-of-range mappings should fail, and not silently clip the offset
     for (int i = 50; i < 63; ++i) {
         uchar *address = 0;
@@ -529,8 +519,8 @@ void tst_LargeFile::mapOffsetOverflow()
         address = largeFile.map(((qint64)1 << i) + blockSize, blockSize);
         QVERIFY( !address );
     }
-}
 #endif
+}
 
 QTEST_APPLESS_MAIN(tst_LargeFile)
 #include "tst_largefile.moc"

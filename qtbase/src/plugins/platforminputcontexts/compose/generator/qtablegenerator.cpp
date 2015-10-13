@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,20 +33,20 @@
 
 #include "qtablegenerator.h"
 
-#include <QtCore/QRegularExpression>
 #include <QtCore/QByteArray>
 #include <QtCore/QTextCodec>
 #include <QtCore/QDebug>
 #include <QtCore/QStringList>
 #include <QtCore/QString>
 
+#include <algorithm>
+
 #include <xkbcommon/xkbcommon.h>
 
-#ifdef XKBCOMMON_0_2_0
-#include <xkbcommon_workaround.h>
-#endif
-
-//#define DEBUG_GENERATOR
+#include <locale.h> // LC_CTYPE
+#include <string.h> // strchr, strncmp, etc.
+#include <strings.h> // strncasecmp
+#include <clocale> // LC_CTYPE
 
 TableGenerator::TableGenerator() : m_state(NoErrors),
     m_systemComposeDir(QString())
@@ -69,17 +61,19 @@ TableGenerator::TableGenerator() : m_state(NoErrors),
 
 void TableGenerator::initPossibleLocations()
 {
-    // AFAICT there is no way to know the exact location
-    // of the compose files. It depends on how Xlib was configured
-    // on a specific platform. During the "./configure" process
-    // xlib generates a config.h file which contains a bunch of defines,
-    // including XLOCALEDIR which points to the location of the compose file dir.
-    // To add an extra system path use the QTCOMPOSE environment variable
-    if (qEnvironmentVariableIsSet("QTCOMPOSE")) {
-        m_possibleLocations.append(QString(qgetenv("QTCOMPOSE")));
-    }
+    // Compose files come as a part of Xlib library. Xlib doesn't provide
+    // a mechanism how to retrieve the location of these files reliably, since it was
+    // never meant for external software to parse compose tables directly. Best we
+    // can do is to hardcode search paths. To add an extra system path use
+    // the QTCOMPOSE environment variable
+    if (qEnvironmentVariableIsSet("QTCOMPOSE"))
+        m_possibleLocations.append(QString::fromLocal8Bit(qgetenv("QTCOMPOSE")));
     m_possibleLocations.append(QStringLiteral("/usr/share/X11/locale"));
+    m_possibleLocations.append(QStringLiteral("/usr/local/share/X11/locale"));
     m_possibleLocations.append(QStringLiteral("/usr/lib/X11/locale"));
+    m_possibleLocations.append(QStringLiteral("/usr/local/lib/X11/locale"));
+    m_possibleLocations.append(QStringLiteral(X11_PREFIX "/share/X11/locale"));
+    m_possibleLocations.append(QStringLiteral(X11_PREFIX "/lib/X11/locale"));
 }
 
 void TableGenerator::findComposeFile()
@@ -97,7 +91,6 @@ void TableGenerator::findComposeFile()
             qDebug() << "Using Compose file from: " << composeFile;
 #endif
     }
-
     // check if user’s home directory has a file named .XCompose
     if (!found && cleanState()) {
         QString composeFile = qgetenv("HOME") + QStringLiteral("/.XCompose");
@@ -108,23 +101,19 @@ void TableGenerator::findComposeFile()
             qDebug() << "Using Compose file from: " << composeFile;
 #endif
     }
-
     // check for the system provided compose files
     if (!found && cleanState()) {
-        readLocaleMappings();
-
+        QString table = composeTableForLocale();
         if (cleanState()) {
-
-            QString table = m_localeToTable.value(locale().toUpper());
             if (table.isEmpty())
                 // no table mappings for the system's locale in the compose.dir
                 m_state = UnsupportedLocale;
             else
-                found = processFile(systemComposeDir() + QLatin1String("/") + table);
+                found = processFile(systemComposeDir() + QLatin1Char('/') + table);
 #ifdef DEBUG_GENERATOR
             if (found)
                 qDebug() << "Using Compose file from: " <<
-                            systemComposeDir() + QLatin1String("/") + table;
+                            systemComposeDir() + QLatin1Char('/') + table;
 #endif
         }
     }
@@ -134,6 +123,15 @@ void TableGenerator::findComposeFile()
 
     if (!found)
         m_state = MissingComposeFile;
+}
+
+QString TableGenerator::composeTableForLocale()
+{
+    QByteArray loc = locale().toUpper().toUtf8();
+    QString table = readLocaleMappings(loc);
+    if (table.isEmpty())
+        table = readLocaleMappings(readLocaleAliases(loc));
+    return table;
 }
 
 bool TableGenerator::findSystemComposeDir()
@@ -174,35 +172,97 @@ QString TableGenerator::locale() const
     return QLatin1String(name);
 }
 
-void TableGenerator::readLocaleMappings()
+QString TableGenerator::readLocaleMappings(const QByteArray &locale)
 {
+    QString file;
+    if (locale.isEmpty())
+        return file;
+
     QFile mappings(systemComposeDir() + QLatin1String("/compose.dir"));
-    if (mappings.exists()) {
-        mappings.open(QIODevice::ReadOnly);
-        QTextStream in(&mappings);
+    if (mappings.open(QIODevice::ReadOnly)) {
+        const int localeNameLength = locale.size();
+        const char * const localeData = locale.constData();
+
+        char l[1024];
         // formating of compose.dir has some inconsistencies
-        while (!in.atEnd()) {
-            QString line = in.readLine();
-            if (!line.startsWith("#") && line.size() != 0 &&
-                    line.at(0).isLower()) {
+        while (!mappings.atEnd()) {
+            int read = mappings.readLine(l, sizeof(l));
+            if (read <= 0)
+                break;
 
-                QStringList pair = line.split(QRegExp(QLatin1String("\\s+")));
-                QString table = pair.at(0);
-                if (table.endsWith(QLatin1String(":")))
-                    table.remove(table.size() - 1, 1);
+            char *line = l;
+            if (*line >= 'a' && *line <= 'z') {
+                // file name
+                while (*line && *line != ':' && *line != ' ' && *line != '\t')
+                    ++line;
+                if (!*line)
+                    continue;
+                const char * const composeFileNameEnd = line;
+                *line = '\0';
+                ++line;
 
-                m_localeToTable.insert(pair.at(1).toUpper(), table);
+                // locale name
+                while (*line && (*line == ' ' || *line == '\t'))
+                    ++line;
+                const char * const lc = line;
+                while (*line && *line != ' ' && *line != '\t' && *line != '\n')
+                    ++line;
+                *line = '\0';
+                if (localeNameLength == (line - lc) && !strncasecmp(lc, localeData, line - lc)) {
+                    file = QString::fromLocal8Bit(l, composeFileNameEnd - l);
+                    break;
+                }
             }
         }
         mappings.close();
     }
+    return file;
 }
 
-bool TableGenerator::processFile(QString composeFileName)
+QByteArray TableGenerator::readLocaleAliases(const QByteArray &locale)
+{
+    QFile aliases(systemComposeDir() + QLatin1String("/locale.alias"));
+    QByteArray fullLocaleName;
+    if (aliases.open(QIODevice::ReadOnly)) {
+        while (!aliases.atEnd()) {
+            char l[1024];
+            int read = aliases.readLine(l, sizeof(l));
+            char *line = l;
+            if (read && ((*line >= 'a' && *line <= 'z') ||
+                         (*line >= 'A' && *line <= 'Z'))) {
+                const char *alias = line;
+                while (*line && *line != ':' && *line != ' ' && *line != '\t')
+                    ++line;
+                if (!*line)
+                    continue;
+                *line = 0;
+                if (locale.size() == (line - alias)
+                        && !strncasecmp(alias, locale.constData(), line - alias)) {
+                    // found a match for alias, read the real locale name
+                    ++line;
+                    while (*line && (*line == ' ' || *line == '\t'))
+                        ++line;
+                    const char *fullName = line;
+                    while (*line && *line != ' ' && *line != '\t' && *line != '\n')
+                        ++line;
+                    *line = 0;
+                    fullLocaleName = fullName;
+#ifdef DEBUG_GENERATOR
+                    qDebug() << "Alias for: " << alias << "is: " << fullLocaleName;
+                    break;
+#endif
+                }
+            }
+        }
+        aliases.close();
+    }
+    return fullLocaleName;
+}
+
+bool TableGenerator::processFile(const QString &composeFileName)
 {
     QFile composeFile(composeFileName);
-    if (composeFile.exists()) {
-        composeFile.open(QIODevice::ReadOnly);
+    if (composeFile.open(QIODevice::ReadOnly)) {
         parseComposeFile(&composeFile);
         return true;
     }
@@ -215,7 +275,7 @@ TableGenerator::~TableGenerator()
 {
 }
 
-QList<QComposeTableElement> TableGenerator::composeTable() const
+QVector<QComposeTableElement> TableGenerator::composeTable() const
 {
     return m_composeTable;
 }
@@ -225,15 +285,14 @@ void TableGenerator::parseComposeFile(QFile *composeFile)
 #ifdef DEBUG_GENERATOR
     qDebug() << "TableGenerator::parseComposeFile: " << composeFile->fileName();
 #endif
-    QTextStream in(composeFile);
 
-    while (!in.atEnd()) {
-        QString line = in.readLine();
-        if (line.startsWith(QLatin1String("<"))) {
+    char line[1024];
+    while (!composeFile->atEnd()) {
+        composeFile->readLine(line, sizeof(line));
+        if (*line == '<')
             parseKeySequence(line);
-        } else if (line.startsWith(QLatin1String("include"))) {
-            parseIncludeInstruction(line);
-        }
+        else if (!strncmp(line, "include", 7))
+            parseIncludeInstruction(QString::fromLocal8Bit(line));
     }
 
     composeFile->close();
@@ -249,7 +308,7 @@ void TableGenerator::parseIncludeInstruction(QString line)
 
     // expand substitutions if present
     line.replace(QLatin1String("%H"), QString(qgetenv("HOME")));
-    line.replace(QLatin1String("%L"), locale());
+    line.replace(QLatin1String("%L"), systemComposeDir() +  QLatin1Char('/')  + composeTableForLocale());
     line.replace(QLatin1String("%S"), systemComposeDir());
 
     processFile(line);
@@ -260,23 +319,7 @@ ushort TableGenerator::keysymToUtf8(quint32 sym)
     QByteArray chars;
     int bytes;
     chars.resize(8);
-
-#ifdef XKBCOMMON_0_2_0
-    if (needWorkaround(sym)) {
-        quint32 codepoint;
-        if (sym == XKB_KEY_KP_Space)
-            codepoint = XKB_KEY_space & 0x7f;
-        else
-            codepoint = sym & 0x7f;
-
-        bytes = utf32_to_utf8(codepoint, chars.data());
-    } else {
-        bytes = xkb_keysym_to_utf8(sym, chars.data(), chars.size());
-    }
-#else
     bytes = xkb_keysym_to_utf8(sym, chars.data(), chars.size());
-#endif
-
     if (bytes == -1)
         qWarning("TableGenerator::keysymToUtf8 - buffer too small");
 
@@ -290,79 +333,109 @@ ushort TableGenerator::keysymToUtf8(quint32 sym)
     return QString::fromUtf8(chars).at(0).unicode();
 }
 
-quint32 TableGenerator::stringToKeysym(QString keysymName)
+static inline int fromBase8(const char *s, const char *end)
 {
-    quint32 keysym;
-    QByteArray keysymArray = keysymName.toLatin1();
-    const char *name = keysymArray.constData();
-
-    if ((keysym = xkb_keysym_from_name(name, (xkb_keysym_flags)0)) == XKB_KEY_NoSymbol)
-        qWarning() << QString("Qt Warning - invalid keysym: %1").arg(keysymName);
-
-    return keysym;
+    int result = 0;
+    while (*s && s != end) {
+        if (*s <= '0' && *s >= '7')
+            return 0;
+        result *= 8;
+        result += *s - '0';
+        ++s;
+    }
+    return result;
 }
 
-void TableGenerator::parseKeySequence(QString line)
+static inline int fromBase16(const char *s, const char *end)
+{
+    int result = 0;
+    while (*s && s != end) {
+        result *= 16;
+        if (*s >= '0' && *s <= '9')
+            result += *s - '0';
+        else if (*s >= 'a' && *s <= 'f')
+            result += *s - 'a' + 10;
+        else if (*s >= 'A' && *s <= 'F')
+            result += *s - 'A' + 10;
+        else
+            return 0;
+        ++s;
+    }
+    return result;
+}
+
+void TableGenerator::parseKeySequence(char *line)
 {
     // we are interested in the lines with the following format:
     // <Multi_key> <numbersign> <S> : "♬"   U266c # BEAMED SIXTEENTH NOTE
-    int keysEnd = line.indexOf(QLatin1String(":"));
-    QString keys = line.left(keysEnd).trimmed();
-
-    // find the key sequence
-    QString regexp = QStringLiteral("<[^>]+>");
-    QRegularExpression reg(regexp);
-    QRegularExpressionMatchIterator i = reg.globalMatch(keys);
-    QStringList keyList;
-    while (i.hasNext()) {
-        QRegularExpressionMatch match = i.next();
-        QString word = match.captured(0);
-        keyList << word;
-    }
+    char *keysEnd = strchr(line, ':');
+    if (!keysEnd)
+        return;
 
     QComposeTableElement elem;
-    QString quote = QStringLiteral("\"");
     // find the composed value - strings may be direct text encoded in the locale
     // for which the compose file is to be used, or an escaped octal or hexadecimal
     // character code. Octal codes are specified as "\123" and hexadecimal codes as "\0x123a".
-    int composeValueIndex = line.indexOf(quote, keysEnd) + 1;
-    const QChar valueType(line.at(composeValueIndex));
+    char *composeValue = strchr(keysEnd, '"');
+    if (!composeValue)
+        return;
+    ++composeValue;
 
-    if (valueType == '\\' && line.at(composeValueIndex + 1).isDigit()) {
+    char *composeValueEnd = strchr(composeValue, '"');
+    if (!composeValueEnd)
+        return;
+
+    // if composed value is a quotation mark adjust the end pointer
+    if (composeValueEnd[1] == '"')
+        ++composeValueEnd;
+
+    if (*composeValue == '\\' && composeValue[1] >= '0' && composeValue[1] <= '9') {
         // handle octal and hex code values
-        QChar detectBase(line.at(composeValueIndex + 2));
-        QString codeValue = line.mid(composeValueIndex + 1, line.lastIndexOf(quote) - composeValueIndex - 1);
+        char detectBase = composeValue[2];
         if (detectBase == 'x') {
             // hexadecimal character code
-            elem.value = keysymToUtf8(codeValue.toUInt(0, 16));
+            elem.value = keysymToUtf8(fromBase16(composeValue + 3, composeValueEnd));
         } else {
             // octal character code
-            QString hexStr = QString::number(codeValue.toUInt(0, 8), 16);
-            elem.value = keysymToUtf8(hexStr.toUInt(0, 16));
+            elem.value = keysymToUtf8(fromBase8(composeValue + 1, composeValueEnd));
         }
     } else {
         // handle direct text encoded in the locale
-        elem.value = valueType.unicode();
+        if (*composeValue == '\\')
+            ++composeValue;
+        elem.value = QString::fromLocal8Bit(composeValue, composeValueEnd - composeValue).at(0).unicode();
+        ++composeValue;
     }
 
+#ifdef DEBUG_GENERATOR
     // find the comment
-    int commnetIndex = line.lastIndexOf(quote) + 1;
-    elem.comment = line.mid(commnetIndex).trimmed();
+    elem.comment = QString::fromLocal8Bit(composeValueEnd + 1).trimmed();
+#endif
 
-    // Convert to X11 keysym
-    int count = keyList.length();
+    // find the key sequence and convert to X11 keysym
+    char *k = line;
+    const char *kend = keysEnd;
+
     for (int i = 0; i < QT_KEYSEQUENCE_MAX_LEN; i++) {
-        if (i < count) {
-            QString keysym = keyList.at(i);
-            keysym.remove(keysym.length() - 1, 1);
-            keysym.remove(0, 1);
-
-            if (keysym == QLatin1String("dead_inverted_breve"))
-                keysym = QStringLiteral("dead_invertedbreve");
-            else if (keysym == QLatin1String("dead_double_grave"))
-                keysym = QStringLiteral("dead_doublegrave");
-
-            elem.keys[i] = stringToKeysym(keysym);
+        // find the next pair of angle brackets and get the contents within
+        while (k < kend && *k != '<')
+            ++k;
+        char *sym = ++k;
+        while (k < kend && *k != '>')
+            ++k;
+        *k = '\0';
+        if (k < kend) {
+            elem.keys[i] = xkb_keysym_from_name(sym, (xkb_keysym_flags)0);
+            if (elem.keys[i] == XKB_KEY_NoSymbol) {
+                if (!strcmp(sym, "dead_inverted_breve"))
+                    elem.keys[i] = XKB_KEY_dead_invertedbreve;
+                else if (!strcmp(sym, "dead_double_grave"))
+                    elem.keys[i] = XKB_KEY_dead_doublegrave;
+#ifdef DEBUG_GENERATOR
+                else
+                    qWarning() << QString("Qt Warning - invalid keysym: %1").arg(sym);
+#endif
+            }
         } else {
             elem.keys[i] = 0;
         }
@@ -372,29 +445,24 @@ void TableGenerator::parseKeySequence(QString line)
 
 void TableGenerator::printComposeTable() const
 {
-    if (composeTable().isEmpty())
+#ifdef DEBUG_GENERATOR
+# ifndef QT_NO_DEBUG_STREAM
+    if (m_composeTable.isEmpty())
         return;
 
-    QString output;
-    QComposeTableElement elem;
-    QString comma = QStringLiteral(",");
-    int tableSize = m_composeTable.size();
+    QDebug ds = qDebug() << "output:\n";
+    ds.nospace();
+    const int tableSize = m_composeTable.size();
     for (int i = 0; i < tableSize; ++i) {
-        elem = m_composeTable.at(i);
-        output.append(QLatin1String("{ {"));
+        const QComposeTableElement &elem = m_composeTable.at(i);
+        ds << "{ {";
         for (int j = 0; j < QT_KEYSEQUENCE_MAX_LEN; j++) {
-            output.append(QString(QLatin1String("0x%1, ")).arg(QString::number(elem.keys[j],16)));
+            ds << hex << showbase << elem.keys[j] << ", ";
         }
-        // take care of the trailing comma
-        if (i == tableSize - 1)
-            comma = QStringLiteral("");
-        output.append(QString(QLatin1String("}, 0x%1, \"\" }%2 // %3 \n"))
-                      .arg(QString::number(elem.value,16))
-                      .arg(comma)
-                      .arg(elem.comment));
+        ds << "}, " << hex << showbase << elem.value << ", \"\" }, // " << elem.comment << " \n";
     }
-
-    qDebug() << "output: \n" << output;
+# endif
+#endif
 }
 
 void TableGenerator::orderComposeTable()
@@ -402,6 +470,6 @@ void TableGenerator::orderComposeTable()
     // Stable-sorting to ensure that the item that appeared before the other in the
     // original container will still appear first after the sort. This property is
     // needed to handle the cases when user re-defines already defined key sequence
-    qStableSort(m_composeTable.begin(), m_composeTable.end(), Compare());
+    std::stable_sort(m_composeTable.begin(), m_composeTable.end(), Compare());
 }
 

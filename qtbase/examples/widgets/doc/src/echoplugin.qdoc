@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -145,7 +145,7 @@
     plugin. The Q_INTERFACES macro tells Qt which interfaces the class
     implements. In our case we only implement the \c EchoInterface.
     If a class implements more than one interface, they are given as
-    a comma separated list. The Q_PLUGIN_METADATA macro is included next
+    a space separated list. The Q_PLUGIN_METADATA macro is included next
     to the Q_OBJECT macro. It contains the plugins IID and a filename
     pointing to a json file containing the metadata for the plugin.
     The json file is compiled into the plugin and does not need to be installed.
@@ -192,12 +192,12 @@
     the platform. By convention the target should have the same name
     as the plugin (set with Q_EXPORT_PLUGIN2)
 
-    \section1 Further reading and examples
+    \section1 Further Reading and Examples
 
-    You can find an overview of the macros needed to create plugins
-    \l{Macros for Defining Plugins}{here}.
+    The \l {qtplugin-defining-plugins}{Defining Plugins} page presents an overview of the macros needed to
+    create plugins.
 
-    We give an example of a plugin that extend Qt in the \l{Style
+    We give an example of a plugin that extends Qt in the \l{Style
     Plugin Example}{style plugin} example. The \l{Plug & Paint
     Example}{plug and paint} example shows how to create static
     plugins.

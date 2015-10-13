@@ -1,43 +1,37 @@
 /***************************************************************************
 **
-** Copyright (C) 2011 - 2012 Research In Motion
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2011 - 2013 BlackBerry Limited. All rights reserved.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+
+#include "qqnxglobal.h"
 
 #include "qqnxscreen.h"
 #include "qqnxwindow.h"
@@ -75,17 +69,18 @@ QT_BEGIN_NAMESPACE
 static QSize determineScreenSize(screen_display_t display, bool primaryScreen) {
     int val[2];
 
-    errno = 0;
     const int result = screen_get_display_property_iv(display, SCREEN_PROPERTY_PHYSICAL_SIZE, val);
+    Q_SCREEN_CHECKERROR(result, "Failed to query display physical size");
     if (result != 0) {
-        qFatal("QQnxScreen: failed to query display physical size, errno=%d", errno);
         return QSize(150, 90);
     }
 
     if (val[0] > 0 && val[1] > 0)
         return QSize(val[0], val[1]);
 
-    qWarning("QQnxScreen: screen_get_display_property_iv() reported an invalid physical screen size (%dx%d). Falling back to QQNX_PHYSICAL_SCREEN_SIZE environment variable.", val[0], val[1]);
+    qScreenDebug("QQnxScreen: screen_get_display_property_iv() reported an invalid "
+                 "physical screen size (%dx%d). Falling back to QQNX_PHYSICAL_SCREEN_SIZE "
+                 "environment variable.", val[0], val[1]);
 
     const QString envPhySizeStr = qgetenv("QQNX_PHYSICAL_SCREEN_SIZE");
     if (!envPhySizeStr.isEmpty()) {
@@ -94,7 +89,9 @@ static QSize determineScreenSize(screen_display_t display, bool primaryScreen) {
         const int envHeight = envPhySizeStrList.size() == 2 ? envPhySizeStrList[1].toInt() : -1;
 
         if (envWidth <= 0 || envHeight <= 0) {
-            qFatal("QQnxScreen: The value of QQNX_PHYSICAL_SCREEN_SIZE must be in the format \"width,height\" in mm, with width, height > 0. Example: QQNX_PHYSICAL_SCREEN_SIZE=150,90");
+            qWarning("QQnxScreen: The value of QQNX_PHYSICAL_SCREEN_SIZE must be in the format "
+                     "\"width,height\" in mm, with width, height > 0. Defaulting to 150x90. "
+                     "Example: QQNX_PHYSICAL_SCREEN_SIZE=150,90");
             return QSize(150, 90);
         }
 
@@ -103,42 +100,79 @@ static QSize determineScreenSize(screen_display_t display, bool primaryScreen) {
 
 #if defined(QQNX_PHYSICAL_SCREEN_SIZE_DEFINED)
     const QSize defSize(QQNX_PHYSICAL_SCREEN_WIDTH, QQNX_PHYSICAL_SCREEN_HEIGHT);
-    qWarning("QQnxScreen: QQNX_PHYSICAL_SCREEN_SIZE variable not set. Falling back to defines QQNX_PHYSICAL_SCREEN_WIDTH/QQNX_PHYSICAL_SCREEN_HEIGHT (%dx%d)", defSize.width(), defSize.height());
+    qWarning("QQnxScreen: QQNX_PHYSICAL_SCREEN_SIZE variable not set. Falling back to defines "
+             "QQNX_PHYSICAL_SCREEN_WIDTH/QQNX_PHYSICAL_SCREEN_HEIGHT (%dx%d)",
+             defSize.width(), defSize.height());
     return defSize;
 #else
     if (primaryScreen)
-        qFatal("QQnxScreen: QQNX_PHYSICAL_SCREEN_SIZE variable not set. Could not determine physical screen size.");
+        qWarning("QQnxScreen: QQNX_PHYSICAL_SCREEN_SIZE variable not set. "
+                 "Could not determine physical screen size. Defaulting to 150x90.");
     return QSize(150, 90);
 #endif
+}
+
+static QQnxWindow *findMultimediaWindow(const QList<QQnxWindow*> &windows,
+                                                    const QByteArray &mmWindowId)
+{
+    Q_FOREACH (QQnxWindow *sibling, windows) {
+        if (sibling->mmRendererWindowName() == mmWindowId)
+            return sibling;
+
+        QQnxWindow *mmWindow = findMultimediaWindow(sibling->children(), mmWindowId);
+
+        if (mmWindow)
+            return mmWindow;
+    }
+
+    return 0;
+}
+
+static QQnxWindow *findMultimediaWindow(const QList<QQnxWindow*> &windows,
+                                                    screen_window_t mmWindowId)
+{
+    Q_FOREACH (QQnxWindow *sibling, windows) {
+        if (sibling->mmRendererWindow() == mmWindowId)
+            return sibling;
+
+        QQnxWindow *mmWindow = findMultimediaWindow(sibling->children(), mmWindowId);
+
+        if (mmWindow)
+            return mmWindow;
+    }
+
+    return 0;
 }
 
 QQnxScreen::QQnxScreen(screen_context_t screenContext, screen_display_t display, bool primaryScreen)
     : m_screenContext(screenContext),
       m_display(display),
+      m_rootWindow(0),
       m_primaryScreen(primaryScreen),
-      m_posted(false),
       m_keyboardHeight(0),
       m_nativeOrientation(Qt::PrimaryOrientation),
-      m_platformContext(0),
+      m_coverWindow(0),
       m_cursor(new QQnxCursor())
 {
     qScreenDebug() << Q_FUNC_INFO;
     // Cache initial orientation of this display
-    errno = 0;
-    int result = screen_get_display_property_iv(m_display, SCREEN_PROPERTY_ROTATION, &m_initialRotation);
-    if (result != 0)
-        qFatal("QQnxScreen: failed to query display rotation, errno=%d", errno);
+    int result = screen_get_display_property_iv(m_display, SCREEN_PROPERTY_ROTATION,
+                                                &m_initialRotation);
+    Q_SCREEN_CHECKERROR(result, "Failed to query display rotation");
 
     m_currentRotation = m_initialRotation;
 
     // Cache size of this display in pixels
-    errno = 0;
     int val[2];
-    result = screen_get_display_property_iv(m_display, SCREEN_PROPERTY_SIZE, val);
-    if (result != 0)
-        qFatal("QQnxScreen: failed to query display size, errno=%d", errno);
+    Q_SCREEN_CRITICALERROR(screen_get_display_property_iv(m_display, SCREEN_PROPERTY_SIZE, val),
+                        "Failed to query display size");
 
     m_currentGeometry = m_initialGeometry = QRect(0, 0, val[0], val[1]);
+
+    char name[100];
+    Q_SCREEN_CHECKERROR(screen_get_display_property_cv(m_display, SCREEN_PROPERTY_ID_STRING, 100,
+                                                       name), "Failed to query display name");
+    m_name = QString::fromUtf8(name);
 
     // Cache size of this display in millimeters. We have to take care of the orientation.
     // libscreen always reports the physical size dimensions as width and height in the
@@ -161,7 +195,107 @@ QQnxScreen::~QQnxScreen()
     Q_FOREACH (QQnxWindow *childWindow, m_childWindows)
         childWindow->setScreen(0);
 
+    if (m_coverWindow)
+        m_coverWindow->setScreen(0);
+
     delete m_cursor;
+}
+
+QPixmap QQnxScreen::grabWindow(WId window, int x, int y, int width, int height) const
+{
+    QQnxWindow *qnxWin = findWindow(reinterpret_cast<screen_window_t>(window));
+    if (!qnxWin) {
+        qWarning("grabWindow: unknown window");
+        return QPixmap();
+    }
+
+    QRect bound = qnxWin->geometry();
+
+    if (width < 0)
+        width = bound.width();
+    if (height < 0)
+        height = bound.height();
+
+    bound &= QRect(x + bound.x(), y + bound.y(), width, height);
+
+    if (bound.width() <= 0 || bound.height() <= 0) {
+        qWarning("grabWindow: size is null");
+        return QPixmap();
+    }
+
+    // Create new context, only SCREEN_DISPLAY_MANAGER_CONTEXT can read from screen
+    screen_context_t context;
+    if (screen_create_context(&context, SCREEN_DISPLAY_MANAGER_CONTEXT)) {
+        if (errno == EPERM)
+            qWarning("grabWindow: root privileges required");
+        else
+            qWarning("grabWindow: cannot create context");
+        return QPixmap();
+    }
+
+    // Find corresponding display in SCREEN_DISPLAY_MANAGER_CONTEXT
+    int count = 0;
+    screen_display_t display = 0;
+    screen_get_context_property_iv(context, SCREEN_PROPERTY_DISPLAY_COUNT, &count);
+    if (count > 0) {
+        const size_t idLen = 30;
+        char matchId[idLen];
+        char id[idLen];
+        bool found = false;
+
+        screen_display_t *displays = static_cast<screen_display_t*>
+                                     (calloc(count, sizeof(screen_display_t)));
+        screen_get_context_property_pv(context, SCREEN_PROPERTY_DISPLAYS, (void **)displays);
+        screen_get_display_property_cv(m_display,  SCREEN_PROPERTY_ID_STRING, idLen, matchId);
+
+        while (count && !found) {
+            --count;
+            screen_get_display_property_cv(displays[count], SCREEN_PROPERTY_ID_STRING, idLen, id);
+            found = !strncmp(id, matchId, idLen);
+        }
+
+        if (found)
+            display = displays[count];
+
+        free(displays);
+    }
+
+    // Create screen and Qt pixmap
+    screen_pixmap_t pixmap;
+    QPixmap result;
+    if (display && !screen_create_pixmap(&pixmap, context)) {
+        screen_buffer_t buffer;
+        void *pointer;
+        int stride;
+        const int rect[4] = { bound.x(), bound.y(), bound.width(), bound.height() };
+
+        int val = SCREEN_USAGE_READ | SCREEN_USAGE_NATIVE;
+        screen_set_pixmap_property_iv(pixmap, SCREEN_PROPERTY_USAGE, &val);
+        val = SCREEN_FORMAT_RGBA8888;
+        screen_set_pixmap_property_iv(pixmap, SCREEN_PROPERTY_FORMAT, &val);
+
+        int err =    screen_set_pixmap_property_iv(pixmap, SCREEN_PROPERTY_BUFFER_SIZE, rect+2);
+        err = err || screen_create_pixmap_buffer(pixmap);
+        err = err || screen_get_pixmap_property_pv(pixmap, SCREEN_PROPERTY_RENDER_BUFFERS,
+                                                   reinterpret_cast<void**>(&buffer));
+        err = err || screen_get_buffer_property_pv(buffer, SCREEN_PROPERTY_POINTER, &pointer);
+        err = err || screen_get_buffer_property_iv(buffer, SCREEN_PROPERTY_STRIDE, &stride);
+        err = err || screen_read_display(display, buffer, 1, rect, 0);
+
+        if (!err) {
+            const QImage img(static_cast<unsigned char*>(pointer),
+                             bound.width(), bound.height(), stride, QImage::Format_ARGB32);
+            result = QPixmap::fromImage(img);
+        } else {
+            qWarning("grabWindow: capture error");
+        }
+        screen_destroy_pixmap(pixmap);
+    } else {
+        qWarning("grabWindow: display/pixmap error ");
+    }
+    screen_destroy_context(context);
+
+    return result;
 }
 
 static int defaultDepth()
@@ -171,7 +305,7 @@ static int defaultDepth()
     if (defaultDepth == 0) {
         // check if display depth was specified in environment variable;
         // use default value if no valid value found
-        defaultDepth = qgetenv("QQNX_DISPLAY_DEPTH").toInt();
+        defaultDepth = qEnvironmentVariableIntValue("QQNX_DISPLAY_DEPTH");
         if (defaultDepth != 16 && defaultDepth != 32)
             defaultDepth = 32;
     }
@@ -195,7 +329,8 @@ qreal QQnxScreen::refreshRate() const
 {
     screen_display_mode_t displayMode;
     int result = screen_get_display_property_pv(m_display, SCREEN_PROPERTY_MODE, reinterpret_cast<void **>(&displayMode));
-    if (result != 0) {
+    // Screen shouldn't really return 0 but it does so default to 60 or things break.
+    if (result != 0 || displayMode.refresh == 0) {
         qWarning("QQnxScreen: Failed to query screen mode. Using default value of 60Hz");
         return 60.0;
     }
@@ -241,6 +376,18 @@ Qt::ScreenOrientation QQnxScreen::orientation() const
     return orient;
 }
 
+QWindow *QQnxScreen::topLevelAt(const QPoint &point) const
+{
+    QListIterator<QQnxWindow*> it(m_childWindows);
+    it.toBack();
+    while (it.hasPrevious()) {
+        QWindow *win = it.previous()->window();
+        if (win->geometry().contains(point))
+            return win;
+    }
+    return 0;
+}
+
 /*!
     Check if the supplied angles are perpendicular to each other.
 */
@@ -253,7 +400,8 @@ void QQnxScreen::setRotation(int rotation)
 {
     qScreenDebug() << Q_FUNC_INFO << "orientation =" << rotation;
     // Check if rotation changed
-    if (m_currentRotation != rotation) {
+    // We only want to rotate if we are the primary screen
+    if (m_currentRotation != rotation && isPrimaryScreen()) {
         // Update rotation of root window
         if (rootWindow())
             rootWindow()->setRotation(rotation);
@@ -273,15 +421,13 @@ void QQnxScreen::setRotation(int rotation)
         if (isOrthogonal(m_currentRotation, rotation)) {
             qScreenDebug() << Q_FUNC_INFO << "resize, size =" << m_currentGeometry.size();
             if (rootWindow())
-                rootWindow()->resize(m_currentGeometry.size());
+                rootWindow()->setGeometry(QRect(QPoint(0,0), m_currentGeometry.size()));
 
-            if (m_primaryScreen)
-                resizeWindows(previousScreenGeometry);
+            resizeWindows(previousScreenGeometry);
         } else {
             // TODO: Find one global place to flush display updates
             // Force immediate display update if no geometry changes required
-            if (rootWindow())
-                rootWindow()->flush();
+            screen_flush_context(nativeContext(), 0);
         }
 
         // Save new rotation
@@ -292,7 +438,7 @@ void QQnxScreen::setRotation(int rotation)
         // Rotating only the primary screen is what we had in the navigator event handler before refactoring
         if (m_primaryScreen) {
             QWindowSystemInterface::handleScreenOrientationChange(screen(), orientation());
-            QWindowSystemInterface::handleScreenGeometryChange(screen(), m_currentGeometry);
+            QWindowSystemInterface::handleScreenGeometryChange(screen(), m_currentGeometry, availableGeometry());
         }
 
         // Flush everything, so that the windows rotations are applied properly.
@@ -407,7 +553,7 @@ void QQnxScreen::resizeWindows(const QRect &previousScreenGeometry)
     }
 }
 
-QQnxWindow *QQnxScreen::findWindow(screen_window_t windowHandle)
+QQnxWindow *QQnxScreen::findWindow(screen_window_t windowHandle) const
 {
     Q_FOREACH (QQnxWindow *window, m_childWindows) {
         QQnxWindow * const result = window->findWindow(windowHandle);
@@ -425,45 +571,59 @@ void QQnxScreen::addWindow(QQnxWindow *window)
     if (m_childWindows.contains(window))
         return;
 
-    // Ensure that the desktop window is at the bottom of the zorder.
-    // If we do not do this then we may end up activating the desktop
-    // when the navigator service gets an event that our window group
-    // has been activated (see QQnxScreen::activateWindowGroup()).
-    // Such a situation would strangely break focus handling due to the
-    // invisible desktop widget window being layered on top of normal
-    // windows
-    if (window->window()->type() == Qt::Desktop)
-        m_childWindows.push_front(window);
-    else
-        m_childWindows.push_back(window);
-    updateHierarchy();
+    if (window->window()->type() != Qt::CoverWindow) {
+        // Ensure that the desktop window is at the bottom of the zorder.
+        // If we do not do this then we may end up activating the desktop
+        // when the navigator service gets an event that our window group
+        // has been activated (see QQnxScreen::activateWindowGroup()).
+        // Such a situation would strangely break focus handling due to the
+        // invisible desktop widget window being layered on top of normal
+        // windows
+        if (window->window()->type() == Qt::Desktop)
+            m_childWindows.push_front(window);
+        else
+            m_childWindows.push_back(window);
+        updateHierarchy();
+    } else {
+#if defined(Q_OS_BLACKBERRY)
+        m_coverWindow = window;
+#endif
+    }
 }
 
 void QQnxScreen::removeWindow(QQnxWindow *window)
 {
     qScreenDebug() << Q_FUNC_INFO << "window =" << window;
 
-    const int numWindowsRemoved = m_childWindows.removeAll(window);
-    if (numWindowsRemoved > 0)
-        updateHierarchy();
+    if (window != m_coverWindow) {
+        const int numWindowsRemoved = m_childWindows.removeAll(window);
+        if (window == m_rootWindow) //We just removed the root window
+            m_rootWindow = 0; //TODO we need a new root window ;)
+        if (numWindowsRemoved > 0)
+            updateHierarchy();
+    } else {
+        m_coverWindow = 0;
+    }
 }
 
 void QQnxScreen::raiseWindow(QQnxWindow *window)
 {
     qScreenDebug() << Q_FUNC_INFO << "window =" << window;
 
-    removeWindow(window);
-    m_childWindows.push_back(window);
-    updateHierarchy();
+    if (window != m_coverWindow) {
+        removeWindow(window);
+        m_childWindows.push_back(window);
+    }
 }
 
 void QQnxScreen::lowerWindow(QQnxWindow *window)
 {
     qScreenDebug() << Q_FUNC_INFO << "window =" << window;
 
-    removeWindow(window);
-    m_childWindows.push_front(window);
-    updateHierarchy();
+    if (window != m_coverWindow) {
+        removeWindow(window);
+        m_childWindows.push_front(window);
+    }
 }
 
 void QQnxScreen::updateHierarchy()
@@ -472,25 +632,33 @@ void QQnxScreen::updateHierarchy()
 
     QList<QQnxWindow*>::const_iterator it;
     int result;
-    int topZorder;
+    int topZorder = 0;
 
     errno = 0;
-    result = screen_get_window_property_iv(rootWindow()->nativeHandle(), SCREEN_PROPERTY_ZORDER, &topZorder);
-    if (result != 0)
-        qFatal("QQnxScreen: failed to query root window z-order, errno=%d", errno);
+    if (rootWindow()) {
+        result = screen_get_window_property_iv(rootWindow()->nativeHandle(), SCREEN_PROPERTY_ZORDER, &topZorder);
+        if (result != 0) { //This can happen if we use winId in QWidgets
+            topZorder = 10;
+            qWarning("QQnxScreen: failed to query root window z-order, errno=%d", errno);
+        }
+    } else {
+        topZorder = 0;  //We do not need z ordering on the secondary screen, because only one window
+                        //is supported there
+    }
 
     topZorder++; // root window has the lowest z-order in the windowgroup
 
+    int underlayZorder = -1;
     // Underlays sit immediately above the root window in the z-ordering
     Q_FOREACH (screen_window_t underlay, m_underlays) {
         // Do nothing when this fails. This can happen if we have stale windows in m_underlays,
         // which in turn can happen because a window was removed but we didn't get a notification
         // yet.
-        screen_set_window_property_iv(underlay, SCREEN_PROPERTY_ZORDER, &topZorder);
-        topZorder++;
+        screen_set_window_property_iv(underlay, SCREEN_PROPERTY_ZORDER, &underlayZorder);
+        underlayZorder--;
     }
 
-    // Normal Qt windows come next above underlays in the z-ordering
+    // Normal Qt windows come next above the root window z-ordering
     for (it = m_childWindows.constBegin(); it != m_childWindows.constEnd(); ++it)
         (*it)->updateZorder(topZorder);
 
@@ -503,21 +671,7 @@ void QQnxScreen::updateHierarchy()
 
     // After a hierarchy update, we need to force a flush on all screens.
     // Right now, all screens share a context.
-    screen_flush_context( m_screenContext, 0 );
-}
-
-void QQnxScreen::onWindowPost(QQnxWindow *window)
-{
-    qScreenDebug() << Q_FUNC_INFO;
-    Q_UNUSED(window)
-
-    // post app window (so navigator will show it) after first child window
-    // has posted; this only needs to happen once as the app window's content
-    // never changes
-    if (!m_posted && rootWindow()) {
-        rootWindow()->post();
-        m_posted = true;
-    }
+    screen_flush_context(m_screenContext, 0);
 }
 
 void QQnxScreen::adjustOrientation()
@@ -526,7 +680,7 @@ void QQnxScreen::adjustOrientation()
         return;
 
     bool ok = false;
-    const int rotation = qgetenv("ORIENTATION").toInt(&ok);
+    const int rotation = qEnvironmentVariableIntValue("ORIENTATION", &ok);
 
     if (ok)
         setRotation(rotation);
@@ -544,7 +698,7 @@ void QQnxScreen::keyboardHeightChanged(int height)
 
     m_keyboardHeight = height;
 
-    QWindowSystemInterface::handleScreenAvailableGeometryChange(screen(), availableGeometry());
+    QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), availableGeometry());
 }
 
 void QQnxScreen::addOverlayWindow(screen_window_t window)
@@ -559,11 +713,26 @@ void QQnxScreen::addUnderlayWindow(screen_window_t window)
     updateHierarchy();
 }
 
+void QQnxScreen::addMultimediaWindow(const QByteArray &id, screen_window_t window)
+{
+    // find the QnxWindow this mmrenderer window is related to
+    QQnxWindow *mmWindow = findMultimediaWindow(m_childWindows, id);
+
+    if (!mmWindow)
+        return;
+
+    mmWindow->setMMRendererWindow(window);
+
+    updateHierarchy();
+}
+
 void QQnxScreen::removeOverlayOrUnderlayWindow(screen_window_t window)
 {
     const int numRemoved = m_overlays.removeAll(window) + m_underlays.removeAll(window);
-    if (numRemoved > 0)
+    if (numRemoved > 0) {
         updateHierarchy();
+        Q_EMIT foreignWindowClosed(window);
+    }
 }
 
 void QQnxScreen::newWindowCreated(void *window)
@@ -582,21 +751,40 @@ void QQnxScreen::newWindowCreated(void *window)
         zorder = 0;
     }
 
+    char windowNameBuffer[256] = { 0 };
+    QByteArray windowName;
+
+    if (screen_get_window_property_cv(windowHandle, SCREEN_PROPERTY_ID_STRING,
+                sizeof(windowNameBuffer) - 1, windowNameBuffer) != 0) {
+        qWarning("QQnx: Failed to get id for window, errno=%d", errno);
+    }
+
+    windowName = QByteArray(windowNameBuffer);
+
     if (display == nativeDisplay()) {
         // A window was created on this screen. If we don't know about this window yet, it means
         // it was not created by Qt, but by some foreign library like the multimedia renderer, which
         // creates an overlay window when playing a video.
         //
-        // Treat all foreign windows as overlays or underlays here.
+        // Treat all foreign windows as overlays, underlays or as windows
+        // created by the BlackBerry QtMultimedia plugin.
         //
-        // Assume that if a foreign window already has a Z-Order both negative and
+        // In the case of the BlackBerry QtMultimedia plugin, we need to
+        // "attach" the foreign created mmrenderer window to the correct
+        // platform window (usually the one belonging to QVideoWidget) to
+        // ensure proper z-ordering.
+        //
+        // Otherwise, assume that if a foreign window already has a Z-Order both negative and
         // less than the default Z-Order installed by mmrender on windows it creates,
         // the windows should be treated as an underlay. Otherwise, we treat it as an overlay.
-        if (!findWindow(windowHandle)) {
+        if (!windowName.isEmpty() && windowName.startsWith("MmRendererVideoWindowControl")) {
+            addMultimediaWindow(windowName, windowHandle);
+        } else if (!findWindow(windowHandle)) {
             if (zorder <= MAX_UNDERLAY_ZORDER)
                 addUnderlayWindow(windowHandle);
             else
                 addOverlayWindow(windowHandle);
+            Q_EMIT foreignWindowCreated(windowHandle);
         }
     }
 }
@@ -605,7 +793,13 @@ void QQnxScreen::windowClosed(void *window)
 {
     Q_ASSERT(thread() == QThread::currentThread());
     const screen_window_t windowHandle = reinterpret_cast<screen_window_t>(window);
-    removeOverlayOrUnderlayWindow(windowHandle);
+
+    QQnxWindow *mmWindow = findMultimediaWindow(m_childWindows, windowHandle);
+
+    if (mmWindow)
+        mmWindow->clearMMRendererWindow();
+    else
+        removeOverlayOrUnderlayWindow(windowHandle);
 }
 
 void QQnxScreen::windowGroupStateChanged(const QByteArray &id, Qt::WindowState state)
@@ -615,7 +809,7 @@ void QQnxScreen::windowGroupStateChanged(const QByteArray &id, Qt::WindowState s
     if (!rootWindow() || id != rootWindow()->groupName())
         return;
 
-    QWindow * const window = topMostChildWindow();
+    QWindow * const window = rootWindow()->window();
 
     if (!window)
         return;
@@ -630,12 +824,16 @@ void QQnxScreen::activateWindowGroup(const QByteArray &id)
     if (!rootWindow() || id != rootWindow()->groupName())
         return;
 
-    QWindow * const window = topMostChildWindow();
+    QWindow * const window = rootWindow()->window();
 
     if (!window)
         return;
 
-    QWindowSystemInterface::handleWindowActivated(window);
+    Q_FOREACH (QQnxWindow *childWindow, m_childWindows)
+        childWindow->setExposed(true);
+
+    if (m_coverWindow)
+        m_coverWindow->setExposed(false);
 }
 
 void QQnxScreen::deactivateWindowGroup(const QByteArray &id)
@@ -645,29 +843,30 @@ void QQnxScreen::deactivateWindowGroup(const QByteArray &id)
     if (!rootWindow() || id != rootWindow()->groupName())
         return;
 
-    QWindowSystemInterface::handleWindowActivated(0);
+    if (m_coverWindow)
+        m_coverWindow->setExposed(true);
+
+    Q_FOREACH (QQnxWindow *childWindow, m_childWindows)
+        childWindow->setExposed(false);
 }
 
-QSharedPointer<QQnxRootWindow> QQnxScreen::rootWindow() const
+QQnxWindow *QQnxScreen::rootWindow() const
 {
-    // We only create the root window if we are the primary display.
-    if (m_primaryScreen && !m_rootWindow)
-        m_rootWindow = QSharedPointer<QQnxRootWindow>(new QQnxRootWindow(this));
-
     return m_rootWindow;
 }
 
-QWindow * QQnxScreen::topMostChildWindow() const
+void QQnxScreen::setRootWindow(QQnxWindow *window)
 {
-    if (!m_childWindows.isEmpty()) {
-
-        // We're picking up the last window of the list here
-        // because this list is ordered by stacking order.
-        // Last window is effectively the one on top.
-        return m_childWindows.last()->window();
+    // Optionally disable the screen power save
+    bool ok = false;
+    const int disablePowerSave = qEnvironmentVariableIntValue("QQNX_DISABLE_POWER_SAVE", &ok);
+    if (ok && disablePowerSave) {
+        const int mode = SCREEN_IDLE_MODE_KEEP_AWAKE;
+        int result = screen_set_window_property_iv(window->nativeHandle(), SCREEN_PROPERTY_IDLE_MODE, &mode);
+        if (result != 0)
+            qWarning("QQnxRootWindow: failed to disable power saving mode");
     }
-
-    return 0;
+    m_rootWindow = window;
 }
 
 QT_END_NAMESPACE

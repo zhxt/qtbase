@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,6 +38,7 @@
 
 #include <qcolor.h>
 #include <qdebug.h>
+#include <private/qdrawingprimitive_sse2_p.h>
 
 class tst_QColor : public QObject
 {
@@ -61,6 +54,8 @@ private slots:
 
     void name_data();
     void name();
+    void namehex_data();
+    void namehex();
     void setNamedColor();
 
     void constructNamedColorWithSpace();
@@ -108,7 +103,10 @@ private slots:
 
     void achromaticHslHue();
 
-#ifdef Q_WS_X11
+    void premultiply();
+    void unpremultiply_sse4();
+
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
     void setallowX11ColorNames();
 #endif
 };
@@ -254,36 +252,75 @@ void tst_QColor::isValid()
     QVERIFY(color.isValid() == isValid);
 }
 
+Q_DECLARE_METATYPE(QColor::NameFormat);
+
 void tst_QColor::name_data()
 {
     QTest::addColumn<QColor>("color");
     QTest::addColumn<QString>("name");
+    QTest::addColumn<QColor::NameFormat>("nameFormat");
 
-    QTest::newRow("invalid") << QColor() << "#000000";
-    QTest::newRow("global color black") << QColor(Qt::black) << "#000000";
-    QTest::newRow("global color white") << QColor(Qt::white) << "#ffffff";
-    QTest::newRow("global color darkGray") << QColor(Qt::darkGray) << "#808080";
-    QTest::newRow("global color gray") << QColor(Qt::gray) << "#a0a0a4";
-    QTest::newRow("global color lightGray") << QColor(Qt::lightGray) << "#c0c0c0";
-    QTest::newRow("global color red") << QColor(Qt::red) << "#ff0000";
-    QTest::newRow("global color green") << QColor(Qt::green) << "#00ff00";
-    QTest::newRow("global color blue") << QColor(Qt::blue) << "#0000ff";
-    QTest::newRow("global color cyan") << QColor(Qt::cyan) << "#00ffff";
-    QTest::newRow("global color magenta") << QColor(Qt::magenta) << "#ff00ff";
-    QTest::newRow("global color yellow") << QColor(Qt::yellow) << "#ffff00";
-    QTest::newRow("global color darkRed") << QColor(Qt::darkRed) << "#800000";
-    QTest::newRow("global color darkGreen") << QColor(Qt::darkGreen) << "#008000";
-    QTest::newRow("global color darkBlue") << QColor(Qt::darkBlue) << "#000080";
-    QTest::newRow("global color darkCyan") << QColor(Qt::darkCyan) << "#008080";
-    QTest::newRow("global color darkMagenta") << QColor(Qt::darkMagenta) << "#800080";
-    QTest::newRow("global color darkYellow") << QColor(Qt::darkYellow) << "#808000";
+    QTest::newRow("invalid") << QColor() << "#000000" << QColor::HexRgb;
+    QTest::newRow("global color black") << QColor(Qt::black) << "#000000" << QColor::HexRgb;
+    QTest::newRow("global color white") << QColor(Qt::white) << "#ffffff" << QColor::HexRgb;
+    QTest::newRow("global color darkGray") << QColor(Qt::darkGray) << "#808080" << QColor::HexRgb;
+    QTest::newRow("global color gray") << QColor(Qt::gray) << "#a0a0a4" << QColor::HexRgb;
+    QTest::newRow("global color lightGray") << QColor(Qt::lightGray) << "#c0c0c0" << QColor::HexRgb;
+    QTest::newRow("global color red") << QColor(Qt::red) << "#ff0000" << QColor::HexRgb;
+    QTest::newRow("global color green") << QColor(Qt::green) << "#00ff00" << QColor::HexRgb;
+    QTest::newRow("global color blue") << QColor(Qt::blue) << "#0000ff" << QColor::HexRgb;
+    QTest::newRow("global color cyan") << QColor(Qt::cyan) << "#00ffff" << QColor::HexRgb;
+    QTest::newRow("global color magenta") << QColor(Qt::magenta) << "#ff00ff" << QColor::HexRgb;
+    QTest::newRow("global color yellow") << QColor(Qt::yellow) << "#ffff00" << QColor::HexRgb;
+    QTest::newRow("global color darkRed") << QColor(Qt::darkRed) << "#800000" << QColor::HexRgb;
+    QTest::newRow("global color darkGreen") << QColor(Qt::darkGreen) << "#008000" << QColor::HexRgb;
+    QTest::newRow("global color darkBlue") << QColor(Qt::darkBlue) << "#000080" << QColor::HexRgb;
+    QTest::newRow("global color darkCyan") << QColor(Qt::darkCyan) << "#008080" << QColor::HexRgb;
+    QTest::newRow("global color darkMagenta") << QColor(Qt::darkMagenta) << "#800080" << QColor::HexRgb;
+    QTest::newRow("global color darkYellow") << QColor(Qt::darkYellow) << "#808000" << QColor::HexRgb;
+    QTest::newRow("transparent red") << QColor(255, 0, 0, 102) << "#66ff0000" << QColor::HexArgb;
 }
 
 void tst_QColor::name()
 {
     QFETCH(QColor, color);
     QFETCH(QString, name);
-    QCOMPARE(color.name(), name);
+    QFETCH(QColor::NameFormat, nameFormat);
+    QCOMPARE(color.name(nameFormat), name);
+}
+
+void tst_QColor::namehex_data()
+{
+    QTest::addColumn<QString>("hexcolor");
+    QTest::addColumn<QColor>("color");
+
+    QTest::newRow("global color black") << "#000000" << QColor(Qt::black);
+    QTest::newRow("global color white") << "#ffffff" << QColor(Qt::white);
+    QTest::newRow("global color darkGray") << "#808080" << QColor(Qt::darkGray);
+    QTest::newRow("global color gray") << "#a0a0a4" << QColor(Qt::gray);
+    QTest::newRow("global color lightGray") << "#c0c0c0" << QColor(Qt::lightGray);
+    QTest::newRow("global color red") << "#ff0000" << QColor(Qt::red);
+    QTest::newRow("global color green") << "#00ff00" << QColor(Qt::green);
+    QTest::newRow("global color blue") << "#0000ff" << QColor(Qt::blue);
+    QTest::newRow("global color cyan") << "#00ffff" << QColor(Qt::cyan);
+    QTest::newRow("global color magenta") << "#ff00ff" << QColor(Qt::magenta);
+    QTest::newRow("global color yellow") << "#ffff00" << QColor(Qt::yellow);
+    QTest::newRow("global color darkRed") << "#800000" << QColor(Qt::darkRed);
+    QTest::newRow("global color darkGreen") << "#008000" << QColor(Qt::darkGreen);
+    QTest::newRow("global color darkBlue") << "#000080" << QColor(Qt::darkBlue);
+    QTest::newRow("global color darkCyan") << "#008080" << QColor(Qt::darkCyan);
+    QTest::newRow("global color darkMagenta") << "#800080" << QColor(Qt::darkMagenta);
+    QTest::newRow("global color darkYellow") << "#808000" << QColor(Qt::darkYellow);
+    QTest::newRow("transparent red") << "#66ff0000" << QColor(255, 0, 0, 102);
+    QTest::newRow("invalid red") << "#gg0000" << QColor();
+    QTest::newRow("invalid transparent") << "#gg00ff00" << QColor();
+}
+
+void tst_QColor::namehex()
+{
+    QFETCH(QString, hexcolor);
+    QFETCH(QColor, color);
+    QCOMPARE(QColor(hexcolor), color);
 }
 
 void tst_QColor::globalColors_data()
@@ -489,10 +526,19 @@ static const int rgbTblSize = sizeof(rgbTbl) / sizeof(RGBData);
 void tst_QColor::setNamedColor()
 {
     for (int i = 0; i < rgbTblSize; ++i) {
-        QColor color;
-        color.setNamedColor(QLatin1String(rgbTbl[i].name));
         QColor expected;
         expected.setRgba(rgbTbl[i].value);
+
+        QColor color;
+        color.setNamedColor(QLatin1String(rgbTbl[i].name));
+        QCOMPARE(color, expected);
+
+        // name should be case insensitive
+        color.setNamedColor(QString(rgbTbl[i].name).toUpper());
+        QCOMPARE(color, expected);
+
+        // spaces should be ignored
+        color.setNamedColor(QString(rgbTbl[i].name).insert(1, ' '));
         QCOMPARE(color, expected);
     }
 }
@@ -1331,7 +1377,7 @@ void tst_QColor::achromaticHslHue()
     QCOMPARE(hsl.hslHue(), -1);
 }
 
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
 void tst_QColor::setallowX11ColorNames()
 {
 #if defined(Q_OS_IRIX)
@@ -1389,6 +1435,34 @@ void tst_QColor::setallowX11ColorNames()
     }
 }
 #endif
+
+void tst_QColor::premultiply()
+{
+    // Tests that qPremultiply(qUnpremultiply(x)) returns x.
+    for (uint a = 0; a < 256; a++) {
+        for (uint c = 0; c <= a; c++) {
+            QRgb p = qRgba(c, a-c, c, a);
+            QCOMPARE(p, qPremultiply(qUnpremultiply(p)));
+        }
+    }
+}
+
+void tst_QColor::unpremultiply_sse4()
+{
+    // Tests that qUnpremultiply_sse4 returns the same as qUnpremultiply.
+#if QT_COMPILER_SUPPORTS_HERE(SSE4_1)
+    if (qCpuHasFeature(SSE4_1)) {
+        for (uint a = 0; a < 256; a++) {
+            for (uint c = 0; c <= a; c++) {
+                QRgb p = qRgba(c, a-c, c, a);
+                QCOMPARE(qUnpremultiply(p), qUnpremultiply_sse4(p));
+            }
+        }
+        return;
+    }
+#endif
+    QSKIP("SSE4 not supported on this CPU.");
+}
 
 QTEST_MAIN(tst_QColor)
 #include "tst_qcolor.moc"

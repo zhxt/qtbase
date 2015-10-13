@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -72,6 +64,7 @@ public:
         , profile(QSurfaceFormat::NoProfile)
         , major(2)
         , minor(0)
+        , swapInterval(1) // default to vsync
     {
     }
 
@@ -89,7 +82,8 @@ public:
           renderableType(other->renderableType),
           profile(other->profile),
           major(other->major),
-          minor(other->minor)
+          minor(other->minor),
+          swapInterval(other->swapInterval)
     {
     }
 
@@ -107,6 +101,7 @@ public:
     QSurfaceFormat::OpenGLContextProfile profile;
     int major;
     int minor;
+    int swapInterval;
 };
 
 /*!
@@ -119,7 +114,7 @@ public:
     the size of the alpha buffer; the size of the depth and stencil buffers;
     and number of samples per pixel for multisampling. In addition, the format
     contains surface configuration parameters such as OpenGL profile and
-    version for rendering, whether or not enable stereo buffers, and swap
+    version for rendering, whether or not to enable stereo buffers, and swap
     behaviour.
 */
 
@@ -133,6 +128,10 @@ public:
     \value DeprecatedFunctions Used to request that deprecated functions be included
         in the OpenGL context profile. If not specified, you should get a forward compatible context
         without support functionality marked as deprecated. This requires OpenGL version 3.0 or higher.
+    \value ResetNotification Enables notifications about resets of the OpenGL context. The status is then
+        queryable via the context's \l{QOpenGLContext::isValid()}{isValid()} function. Note that not setting
+        this flag does not guarantee that context state loss never occurs. Additionally, some implementations
+        may choose to report context loss regardless of this flag.
 */
 
 /*!
@@ -186,13 +185,16 @@ public:
     in the set OpenGL version you can use the QSurfaceFormat format option
     QSurfaceFormat::DeprecatedFunctions.
 
-    \value NoProfile            OpenGL version is lower than 3.2.
+    \value NoProfile            OpenGL version is lower than 3.2. For 3.2 and newer this is same as CoreProfile.
     \value CoreProfile          Functionality deprecated in OpenGL version 3.0 is not available.
     \value CompatibilityProfile Functionality from earlier OpenGL versions is available.
 */
 
 /*!
     Constructs a default initialized QSurfaceFormat.
+
+    \note By default OpenGL 2.0 is requested since this provides the highest
+    grade of portability between platforms and OpenGL implementations.
 */
 QSurfaceFormat::QSurfaceFormat() : d(new QSurfaceFormatPrivate)
 {
@@ -254,7 +256,7 @@ QSurfaceFormat::~QSurfaceFormat()
 /*!
     \fn bool QSurfaceFormat::stereo() const
 
-    Returns true if stereo buffering is enabled; otherwise returns
+    Returns \c true if stereo buffering is enabled; otherwise returns
     false. Stereo buffering is disabled by default.
 
     \sa setStereo()
@@ -310,10 +312,17 @@ void QSurfaceFormat::setSamples(int numSamples)
     }
 }
 
+#if QT_DEPRECATED_SINCE(5, 2)
 /*!
-    Sets the format option to \a opt.
+    \obsolete
+    \overload
 
-    \sa testOption()
+    Use setOption(QSurfaceFormat::FormatOption, bool) or setOptions() instead.
+
+    Sets the format options to the OR combination of \a opt and the
+    current format options.
+
+    \sa options(), testOption()
 */
 void QSurfaceFormat::setOption(QSurfaceFormat::FormatOptions opt)
 {
@@ -325,7 +334,13 @@ void QSurfaceFormat::setOption(QSurfaceFormat::FormatOptions opt)
 }
 
 /*!
-    Returns true if format option \a opt is set; otherwise returns false.
+    \obsolete
+    \overload
+
+    Use testOption(QSurfaceFormat::FormatOption) instead.
+
+    Returns \c true if any of the options in \a opt is currently set
+    on this object; otherwise returns false.
 
     \sa setOption()
 */
@@ -333,11 +348,69 @@ bool QSurfaceFormat::testOption(QSurfaceFormat::FormatOptions opt) const
 {
     return d->opts & opt;
 }
+#endif // QT_DEPRECATED_SINCE(5, 2)
+
+/*!
+    \since 5.3
+
+    Sets the format options to \a options.
+
+    \sa options(), testOption()
+*/
+void QSurfaceFormat::setOptions(QSurfaceFormat::FormatOptions options)
+{
+    if (int(d->opts) != int(options)) {
+        detach();
+        d->opts = options;
+    }
+}
+
+/*!
+    \since 5.3
+
+    Sets the format option \a option if \a on is true; otherwise, clears the option.
+
+    \sa setOptions(), options(), testOption()
+*/
+void QSurfaceFormat::setOption(QSurfaceFormat::FormatOption option, bool on)
+{
+    if (testOption(option) == on)
+        return;
+    detach();
+    if (on)
+        d->opts |= option;
+    else
+        d->opts &= ~option;
+}
+
+/*!
+    \since 5.3
+
+    Returns true if the format option \a option is set; otherwise returns false.
+
+    \sa options()
+*/
+bool QSurfaceFormat::testOption(QSurfaceFormat::FormatOption option) const
+{
+    return d->opts & option;
+}
+
+/*!
+    \since 5.3
+
+    Returns the currently set format options.
+
+    \sa setOption(), setOptions(), testOption()
+*/
+QSurfaceFormat::FormatOptions QSurfaceFormat::options() const
+{
+    return d->opts;
+}
 
 /*!
     Set the minimum depth buffer size to \a size.
 
-    \sa depthBufferSize(), setDepth(), depth()
+    \sa depthBufferSize()
 */
 void QSurfaceFormat::setDepthBufferSize(int size)
 {
@@ -350,7 +423,7 @@ void QSurfaceFormat::setDepthBufferSize(int size)
 /*!
     Returns the depth buffer size.
 
-    \sa setDepthBufferSize(), setDepth(), depth()
+    \sa setDepthBufferSize()
 */
 int QSurfaceFormat::depthBufferSize() const
 {
@@ -361,7 +434,7 @@ int QSurfaceFormat::depthBufferSize() const
     Set the swap \a behavior of the surface.
 
     The swap behavior specifies whether single, double, or triple
-    buffering is desired. The default, SwapBehavior::DefaultSwapBehavior,
+    buffering is desired. The default, DefaultSwapBehavior,
     gives the default swap behavior of the platform.
 */
 void QSurfaceFormat::setSwapBehavior(SwapBehavior behavior)
@@ -383,7 +456,7 @@ QSurfaceFormat::SwapBehavior QSurfaceFormat::swapBehavior() const
 }
 
 /*!
-    Returns true if the alpha buffer size is greater than zero.
+    Returns \c true if the alpha buffer size is greater than zero.
 
     This means that the surface might be used with per pixel
     translucency effects.
@@ -396,7 +469,7 @@ bool QSurfaceFormat::hasAlpha() const
 /*!
     Set the preferred stencil buffer size to \a size bits.
 
-    \sa stencilBufferSize(), setStencil(), stencil()
+    \sa stencilBufferSize()
 */
 void QSurfaceFormat::setStencilBufferSize(int size)
 {
@@ -409,7 +482,7 @@ void QSurfaceFormat::setStencilBufferSize(int size)
 /*!
     Returns the stencil buffer size in bits.
 
-    \sa stencil(), setStencil(), setStencilBufferSize()
+    \sa setStencilBufferSize()
 */
 int QSurfaceFormat::stencilBufferSize() const
 {
@@ -450,6 +523,10 @@ int QSurfaceFormat::alphaBufferSize() const
 
 /*!
     Set the desired \a size in bits of the red channel of the color buffer.
+
+    \note On Mac OSX, be sure to set the buffer size of all color channels,
+    otherwise this setting will have no effect. If one of the buffer sizes is not set,
+    the current bit-depth of the screen is used.
 */
 void QSurfaceFormat::setRedBufferSize(int size)
 {
@@ -461,6 +538,10 @@ void QSurfaceFormat::setRedBufferSize(int size)
 
 /*!
     Set the desired \a size in bits of the green channel of the color buffer.
+
+    \note On Mac OSX, be sure to set the buffer size of all color channels,
+    otherwise this setting will have no effect. If one of the buffer sizes is not set,
+    the current bit-depth of the screen is used.
 */
 void QSurfaceFormat::setGreenBufferSize(int size)
 {
@@ -472,6 +553,10 @@ void QSurfaceFormat::setGreenBufferSize(int size)
 
 /*!
     Set the desired \a size in bits of the blue channel of the color buffer.
+
+    \note On Mac OSX, be sure to set the buffer size of all color channels,
+    otherwise this setting will have no effect. If one of the buffer sizes is not set,
+    the current bit-depth of the screen is used.
 */
 void QSurfaceFormat::setBlueBufferSize(int size)
 {
@@ -607,7 +692,90 @@ void QSurfaceFormat::setVersion(int major, int minor)
 }
 
 /*!
-    Returns true if all the options of the two QSurfaceFormat objects
+    Sets the preferred swap interval. The swap interval specifies the
+    minimum number of video frames that are displayed before a buffer
+    swap occurs. This can be used to sync the GL drawing into a window
+    to the vertical refresh of the screen.
+
+    Setting an \a interval value of 0 will turn the vertical refresh
+    syncing off, any value higher than 0 will turn the vertical
+    syncing on. Setting \a interval to a higher value, for example 10,
+    results in having 10 vertical retraces between every buffer swap.
+
+    The default interval is 1.
+
+    Changing the swap interval may not be supported by the underlying
+    platform. In this case, the request will be silently ignored.
+
+    \since 5.3
+
+    \sa swapInterval()
+ */
+void QSurfaceFormat::setSwapInterval(int interval)
+{
+    if (d->swapInterval != interval) {
+        detach();
+        d->swapInterval = interval;
+    }
+}
+
+/*!
+    Returns the swap interval.
+
+    \since 5.3
+
+    \sa setSwapInterval()
+*/
+int QSurfaceFormat::swapInterval() const
+{
+    return d->swapInterval;
+}
+
+Q_GLOBAL_STATIC(QSurfaceFormat, qt_default_surface_format)
+
+/*!
+    Sets the global default surface \a format.
+
+    This format is used by default in QOpenGLContext, QWindow, QOpenGLWidget and
+    similar classes.
+
+    It can always be overridden on a per-instance basis by using the class in
+    question's own setFormat() function. However, it is often more convenient to
+    set the format for all windows once at the start of the application. It also
+    guarantees proper behavior in cases where shared contexts are required,
+    because settings the format via this function guarantees that all contexts
+    and surfaces, even the ones created internally by Qt, will use the same
+    format.
+
+    \note When setting Qt::AA_ShareOpenGLContexts, it is strongly recommended to
+    place the call to this function before the construction of the
+    QGuiApplication or QApplication. Otherwise \a format will not be applied to
+    the global share context and therefore issues may arise with context sharing
+    afterwards.
+
+    \since 5.4
+    \sa defaultFormat()
+ */
+void QSurfaceFormat::setDefaultFormat(const QSurfaceFormat &format)
+{
+    *qt_default_surface_format() = format;
+}
+
+/*!
+    Returns the global default surface format.
+
+    When setDefaultFormat() is not called, this is a default-constructed QSurfaceFormat.
+
+    \since 5.4
+    \sa setDefaultFormat()
+ */
+QSurfaceFormat QSurfaceFormat::defaultFormat()
+{
+    return *qt_default_surface_format();
+}
+
+/*!
+    Returns \c true if all the options of the two QSurfaceFormat objects
     \a a and \a b are equal.
 
     \relates QSurfaceFormat
@@ -625,12 +793,13 @@ bool operator==(const QSurfaceFormat& a, const QSurfaceFormat& b)
         && a.d->swapBehavior == b.d->swapBehavior
         && a.d->profile == b.d->profile
         && a.d->major == b.d->major
-        && a.d->minor == b.d->minor);
+        && a.d->minor == b.d->minor
+        && a.d->swapInterval == b.d->swapInterval);
 }
 
 /*!
-    Returns false if all the options of the two QSurfaceFormat objects
-    \a a and \a b are equal; otherwise returns true.
+    Returns \c false if all the options of the two QSurfaceFormat objects
+    \a a and \a b are equal; otherwise returns \c true.
 
     \relates QSurfaceFormat
 */
@@ -643,6 +812,7 @@ bool operator!=(const QSurfaceFormat& a, const QSurfaceFormat& b)
 QDebug operator<<(QDebug dbg, const QSurfaceFormat &f)
 {
     const QSurfaceFormatPrivate * const d = f.d;
+    QDebugStateSaver saver(dbg);
 
     dbg.nospace() << "QSurfaceFormat("
                   << "version " << d->major << '.' << d->minor
@@ -655,10 +825,11 @@ QDebug operator<<(QDebug dbg, const QSurfaceFormat &f)
                   << ", stencilBufferSize " << d->stencilSize
                   << ", samples " << d->numSamples
                   << ", swapBehavior " << d->swapBehavior
+                  << ", swapInterval " << d->swapInterval
                   << ", profile  " << d->profile
                   << ')';
 
-    return dbg.space();
+    return dbg;
 }
 #endif
 

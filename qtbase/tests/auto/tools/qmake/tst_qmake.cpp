@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -68,12 +60,6 @@ private slots:
     void simple_dll();
     void subdirs();
     void subdir_via_pro_file_extra_target();
-    void functions();
-    void operators();
-    void variables();
-    void func_export();
-    void func_variables();
-    void comments();
     void duplicateLibraryEntries();
     void export_across_file_boundaries();
     void include_dir();
@@ -88,7 +74,6 @@ private slots:
 #if defined(Q_OS_MAC)
     void bundle_spaces();
 #endif
-    void includefunction();
     void substitutes();
     void project();
     void proFileCache();
@@ -148,14 +133,15 @@ void tst_qmake::cleanup()
 void tst_qmake::simple_app()
 {
     QString workDir = base_path + "/testdata/simple_app";
+    QString destDir = workDir + "/dest dir";
 
     QVERIFY( test_compiler.qmake( workDir, "simple_app" ));
     QVERIFY( test_compiler.make( workDir ));
-    QVERIFY( test_compiler.exists( workDir, "simple_app", Exe, "1.0.0" ));
+    QVERIFY( test_compiler.exists( destDir, "simple app", Exe, "1.0.0" ));
     QVERIFY( test_compiler.makeClean( workDir ));
-    QVERIFY( test_compiler.exists( workDir, "simple_app", Exe, "1.0.0" )); // Should still exist after a make clean
+    QVERIFY( test_compiler.exists( destDir, "simple app", Exe, "1.0.0" )); // Should still exist after a make clean
     QVERIFY( test_compiler.makeDistClean( workDir ));
-    QVERIFY( !test_compiler.exists( workDir, "simple_app", Exe, "1.0.0" )); // Should not exist after a make distclean
+    QVERIFY( !test_compiler.exists( destDir, "simple app", Exe, "1.0.0" )); // Should not exist after a make distclean
     QVERIFY( test_compiler.removeMakefile( workDir ) );
 }
 
@@ -163,14 +149,15 @@ void tst_qmake::simple_app_shadowbuild()
 {
     QString workDir = base_path + "/testdata/simple_app";
     QString buildDir = base_path + "/testdata/simple_app_build";
+    QString destDir = buildDir + "/dest dir";
 
     QVERIFY( test_compiler.qmake( workDir, "simple_app", buildDir ));
     QVERIFY( test_compiler.make( buildDir ));
-    QVERIFY( test_compiler.exists( buildDir, "simple_app", Exe, "1.0.0" ));
+    QVERIFY( test_compiler.exists( destDir, "simple app", Exe, "1.0.0" ));
     QVERIFY( test_compiler.makeClean( buildDir ));
-    QVERIFY( test_compiler.exists( buildDir, "simple_app", Exe, "1.0.0" )); // Should still exist after a make clean
+    QVERIFY( test_compiler.exists( destDir, "simple app", Exe, "1.0.0" )); // Should still exist after a make clean
     QVERIFY( test_compiler.makeDistClean( buildDir ));
-    QVERIFY( !test_compiler.exists( buildDir, "simple_app", Exe, "1.0.0" )); // Should not exist after a make distclean
+    QVERIFY( !test_compiler.exists( destDir, "simple app", Exe, "1.0.0" )); // Should not exist after a make distclean
     QVERIFY( test_compiler.removeMakefile( buildDir ) );
 }
 
@@ -178,46 +165,49 @@ void tst_qmake::simple_app_shadowbuild2()
 {
     QString workDir = base_path + "/testdata/simple_app";
     QString buildDir = base_path + "/testdata/simple_app/build";
+    QString destDir = buildDir + "/dest dir";
 
     QVERIFY( test_compiler.qmake( workDir, "simple_app", buildDir ));
     QVERIFY( test_compiler.make( buildDir ));
-    QVERIFY( test_compiler.exists( buildDir, "simple_app", Exe, "1.0.0" ));
+    QVERIFY( test_compiler.exists( destDir, "simple app", Exe, "1.0.0" ));
     QVERIFY( test_compiler.makeClean( buildDir ));
-    QVERIFY( test_compiler.exists( buildDir, "simple_app", Exe, "1.0.0" )); // Should still exist after a make clean
+    QVERIFY( test_compiler.exists( destDir, "simple app", Exe, "1.0.0" )); // Should still exist after a make clean
     QVERIFY( test_compiler.makeDistClean( buildDir ));
-    QVERIFY( !test_compiler.exists( buildDir, "simple_app", Exe, "1.0.0" )); // Should not exist after a make distclean
+    QVERIFY( !test_compiler.exists( destDir, "simple app", Exe, "1.0.0" )); // Should not exist after a make distclean
     QVERIFY( test_compiler.removeMakefile( buildDir ) );
 }
 
 void tst_qmake::simple_dll()
 {
     QString workDir = base_path + "/testdata/simple_dll";
+    QString destDir = workDir + "/dest dir";
 
     QDir D;
     D.remove( workDir + "/Makefile");
     QVERIFY( test_compiler.qmake( workDir, "simple_dll" ));
     QVERIFY( test_compiler.make( workDir ));
-    QVERIFY( test_compiler.exists( workDir, "simple_dll", Dll, "1.0.0" ));
+    QVERIFY( test_compiler.exists( destDir, "simple dll", Dll, "1.0.0" ));
     QVERIFY( test_compiler.makeClean( workDir ));
-    QVERIFY( test_compiler.exists( workDir, "simple_dll", Dll, "1.0.0" )); // Should still exist after a make clean
+    QVERIFY( test_compiler.exists( destDir, "simple dll", Dll, "1.0.0" )); // Should still exist after a make clean
     QVERIFY( test_compiler.makeDistClean( workDir ));
-    QVERIFY( !test_compiler.exists( workDir, "simple_dll", Dll, "1.0.0" )); // Should not exist after a make distclean
+    QVERIFY( !test_compiler.exists( destDir, "simple dll", Dll, "1.0.0" )); // Should not exist after a make distclean
     QVERIFY( test_compiler.removeMakefile( workDir ) );
 }
 
 void tst_qmake::simple_lib()
 {
     QString workDir = base_path + "/testdata/simple_lib";
+    QString destDir = workDir + "/dest dir";
 
     QDir D;
     D.remove( workDir + "/Makefile");
     QVERIFY( test_compiler.qmake( workDir, "simple_lib" ));
     QVERIFY( test_compiler.make( workDir ));
-    QVERIFY( test_compiler.exists( workDir, "simple_lib", Lib, "1.0.0" ));
+    QVERIFY( test_compiler.exists( destDir, "simple lib", Lib, "1.0.0" ));
     QVERIFY( test_compiler.makeClean( workDir ));
-    QVERIFY( test_compiler.exists( workDir, "simple_lib", Lib, "1.0.0" )); // Should still exist after a make clean
+    QVERIFY( test_compiler.exists( destDir, "simple lib", Lib, "1.0.0" )); // Should still exist after a make clean
     QVERIFY( test_compiler.makeDistClean( workDir ));
-    QVERIFY( !test_compiler.exists( workDir, "simple_lib", Lib, "1.0.0" )); // Should not exist after a make distclean
+    QVERIFY( !test_compiler.exists( destDir, "simple lib", Lib, "1.0.0" )); // Should not exist after a make distclean
     QVERIFY( test_compiler.removeMakefile( workDir ) );
 }
 
@@ -230,12 +220,12 @@ void tst_qmake::subdirs()
     D.remove( workDir + "/simple_dll/Makefile");
     QVERIFY( test_compiler.qmake( workDir, "subdirs" ));
     QVERIFY( test_compiler.make( workDir ));
-    QVERIFY( test_compiler.exists( workDir + "/simple_app", "simple_app", Exe, "1.0.0" ));
-    QVERIFY( test_compiler.exists( workDir + "/simple_dll", "simple_dll", Dll, "1.0.0" ));
+    QVERIFY( test_compiler.exists( workDir + "/simple_app/dest dir", "simple app", Exe, "1.0.0" ));
+    QVERIFY( test_compiler.exists( workDir + "/simple_dll/dest dir", "simple dll", Dll, "1.0.0" ));
     QVERIFY( test_compiler.makeClean( workDir ));
     // Should still exist after a make clean
-    QVERIFY( test_compiler.exists( workDir + "/simple_app", "simple_app", Exe, "1.0.0" ));
-    QVERIFY( test_compiler.exists( workDir + "/simple_dll", "simple_dll", Dll, "1.0.0" ));
+    QVERIFY( test_compiler.exists( workDir + "/simple_app/dest dir", "simple app", Exe, "1.0.0" ));
+    QVERIFY( test_compiler.exists( workDir + "/simple_dll/dest dir", "simple dll", Dll, "1.0.0" ));
     // Since subdirs templates do not have a make dist clean, we should clean up ourselves
     // properly
     QVERIFY( test_compiler.makeDistClean( workDir ));
@@ -253,43 +243,6 @@ void tst_qmake::subdir_via_pro_file_extra_target()
     D.remove( workDir + "/simple/Makefile.subdir");
     QVERIFY( test_compiler.qmake( workDir, "subdir_via_pro_file_extra_target" ));
     QVERIFY( test_compiler.make( workDir, "extratarget" ));
-}
-
-void tst_qmake::functions()
-{
-    QString workDir = base_path + "/testdata/functions";
-    QString buildDir = base_path + "/testdata/functions_build";
-    QVERIFY( test_compiler.qmake( workDir, "functions", buildDir ));
-}
-
-void tst_qmake::operators()
-{
-    QString workDir = base_path + "/testdata/operators";
-    QVERIFY( test_compiler.qmake( workDir, "operators" ));
-}
-
-void tst_qmake::variables()
-{
-    QString workDir = base_path + "/testdata/variables";
-    QVERIFY(test_compiler.qmake( workDir, "variables" ));
-}
-
-void tst_qmake::func_export()
-{
-    QString workDir = base_path + "/testdata/func_export";
-    QVERIFY(test_compiler.qmake( workDir, "func_export" ));
-}
-
-void tst_qmake::func_variables()
-{
-    QString workDir = base_path + "/testdata/func_variables";
-    QVERIFY(test_compiler.qmake( workDir, "func_variables" ));
-}
-
-void tst_qmake::comments()
-{
-    QString workDir = base_path + "/testdata/comments";
-    QVERIFY(test_compiler.qmake( workDir, "comments" ));
 }
 
 void tst_qmake::duplicateLibraryEntries()
@@ -314,6 +267,9 @@ void tst_qmake::export_across_file_boundaries()
 
 void tst_qmake::include_dir()
 {
+#ifdef QT_NO_WIDGETS
+    QSKIP("This test depends on QtWidgets");
+#else
     QString workDir = base_path + "/testdata/include_dir";
     QVERIFY( test_compiler.qmake( workDir, "foo" ));
     QVERIFY( test_compiler.make( workDir ));
@@ -325,6 +281,7 @@ void tst_qmake::include_dir()
     QVERIFY( test_compiler.make( buildDir ));
     QVERIFY( test_compiler.exists( buildDir, "foo", Exe, "1.0.0" ));
     QVERIFY( test_compiler.makeDistClean( buildDir ));
+#endif
 }
 
 void tst_qmake::include_pwd()
@@ -464,7 +421,8 @@ void tst_qmake::bundle_spaces()
     // Bundles and since this might be the wrong output we rely on dry-running
     // make (-n).
 
-    test_compiler.setArguments("-n", "-spec macx-clang");
+    test_compiler.setArguments(QStringList() << "-n",
+                               QStringList() << "-spec" << "macx-clang");
 
     QVERIFY( test_compiler.qmake(workDir, "bundle-spaces") );
 
@@ -486,26 +444,6 @@ void tst_qmake::bundle_spaces()
     QVERIFY( test_compiler.removeMakefile(workDir) );
 }
 #endif // defined(Q_OS_MAC)
-
-void tst_qmake::includefunction()
-{
-    QString workDir = base_path + "/testdata/include_function";
-    QRegExp warningMsg("Include file .* not found");
-    QVERIFY(test_compiler.qmake( workDir, "include_existing_file"));
-    QVERIFY(!test_compiler.commandOutput().contains(warningMsg));
-
-    // test include()  usage on a missing file
-    test_compiler.clearCommandOutput();
-    workDir = base_path + "/testdata/include_function";
-    QVERIFY(test_compiler.qmake( workDir, "include_missing_file" ));
-    QVERIFY(test_compiler.commandOutput().contains(warningMsg));
-
-    // test include() usage on a missing file when all function parameters are used
-    test_compiler.clearCommandOutput();
-    workDir = base_path + "/testdata/include_function";
-    QVERIFY(test_compiler.qmake( workDir, "include_missing_file2" ));
-    QVERIFY(test_compiler.commandOutput().contains(warningMsg));
-}
 
 void tst_qmake::substitutes()
 {

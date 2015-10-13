@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,7 @@ QT_BEGIN_NAMESPACE
     \class QJsonObject
     \inmodule QtCore
     \ingroup json
+    \ingroup shared
     \reentrant
     \since 5.0
 
@@ -69,7 +62,9 @@ QT_BEGIN_NAMESPACE
     QJsonObject is an implicitly shared class, and shares the data with the document
     it has been created from as long as it is not being modified.
 
-    You can convert the array to and from text based JSON through QJsonDocument.
+    You can convert the object to and from text based JSON through QJsonDocument.
+
+    \sa {JSON Support in Qt}, {JSON Save Game Example}
 */
 
 /*!
@@ -104,7 +99,7 @@ QT_BEGIN_NAMESPACE
 
 
 /*!
-    Constructs an empty JSON object
+    Constructs an empty JSON object.
 
     \sa isEmpty()
  */
@@ -112,6 +107,20 @@ QJsonObject::QJsonObject()
     : d(0), o(0)
 {
 }
+
+/*!
+    \fn QJsonObject::QJsonObject(std::initializer_list<QPair<QString, QJsonValue> > args)
+    \since 5.4
+    Constructs a QJsonObject instance initialized from \a args initialization list.
+    For example:
+    \code
+    QJsonObject object
+    {
+        {"property1", 1},
+        {"property2", 2}
+    };
+    \endcode
+*/
 
 /*!
     \internal
@@ -124,6 +133,19 @@ QJsonObject::QJsonObject(QJsonPrivate::Data *data, QJsonPrivate::Object *object)
     d->ref.ref();
 }
 
+/*!
+    This method replaces part of the QJsonObject(std::initializer_list<QPair<QString, QJsonValue>> args) body.
+    The constructor needs to be inline, but we do not want to leak implementation details
+    of this class.
+    \note this method is called for an uninitialized object
+    \internal
+ */
+
+void QJsonObject::initialize()
+{
+    d = 0;
+    o = 0;
+}
 
 /*!
     Destroys the object.
@@ -171,7 +193,7 @@ QJsonObject &QJsonObject::operator =(const QJsonObject &other)
     The keys in \a map will be used as the keys in the JSON object,
     and the QVariant values will be converted to JSON values.
 
-    \sa toVariantMap(), QJsonValue::fromVariant()
+    \sa fromVariantHash(), toVariantMap(), QJsonValue::fromVariant()
  */
 QJsonObject QJsonObject::fromVariantMap(const QVariantMap &map)
 {
@@ -187,6 +209,8 @@ QJsonObject QJsonObject::fromVariantMap(const QVariantMap &map)
     Converts this object to a QVariantMap.
 
     Returns the created map.
+
+    \sa toVariantHash()
  */
 QVariantMap QJsonObject::toVariantMap() const
 {
@@ -201,7 +225,48 @@ QVariantMap QJsonObject::toVariantMap() const
 }
 
 /*!
+    Converts the variant hash \a hash to a QJsonObject.
+    \since 5.5
+
+    The keys in \a hash will be used as the keys in the JSON object,
+    and the QVariant values will be converted to JSON values.
+
+    \sa fromVariantMap(), toVariantHash(), QJsonValue::fromVariant()
+ */
+QJsonObject QJsonObject::fromVariantHash(const QVariantHash &hash)
+{
+    // ### this is implemented the trivial way, not the most efficient way
+
+    QJsonObject object;
+    for (QVariantHash::const_iterator it = hash.constBegin(); it != hash.constEnd(); ++it)
+        object.insert(it.key(), QJsonValue::fromVariant(it.value()));
+    return object;
+}
+
+/*!
+    Converts this object to a QVariantHash.
+    \since 5.5
+
+    Returns the created hash.
+
+    \sa toVariantMap()
+ */
+QVariantHash QJsonObject::toVariantHash() const
+{
+    QVariantHash hash;
+    if (o) {
+        for (uint i = 0; i < o->length; ++i) {
+            QJsonPrivate::Entry *e = o->entryAt(i);
+            hash.insert(e->key(), QJsonValue(d, o, e->value).toVariant());
+        }
+    }
+    return hash;
+}
+
+/*!
     Returns a list of all keys in this object.
+
+    The list is sorted lexographically.
  */
 QStringList QJsonObject::keys() const
 {
@@ -245,14 +310,14 @@ bool QJsonObject::isEmpty() const
 /*!
     Returns a QJsonValue representing the value for the key \a key.
 
-    The returned QJsonValue is \c Undefined, if the key does not exist.
+    The returned QJsonValue is QJsonValue::Undefined if the key does not exist.
 
     \sa QJsonValue, QJsonValue::isUndefined()
  */
 QJsonValue QJsonObject::value(const QString &key) const
 {
     if (!d)
-        return QJsonValue();
+        return QJsonValue(QJsonValue::Undefined);
 
     bool keyExists;
     int i = o->indexOf(key, &keyExists);
@@ -266,7 +331,7 @@ QJsonValue QJsonObject::value(const QString &key) const
 
     This does the same as value().
 
-    The returned QJsonValue is \c Undefined, if the key does not exist.
+    The returned QJsonValue is QJsonValue::Undefined if the key does not exist.
 
     \sa value(), QJsonValue, QJsonValue::isUndefined()
  */
@@ -281,7 +346,7 @@ QJsonValue QJsonObject::operator [](const QString &key) const
     The return value is of type QJsonValueRef, a helper class for QJsonArray
     and QJsonObject. When you get an object of type QJsonValueRef, you can
     use it as if it were a reference to a QJsonValue. If you assign to it,
-    the assignment will apply to the character in the QJsonArray of QJsonObject
+    the assignment will apply to the element in the QJsonArray or QJsonObject
     from which you got the reference.
 
     \sa value()
@@ -301,13 +366,13 @@ QJsonValueRef QJsonObject::operator [](const QString &key)
 /*!
     Inserts a new item with the key \a key and a value of \a value.
 
-    If there is already an item with the key \a key then that item's value
+    If there is already an item with the key \a key, then that item's value
     is replaced with \a value.
 
     Returns an iterator pointing to the inserted item.
 
     If the value is QJsonValue::Undefined, it will cause the key to get removed
-    from the object. The returned iterator will then point to end()
+    from the object. The returned iterator will then point to end().
 
     \sa remove(), take(), QJsonObject::iterator, end()
  */
@@ -382,7 +447,7 @@ void QJsonObject::remove(const QString &key)
 
     Returns a QJsonValue containing the value referenced by \a key.
     If \a key was not contained in the object, the returned QJsonValue
-    is Undefined.
+    is QJsonValue::Undefined.
 
     \sa insert(), remove(), QJsonValue
  */
@@ -422,7 +487,7 @@ bool QJsonObject::contains(const QString &key) const
 }
 
 /*!
-    Returns \c true if \a other is equal to this object
+    Returns \c true if \a other is equal to this object.
  */
 bool QJsonObject::operator==(const QJsonObject &other) const
 {
@@ -447,7 +512,7 @@ bool QJsonObject::operator==(const QJsonObject &other) const
 }
 
 /*!
-    Returns \c true if \a other is not equal to this object
+    Returns \c true if \a other is not equal to this object.
  */
 bool QJsonObject::operator!=(const QJsonObject &other) const
 {
@@ -501,7 +566,7 @@ QJsonObject::iterator QJsonObject::find(const QString &key)
 */
 
 /*!
-    Returns an const iterator pointing to the item with key \a key in the
+    Returns a const iterator pointing to the item with key \a key in the
     map.
 
     If the map contains no item with key \a key, the function
@@ -594,7 +659,7 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
     should use QJsonObject::const_iterator. It is generally good practice to
     use QJsonObject::const_iterator on a non-const QJsonObject as well, unless you
     need to change the QJsonObject through the iterator. Const iterators are
-    slightly faster, and improves code readability.
+    slightly faster, and improve code readability.
 
     The default QJsonObject::iterator constructor creates an uninitialized
     iterator. You must initialize it using a QJsonObject function like
@@ -604,7 +669,7 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
     Multiple iterators can be used on the same object. Existing iterators will however
     become dangling once the object gets modified.
 
-    \sa QJsonObject::const_iterator
+    \sa QJsonObject::const_iterator, {JSON Support in Qt}, {JSON Save Game Example}
 */
 
 /*! \typedef QJsonObject::iterator::difference_type
@@ -614,8 +679,8 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
 
 /*! \typedef QJsonObject::iterator::iterator_category
 
-  A synonym for \e {std::bidirectional_iterator_tag} indicating
-  this iterator is a bidirectional iterator.
+    A synonym for \e {std::bidirectional_iterator_tag} indicating
+    this iterator is a bidirectional iterator.
 */
 
 /*! \typedef QJsonObject::iterator::reference
@@ -664,7 +729,7 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
     The return value is of type QJsonValueRef, a helper class for QJsonArray
     and QJsonObject. When you get an object of type QJsonValueRef, you can
     use it as if it were a reference to a QJsonValue. If you assign to it,
-    the assignment will apply to the character in the QJsonArray of QJsonObject
+    the assignment will apply to the element in the QJsonArray or QJsonObject
     from which you got the reference.
 
     \sa key(), operator*()
@@ -679,10 +744,15 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
     The return value is of type QJsonValueRef, a helper class for QJsonArray
     and QJsonObject. When you get an object of type QJsonValueRef, you can
     use it as if it were a reference to a QJsonValue. If you assign to it,
-    the assignment will apply to the character in the QJsonArray of QJsonObject
+    the assignment will apply to the element in the QJsonArray or QJsonObject
     from which you got the reference.
 
     \sa key()
+*/
+
+/*! \fn QJsonValueRef *QJsonObject::iterator::operator->() const
+
+    Returns a pointer to a modifiable reference to the current item.
 */
 
 /*!
@@ -781,6 +851,8 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
 /*!
     \class QJsonObject::const_iterator
     \inmodule QtCore
+    \ingroup json
+    \since 5.0
     \brief The QJsonObject::const_iterator class provides an STL-style const iterator for QJsonObject.
 
     QJsonObject::const_iterator allows you to iterate over a QJsonObject.
@@ -788,7 +860,7 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
     over it, you must use QJsonObject::iterator instead. It is generally
     good practice to use QJsonObject::const_iterator on a non-const QJsonObject as
     well, unless you need to change the QJsonObject through the iterator.
-    Const iterators are slightly faster and improves code
+    Const iterators are slightly faster and improve code
     readability.
 
     The default QJsonObject::const_iterator constructor creates an
@@ -799,7 +871,7 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
     Multiple iterators can be used on the same object. Existing iterators
     will however become dangling if the object gets modified.
 
-    \sa QJsonObject::iterator
+    \sa QJsonObject::iterator, {JSON Support in Qt}, {JSON Save Game Example}
 */
 
 /*! \typedef QJsonObject::const_iterator::difference_type
@@ -809,8 +881,8 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
 
 /*! \typedef QJsonObject::const_iterator::iterator_category
 
-  A synonym for \e {std::bidirectional_iterator_tag} indicating
-  this iterator is a bidirectional iterator.
+    A synonym for \e {std::bidirectional_iterator_tag} indicating
+    this iterator is a bidirectional iterator.
 */
 
 /*! \typedef QJsonObject::const_iterator::reference
@@ -864,6 +936,11 @@ QJsonObject::const_iterator QJsonObject::constFind(const QString &key) const
     Same as value().
 
     \sa key()
+*/
+
+/*! \fn QJsonValue *QJsonObject::const_iterator::operator->() const
+
+    Returns a pointer to the current item.
 */
 
 /*! \fn bool QJsonObject::const_iterator::operator==(const const_iterator &other) const
@@ -1034,9 +1111,10 @@ void QJsonObject::setValueAt(int i, const QJsonValue &val)
     insert(e->key(), val);
 }
 
-#ifndef QT_NO_DEBUG_STREAM
+#if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_JSON_READONLY)
 QDebug operator<<(QDebug dbg, const QJsonObject &o)
 {
+    QDebugStateSaver saver(dbg);
     if (!o.o) {
         dbg << "QJsonObject()";
         return dbg;
@@ -1046,7 +1124,7 @@ QDebug operator<<(QDebug dbg, const QJsonObject &o)
     dbg.nospace() << "QJsonObject("
                   << json.constData() // print as utf-8 string without extra quotation marks
                   << ")";
-    return dbg.space();
+    return dbg;
 }
 #endif
 

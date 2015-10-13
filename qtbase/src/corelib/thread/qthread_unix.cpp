@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -83,9 +75,9 @@
 #   define old_qDebug qDebug
 #   undef qDebug
 # endif
-#ifndef Q_OS_IOS
+#ifdef Q_OS_MACX
 # include <CoreServices/CoreServices.h>
-#endif //Q_OS_IOS
+#endif // Q_OS_MACX
 
 # ifdef old_qDebug
 #   undef qDebug
@@ -172,6 +164,12 @@ static void destroy_current_thread_data_key()
 {
     pthread_once(&current_thread_data_once, create_current_thread_data_key);
     pthread_key_delete(current_thread_data_key);
+
+    // Reset current_thread_data_once in case we end up recreating
+    // the thread-data in the rare case of QObject construction
+    // after destroying the QThreadData.
+    pthread_once_t pthread_once_init = PTHREAD_ONCE_INIT;
+    current_thread_data_once = pthread_once_init;
 }
 Q_DESTRUCTOR_FUNCTION(destroy_current_thread_data_key)
 
@@ -209,10 +207,10 @@ void QThreadData::clearCurrentThreadData()
     clear_thread_data();
 }
 
-QThreadData *QThreadData::current()
+QThreadData *QThreadData::current(bool createIfNecessary)
 {
     QThreadData *data = get_thread_data();
-    if (!data) {
+    if (!data && createIfNecessary) {
         data = new QThreadData;
         QT_TRY {
             set_thread_data(data);
@@ -227,7 +225,7 @@ QThreadData *QThreadData::current()
         data->isAdopted = true;
         data->threadId = (Qt::HANDLE)pthread_self();
         if (!QCoreApplicationPrivate::theMainThread)
-            QCoreApplicationPrivate::theMainThread = data->thread;
+            QCoreApplicationPrivate::theMainThread = data->thread.load();
     }
     return data;
 }
@@ -243,15 +241,9 @@ void QAdoptedThread::init()
    QThreadPrivate
 */
 
-#if defined(Q_C_CALLBACKS)
 extern "C" {
-#endif
-
 typedef void*(*QtThreadCallback)(void*);
-
-#if defined(Q_C_CALLBACKS)
 }
-#endif
 
 #endif // QT_NO_THREAD
 
@@ -371,6 +363,7 @@ void QThreadPrivate::finish(void *arg)
     d->thread_id = 0;
     d->running = false;
     d->finished = true;
+    d->interruptionRequested = false;
 
     d->isInFinish = false;
     d->thread_done.wakeAll();
@@ -396,26 +389,24 @@ Qt::HANDLE QThread::currentThreadId() Q_DECL_NOTHROW
 
 int QThread::idealThreadCount() Q_DECL_NOTHROW
 {
-    int cores = -1;
+    int cores = 1;
 
 #if defined(Q_OS_HPUX)
     // HP-UX
     struct pst_dynamic psd;
     if (pstat_getdynamic(&psd, sizeof(psd), 1, 0) == -1) {
         perror("pstat_getdynamic");
-        cores = -1;
     } else {
         cores = (int)psd.psd_proc_cnt;
     }
 #elif defined(Q_OS_BSD4)
-    // FreeBSD, OpenBSD, NetBSD, BSD/OS, Mac OS X
+    // FreeBSD, OpenBSD, NetBSD, BSD/OS, OS X, iOS
     size_t len = sizeof(cores);
     int mib[2];
     mib[0] = CTL_HW;
     mib[1] = HW_NCPU;
     if (sysctl(mib, 2, &cores, &len, NULL, 0) != 0) {
         perror("sysctl");
-        cores = -1;
     }
 #elif defined(Q_OS_IRIX)
     // IRIX
@@ -450,8 +441,9 @@ int QThread::idealThreadCount() Q_DECL_NOTHROW
 #else
     // the rest: Linux, Solaris, AIX, Tru64
     cores = (int)sysconf(_SC_NPROCESSORS_ONLN);
+    if (cores == -1)
+        return 1;
 #endif
-
     return cores;
 }
 
@@ -543,6 +535,7 @@ void QThread::start(Priority priority)
     d->finished = false;
     d->returnCode = 0;
     d->exited = false;
+    d->interruptionRequested = false;
 
     pthread_attr_t attr;
     pthread_attr_init(&attr);

@@ -1,40 +1,32 @@
 #!/usr/bin/env perl
 #############################################################################
 ##
-## Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-## Contact: http://www.qt-project.org/legal
+## Copyright (C) 2015 The Qt Company Ltd.
+## Contact: http://www.qt.io/licensing/
 ##
 ## This file is part of the build configuration tools of the Qt Toolkit.
 ##
-## $QT_BEGIN_LICENSE:LGPL$
+## $QT_BEGIN_LICENSE:LGPL21$
 ## Commercial License Usage
 ## Licensees holding valid commercial Qt licenses may use this file in
 ## accordance with the commercial license agreement provided with the
 ## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and Digia.  For licensing terms and
-## conditions see http://qt.digia.com/licensing.  For further information
-## use the contact form at http://qt.digia.com/contact-us.
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see http://www.qt.io/terms-conditions. For further
+## information use the contact form at http://www.qt.io/contact-us.
 ##
 ## GNU Lesser General Public License Usage
 ## Alternatively, this file may be used under the terms of the GNU Lesser
-## General Public License version 2.1 as published by the Free Software
-## Foundation and appearing in the file LICENSE.LGPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU Lesser General Public License version 2.1 requirements
-## will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+## General Public License version 2.1 or version 3 as published by the Free
+## Software Foundation and appearing in the file LICENSE.LGPLv21 and
+## LICENSE.LGPLv3 included in the packaging of this file. Please review the
+## following information to ensure the GNU Lesser General Public License
+## requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+## http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 ##
-## In addition, as a special exception, Digia gives you certain additional
-## rights.  These rights are described in the Digia Qt LGPL Exception
+## As a special exception, The Qt Company gives you certain additional
+## rights. These rights are described in The Qt Company LGPL Exception
 ## version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3.0 as published by the Free Software
-## Foundation and appearing in the file LICENSE.GPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU General Public License version 3.0 requirements will be
-## met: http://www.gnu.org/copyleft/gpl.html.
-##
 ##
 ## $QT_END_LICENSE$
 ##
@@ -84,8 +76,11 @@ our $quoted_basedir;
 $INPUT_RECORD_SEPARATOR = "\r\n" if ($^O eq "msys");
 
 # will be defined based on the modules sync.profile
-our (%modules, %moduleheaders, @allmoduleheadersprivate, %classnames, %explicitheaders, %deprecatedheaders);
+our (%modules, %moduleheaders, @allmoduleheadersprivate, %classnames, %deprecatedheaders);
 our @qpa_headers = ();
+
+# will be derived from sync.profile
+our %reverse_classnames = ();
 
 # global variables (modified by options)
 my $isunix = 0;
@@ -97,7 +92,6 @@ my $force_win = 0;
 my $force_relative = 0;
 my $check_includes = 0;
 my $copy_headers = 0;
-my $create_uic_class_map = 0;
 my $create_private_headers = 1;
 my $minimal = 0;
 my $module_version = 0;
@@ -196,8 +190,9 @@ sub shouldMasterInclude {
 }
 
 ######################################################################
-# Syntax:  classNames(iheader)
+# Syntax:  classNames(iheader, clean)
 # Params:  iheader, string, filename to parse for classname "symlinks"
+#          (out) clean, boolean, will be set to false if the header isn't clean
 #
 # Purpose: Scans through iheader to find all classnames that should be
 #          synced into library's include structure.
@@ -205,10 +200,12 @@ sub shouldMasterInclude {
 ######################################################################
 sub classNames {
     my @ret;
-    my ($iheader) = @_;
+    my ($iheader, $clean) = @_;
+    $$clean = 1;
 
-    my $classname = $classnames{basename($iheader)};
-    push @ret, $classname if ($classname);
+    my $ihdrbase = basename($iheader);
+    my $classname = $classnames{$ihdrbase};
+    push @ret, split(/,/, $classname) if ($classname);
 
     my $parsable = "";
     if(open(F, "<$iheader")) {
@@ -217,6 +214,7 @@ sub classNames {
             chomp $line;
                         chop $line if ($line =~ /\r$/);
             if($line =~ /^\#/) {
+                $$clean = 0 if ($line =~ m/^#pragma qt_sync_skip_header_check/);
                 return @ret if($line =~ m/^#pragma qt_sync_stop_processing/);
                 push(@ret, $1) if($line =~ m/^#pragma qt_class\(([^)]*)\)[\r\n]*$/);
                 $line = 0;
@@ -227,6 +225,7 @@ sub classNames {
                 $line .= ";" if($line =~ m/^QT_(BEGIN|END)_HEADER[\r\n]*$/); #qt macro
                 $line .= ";" if($line =~ m/^QT_(BEGIN|END)_NAMESPACE(_[A-Z]+)*[\r\n]*$/); #qt macro
                 $line .= ";" if($line =~ m/^QT_MODULE\(.*\)[\r\n]*$/); # QT_MODULE macro
+                $line .= ";" if($line =~ m/^QT_WARNING_(PUSH|POP|DISABLE_\w+\(.*\))[\r\n]*$/); # qt macros
                 $parsable .= " " . $line;
             }
         }
@@ -296,7 +295,7 @@ sub classNames {
                 push @symbols, $1;
             } elsif($definition =~ m/^ *typedef +(.*) +([^ ]*);$/) {
                 push @symbols, $2;
-            } elsif($definition =~ m/^ *(template *<.*> *)?(class|struct) +([^ ]* +)?((?!$post_kw)[^<\s]+) ?(<[^>]*> ?)?\s*(?:$post_kw)?\s*((,|:)\s*(public|protected|private) *.*)? *\{\}$/o) {
+            } elsif($definition =~ m/^ *(template *<.*> *)?(class|struct) +([^ <>]* +)?((?!$post_kw)[^<\s]+) ?(<[^>]*> ?)?\s*(?:$post_kw)?\s*((,|:)\s*(public|protected|private) *.*)? *\{\}$/o) {
                 push @symbols, $4;
             } elsif($definition =~ m/^ *Q_DECLARE_.*ITERATOR\((.*)\);$/) {
                 push @symbols, "Q" . $1 . "Iterator";
@@ -307,6 +306,8 @@ sub classNames {
             foreach my $symbol (@symbols) {
                 $symbol = (join("::", @namespaces) . "::" . $symbol) if (scalar @namespaces);
 
+                my $revhdr = $reverse_classnames{$symbol};
+                next if (defined($revhdr) and $revhdr ne $ihdrbase);
                 if ($symbol =~ /^Q[^:]*$/) {           # no-namespace, starting with Q
                     push @ret, $symbol;
                 } elsif (defined($publicclassregexp)) {
@@ -381,6 +382,7 @@ sub fixPaths {
 
     my $out = File::Spec->abs2rel(cleanupPath($file), cleanupPath($dir));
     $out =~ s,\\,/,g;
+    $out = "\"$out\"" if ($out =~ / /);
     return $out;
 }
 
@@ -508,36 +510,6 @@ sub copyFile
 }
 
 ######################################################################
-# Syntax:  symlinkFile(file, ifile)
-# Params:  file, string, filename to create "symlink" for
-#          ifile, string, destination name of symlink
-#
-# Purpose: File is symlinked to ifile (or copied if filesystem doesn't
-#          support symlink).
-# Returns: 1 on success, else 0.
-######################################################################
-sub symlinkFile
-{
-    my ($lib, $file, $ifile) = @_;
-
-    if ($isunix) {
-        print "$lib: symlink created for $file " if ($verbose_level);
-        if ( $force_relative && ($ifile =~ /^$quoted_basedir/)) {
-            my $t = getcwd();
-            my $c = -1;
-            my $p = "../";
-            $t =~ s-^$quoted_basedir/--;
-            $p .= "../" while( ($c = index( $t, "/", $c + 1)) != -1 );
-            $file =~ s-^$quoted_basedir/-$p-;
-            print " ($file)\n" if($verbose_level);
-        }
-        print "\n" if($verbose_level);
-        return symlink($file, $ifile);
-    }
-    return copyFile($lib, $file, $ifile);
-}
-
-######################################################################
 # Syntax:  findFiles(dir, match, descend)
 # Params:  dir, string, directory to search for name
 #          match, string, regular expression to match in dir
@@ -611,6 +583,13 @@ sub loadSyncProfile {
         die "syncqt couldn't parse $syncprofile: $@" if $@;
         die "syncqt couldn't execute $syncprofile: $!" unless defined $result;
     }
+
+    for my $fn (keys %classnames) {
+        for my $cn (split(/,/, $classnames{$fn})) {
+            $reverse_classnames{$cn} = $fn;
+        }
+    }
+
     return $result;
 }
 
@@ -786,7 +765,6 @@ while ( @ARGV ) {
         $modules{$module} = $prodir;
         push @modules_to_sync, $module;
         $moduleheaders{$module} = $headerdir;
-        $create_uic_class_map = 0;
     } elsif ($var eq "version") {
         if($val) {
             $module_version = $val;
@@ -809,7 +787,6 @@ while ( @ARGV ) {
 # if we have no $basedir we cannot be sure which sources you want, so die
 die "Could not find any sync.profile for your module!\nPass <module directory> to syncqt to sync your header files.\nsyncqt failed" if (!$basedir);
 
-my $class_lib_map_contents = "";
 our @ignore_headers = ();
 our @ignore_for_master_contents = ();
 our @ignore_for_include_check = ();
@@ -853,6 +830,8 @@ foreach my $lib (@modules_to_sync) {
     my $pri_install_files = "";
     my $pri_install_pfiles = "";
     my $pri_install_qpafiles = "";
+    my $pri_injections = "";
+    my $pri_clean_files = "";
 
     my $libcapitals = uc($lib);
     my $master_contents =
@@ -925,8 +904,15 @@ foreach my $lib (@modules_to_sync) {
             #calc files and "copy" them
             foreach my $subdir (@subdirs) {
                 my @headers = findFiles($subdir, "^[-a-z0-9_]*\\.h\$" , 0);
+                if (defined $inject_headers{$subdir}) {
+                    foreach my $if (@{$inject_headers{$subdir}}) {
+                        @headers = grep(!/^\Q$if\E$/, @headers); #in case we configure'd previously
+                        push @headers, "*".$if;
+                    }
+                }
                 my $header_dirname = "";
                 foreach my $header (@headers) {
+                    my $shadow = ($header =~ s/^\*//);
                     $header = 0 if($header =~ /^ui_.*.h/);
                     foreach (@ignore_headers) {
                         $header = 0 if($header eq $_);
@@ -947,19 +933,21 @@ foreach my $lib (@modules_to_sync) {
                             }
                         }
 
+                        my $clean_header;
                         my $iheader = $subdir . "/" . $header;
-                        my @classes = $public_header && (!$minimal && $is_qt) ? classNames($iheader) : ();
+                        $iheader =~ s/^\Q$basedir\E/$out_basedir/ if ($shadow);
+                        my @classes = $public_header && (!$minimal && $is_qt) ? classNames($iheader, \$clean_header) : ();
                         if($showonly) {
                             print "$header [$lib]\n";
                             foreach(@classes) {
                                 print "SYMBOL: $_\n";
                             }
                         } else {
-                            my $ts = (stat($iheader))[9];
+                            my $ts = $shadow ? 0 : (stat($iheader))[9];
                             #find out all the places it goes..
-                            my @headers;
+                            my $oheader;
                             if ($public_header) {
-                                @headers = ( "$out_basedir/include/$lib/$header" );
+                                $oheader = "$out_basedir/include/$lib/$header";
                                 foreach my $full_class (@classes) {
                                     my $header_base = basename($header);
                                     # Strip namespaces:
@@ -969,62 +957,45 @@ foreach my $lib (@modules_to_sync) {
     #                                  class =~ s,::,/,g;
     #                               }
 
-                                    if (defined $explicitheaders{$lib}{$class}) {
-                                        $header_copies++ if(syncHeader($lib, "$out_basedir/include/$lib/$class", "$out_basedir/include/$lib/$explicitheaders{$lib}{$class}", 0, $ts));
-                                    } else {
-                                        $class_lib_map_contents .= "QT_CLASS_LIB($full_class, $lib, $header_base)\n";
-                                        $header_copies++ if(syncHeader($lib, "$out_basedir/include/$lib/$class", "$out_basedir/include/$lib/$header", 0, $ts));
-                                    }
+                                    $header_copies++ if (!$shadow && syncHeader($lib, "$out_basedir/include/$lib/$class", "$out_basedir/include/$lib/$header", 0, $ts));
                                 }
-
-                                if ($explicitheaders{$lib}{basename($header)}) {
-                                    $header_copies++ if(syncHeader($lib, "$out_basedir/include/$lib/$explicitheaders{$lib}{basename($header)}", "$out_basedir/include/$lib/$header", 0, $ts));
-                                }
-
                             } elsif ($create_private_headers && !$qpa_header) {
-                                @headers = ( "$out_basedir/include/$lib/$module_version/$lib/private/$header" );
+                                $oheader = "$out_basedir/include/$lib/$module_version/$lib/private/$header";
                             } elsif ($create_private_headers) {
-                                @headers = ( "$out_basedir/include/$lib/$module_version/$lib/qpa/$header" );
+                                $oheader = "$out_basedir/include/$lib/$module_version/$lib/qpa/$header";
                             }
+                            $header_copies++ if (!$shadow && syncHeader($lib, $oheader, $iheader, $copy_headers, $ts));
 
-                            foreach(@headers) { #sync them
-                                $header_copies++ if (syncHeader($lib, $_, $iheader, $copy_headers, $ts));
-                            }
-
+                            my $pri_install_iheader = fixPaths($iheader, $dir);
+                            my $injection = "";
                             if($public_header) {
                                 #put it into the master file
-                                $master_contents .= "#include \"$public_header\"\n" if (shouldMasterInclude($iheader));
+                                $master_contents .= "#include \"$public_header\"\n" if (!$shadow && shouldMasterInclude($iheader));
 
                                 #deal with the install directives
-                                if($public_header) {
-                                    my $pri_install_iheader = fixPaths($iheader, $dir);
-                                    foreach my $class (@classes) {
-                                        # Strip namespaces:
-                                        $class =~ s/^.*:://;
-    #                                   if ($class =~ m/::/) {
-    #                                       $class =~ s,::,/,g;
-    #                                   }
-                                        my $class_header = fixPaths("$out_basedir/include/$lib/$class",
-                                                                    $dir) . " ";
-                                        $pri_install_classes .= $class_header
-                                                                    unless($pri_install_classes =~ $class_header);
-                                    }
-                                    if ($explicitheaders{$lib}{basename($iheader)}) {
-                                        my $compat_header = fixPaths("$out_basedir/include/$lib/$explicitheaders{$lib}{basename($iheader)}",
-                                                                     $dir) . " ";
-                                        $pri_install_files .= $compat_header unless($pri_install_files =~ $compat_header);
-                                    }
-                                    $pri_install_files.= "$pri_install_iheader ";;
+                                foreach my $class (@classes) {
+                                    # Strip namespaces:
+                                    $class =~ s/^.*:://;
+#                                   if ($class =~ m/::/) {
+#                                       $class =~ s,::,/,g;
+#                                   }
+                                    my $class_header = fixPaths("$out_basedir/include/$lib/$class", $dir) . " ";
+                                    $pri_install_classes .= $class_header
+                                                                unless($pri_install_classes =~ $class_header);
+                                    $injection .= ":$class";
                                 }
+                                $pri_install_files.= "$pri_install_iheader ";;
+                                $pri_clean_files .= "$pri_install_iheader " if ($clean_header);
                             }
                             elsif ($qpa_header) {
-                                my $pri_install_iheader = fixPaths($iheader, $dir);
                                 $pri_install_qpafiles.= "$pri_install_iheader ";;
                             }
                             else {
-                                my $pri_install_iheader = fixPaths($iheader, $dir);
                                 $pri_install_pfiles.= "$pri_install_iheader ";;
                             }
+                            $pri_injections .= fixPaths($iheader, "$out_basedir/include/$lib")
+                                               .":".fixPaths($oheader, "$out_basedir/include/$lib")
+                                               .$injection." " if ($shadow);
                         }
 
                         if ($verbose_level && $header_copies) {
@@ -1079,34 +1050,37 @@ foreach my $lib (@modules_to_sync) {
                 my $header_dir = dirname($header_path);
                 make_path($header_dir, $lib, $verbose_level);
 
-                open(HEADER, ">$header_path") || die "Could not open $header_path for writing: $!\n";
-                print HEADER "#ifndef $guard\n";
-                print HEADER "#define $guard\n";
+                my $hdrcont =
+                    "#ifndef $guard\n" .
+                    "#define $guard\n";
                 my $warning = "Header <$lib/";
                 $warning .= "private/" unless ($public_header);
                 $warning .= "$header> is deprecated. Please include <$include> instead.";
-                print HEADER "#if defined(__GNUC__)\n";
-                print HEADER "#  warning $warning\n";
-                print HEADER "#elif defined(_MSC_VER)\n";
-                print HEADER "#  pragma message (\"$warning\")\n";
-                print HEADER "#endif\n";
-                print HEADER "#include <$include>\n";
+                $hdrcont .=
+                    "#if defined(__GNUC__)\n" .
+                    "#  warning $warning\n" .
+                    "#elif defined(_MSC_VER)\n" .
+                    "#  pragma message (\"$warning\")\n" .
+                    "#endif\n" .
+                    "#include <$include>\n";
                 if ($public_header) {
-                    print HEADER "#if 0\n";
-                    print HEADER "#pragma qt_no_master_include\n";
-                    print HEADER "#endif\n";
+                    $hdrcont .=
+                        "#if 0\n" .
+                        "#pragma qt_no_master_include\n" .
+                        "#endif\n";
                 }
-                print HEADER "#endif\n";
-                close HEADER;
-
-                if ($verbose_level < 3) {
-                    my $line_prefix = ",";
-                    $line_prefix = "$lib: created deprecated header(s) {" if ($first);
-                    print "$line_prefix $header";
-                } else {
-                    print "$lib: created deprecated header $header => $include\n";
+                $hdrcont .=
+                    "#endif\n";
+                if (writeFile($header_path, $hdrcont)) {
+                    if ($verbose_level < 3) {
+                        my $line_prefix = ",";
+                        $line_prefix = "$lib: created deprecated header(s) {" if ($first);
+                        print "$line_prefix $header";
+                    } else {
+                        print "$lib: created deprecated header $header => $include\n";
+                    }
+                    $first = 0;
                 }
-                $first = 0;
             }
 
             my $addendum = fixPaths($header_path, $dir) . " ";
@@ -1152,27 +1126,10 @@ foreach my $lib (@modules_to_sync) {
         $headers_pri_contents .= "SYNCQT.HEADER_CLASSES = $pri_install_classes\n";
         $headers_pri_contents .= "SYNCQT.PRIVATE_HEADER_FILES = $pri_install_pfiles\n";
         $headers_pri_contents .= "SYNCQT.QPA_HEADER_FILES = $pri_install_qpafiles\n";
+        $headers_pri_contents .= "SYNCQT.CLEAN_HEADER_FILES = $pri_clean_files\n";
+        $headers_pri_contents .= "SYNCQT.INJECTIONS = $pri_injections\n";
         my $headers_pri_file = "$out_basedir/include/$lib/headers.pri";
         writeFile($headers_pri_file, $headers_pri_contents, $lib, "headers.pri file");
-    }
-}
-unless($showonly || !$create_uic_class_map) {
-    my $class_lib_map = "$out_basedir/src/tools/uic/qclass_lib_map.h";
-    if(-e $class_lib_map) {
-        open CLASS_LIB_MAP, "<$class_lib_map";
-        local $/;
-        binmode CLASS_LIB_MAP;
-        my $old_class_lib_map_contents = <CLASS_LIB_MAP>;
-        close CLASS_LIB_MAP;
-        $old_class_lib_map_contents =~ s/\r//g; # remove \r's , so comparison is ok on all platforms
-        $class_lib_map = 0 if($old_class_lib_map_contents eq $class_lib_map_contents);
-    }
-    if($class_lib_map) {
-        my $class_lib_map_dir = dirname($class_lib_map);
-        make_path($class_lib_map_dir, "<outdir>", $verbose_level);
-        open CLASS_LIB_MAP, ">$class_lib_map";
-        print CLASS_LIB_MAP $class_lib_map_contents;
-        close CLASS_LIB_MAP;
     }
 }
 

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -63,12 +55,12 @@ class QQmlJSGrammar
 public:
   enum VariousConstants {
     EOF_SYMBOL = 0,
-    REDUCE_HERE = 104,
-    SHIFT_THERE = 103,
+    REDUCE_HERE = 105,
+    SHIFT_THERE = 104,
     T_AND = 1,
     T_AND_AND = 2,
     T_AND_EQ = 3,
-    T_AS = 92,
+    T_AS = 93,
     T_AUTOMATIC_SEMICOLON = 62,
     T_BREAK = 4,
     T_CASE = 5,
@@ -90,19 +82,19 @@ public:
     T_EQ = 17,
     T_EQ_EQ = 18,
     T_EQ_EQ_EQ = 19,
-    T_ERROR = 96,
+    T_ERROR = 97,
     T_FALSE = 83,
-    T_FEED_JS_EXPRESSION = 100,
-    T_FEED_JS_PROGRAM = 102,
-    T_FEED_JS_SOURCE_ELEMENT = 101,
-    T_FEED_JS_STATEMENT = 99,
-    T_FEED_UI_OBJECT_MEMBER = 98,
-    T_FEED_UI_PROGRAM = 97,
+    T_FEED_JS_EXPRESSION = 101,
+    T_FEED_JS_PROGRAM = 103,
+    T_FEED_JS_SOURCE_ELEMENT = 102,
+    T_FEED_JS_STATEMENT = 100,
+    T_FEED_UI_OBJECT_MEMBER = 99,
+    T_FEED_UI_PROGRAM = 98,
     T_FINALLY = 20,
     T_FOR = 21,
     T_FUNCTION = 22,
     T_GE = 23,
-    T_GET = 94,
+    T_GET = 95,
     T_GT = 24,
     T_GT_GT = 25,
     T_GT_GT_EQ = 26,
@@ -130,13 +122,14 @@ public:
     T_NOT_EQ_EQ = 46,
     T_NULL = 81,
     T_NUMERIC_LITERAL = 47,
-    T_ON = 93,
+    T_ON = 94,
     T_OR = 48,
     T_OR_EQ = 49,
     T_OR_OR = 50,
     T_PLUS = 51,
     T_PLUS_EQ = 52,
     T_PLUS_PLUS = 53,
+    T_PRAGMA = 92,
     T_PROPERTY = 66,
     T_PUBLIC = 90,
     T_QUESTION = 54,
@@ -149,7 +142,7 @@ public:
     T_RETURN = 59,
     T_RPAREN = 60,
     T_SEMICOLON = 61,
-    T_SET = 95,
+    T_SET = 96,
     T_SIGNAL = 67,
     T_STAR = 63,
     T_STAR_EQ = 64,
@@ -168,15 +161,15 @@ public:
     T_XOR = 79,
     T_XOR_EQ = 80,
 
-    ACCEPT_STATE = 655,
-    RULE_COUNT = 351,
-    STATE_COUNT = 656,
-    TERMINAL_COUNT = 105,
-    NON_TERMINAL_COUNT = 108,
+    ACCEPT_STATE = 665,
+    RULE_COUNT = 358,
+    STATE_COUNT = 666,
+    TERMINAL_COUNT = 106,
+    NON_TERMINAL_COUNT = 111,
 
-    GOTO_INDEX_OFFSET = 656,
-    GOTO_INFO_OFFSET = 2970,
-    GOTO_CHECK_OFFSET = 2970
+    GOTO_INDEX_OFFSET = 666,
+    GOTO_INFO_OFFSET = 3018,
+    GOTO_CHECK_OFFSET = 3018
   };
 
   static const char  *const    spell [];

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -58,12 +50,13 @@
 #include <QStyle>
 #include <QStyleOptionTitleBar>
 #include <QPushButton>
+#include <QScreen>
 #include <QSizeGrip>
 
 #include "../../../qtest-config.h"
 
 QT_BEGIN_NAMESPACE
-#if !defined(Q_WS_WIN)
+#if !defined(Q_DEAD_CODE_FROM_QT4_WIN)
 extern bool qt_tab_all_widgets();
 #endif
 QT_END_NAMESPACE
@@ -146,7 +139,7 @@ static void sendMouseDoubleClick(QWidget *widget, const QPoint &point, Qt::Mouse
 }
 
 static const Qt::WindowFlags StandardWindowFlags
-    = Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint;
+    = Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint;
 static const Qt::WindowFlags DialogWindowFlags
     = Qt::WindowTitleHint | Qt::WindowSystemMenuHint;
 
@@ -182,6 +175,7 @@ private slots:
     void mouseDoubleClick();
     void setSystemMenu();
     void restoreFocus();
+    void restoreFocusOverCreation();
     void changeFocusWithTab();
     void closeEvent();
     void setWindowTitle();
@@ -206,6 +200,7 @@ private slots:
     void task_233197();
     void task_226929();
     void styleChange();
+    void testFullScreenState();
 };
 
 void tst_QMdiSubWindow::initTestCase()
@@ -443,7 +438,7 @@ void tst_QMdiSubWindow::mainWindowSupport()
         QVERIFY(!nestedWindow->maximizedButtonsWidget());
         QVERIFY(!nestedWindow->maximizedSystemMenuIconWidget());
 
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE) && !defined(Q_OS_QNX)
         QCOMPARE(mainWindow.windowTitle(), QString::fromLatin1("%1 - [%2]")
                                            .arg(originalWindowTitle, window->widget()->windowTitle()));
 #endif
@@ -686,8 +681,8 @@ void tst_QMdiSubWindow::setOpaqueResizeAndMove_data()
     QTest::addColumn<QSize>("workspaceSize");
     QTest::addColumn<QSize>("windowSize");
 
-    QTest::newRow("normal mode") << true<< 20 << 20 << QSize(400, 400) << QSize(200, 200);
-    QTest::newRow("rubberband mode") << false << 20 << 1 << QSize(400, 400) << QSize(200, 200);
+    QTest::newRow("normal mode") << true<< 20 << 20 << QSize(400, 400) << QSize(240, 200);
+    QTest::newRow("rubberband mode") << false << 20 << 1 << QSize(400, 400) << QSize(240, 200);
 }
 
 void tst_QMdiSubWindow::setOpaqueResizeAndMove()
@@ -778,7 +773,7 @@ void tst_QMdiSubWindow::setOpaqueResizeAndMove()
     // ### Remove this after mac style has been fixed
     height -= 4;
 #endif
-    QPoint mousePosition(window->width() / 2, height - 1);
+    QPoint mousePosition(window->width() / 3, height - 1);
     sendMouseMove(window, mousePosition, Qt::NoButton);
     sendMousePress(window, mousePosition);
 
@@ -901,40 +896,12 @@ void tst_QMdiSubWindow::setWindowFlags()
     QVERIFY(QTest::qWaitForWindowExposed(&workspace));
 
     window->setWindowFlags(windowType | customFlags);
-    QEXPECT_FAIL("Qt::Widget", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::Window", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::Dialog", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::Sheet", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::Drawer", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::Popup", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::Tool", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::ToolTip", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::SplashScreen", "QTBUG-27274", Continue);
-    QEXPECT_FAIL("Qt::Desktop", "QTBUG-27274", Continue);
     QCOMPARE(window->windowType(), expectedWindowType);
 
-    if (!expectedCustomFlags) {
-        // We expect the same as 'customFlags'
+    if (!expectedCustomFlags) // We expect the same as 'customFlags'
         QCOMPARE(window->windowFlags() & ~expectedWindowType, customFlags);
-    } else {
-        QEXPECT_FAIL("Qt::Widget", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::Window", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::Dialog", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::Sheet", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::Drawer", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::Popup", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::Tool", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::ToolTip", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::SplashScreen", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::Desktop", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Qt::SubWindow", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("StandardAndFrameless", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("StandardAndFramelessAndStaysOnTop", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Shade", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("Context", "QTBUG-27274", Continue);
-        QEXPECT_FAIL("ShadeAndContext", "QTBUG-27274", Continue);
+    else
         QCOMPARE(window->windowFlags() & ~expectedWindowType, expectedCustomFlags);
-    }
 }
 
 void tst_QMdiSubWindow::mouseDoubleClick()
@@ -954,9 +921,6 @@ void tst_QMdiSubWindow::mouseDoubleClick()
     QStyleOptionTitleBar options;
     options.initFrom(window);
     int height = window->style()->pixelMetric(QStyle::PM_TitleBarHeight, &options);
-    // ### Remove this after mac style has been fixed
-    if (window->style()->inherits("QMacStyle"))
-        height -= 4;
     // has border
     if (!window->style()->styleHint(QStyle::SH_TitleBar_NoBorder, &options, window))
         height += window->isMinimized() ? 8 : 4;
@@ -984,18 +948,12 @@ void tst_QMdiSubWindow::mouseDoubleClick()
     sendMouseDoubleClick(window, mousePosition);
     qApp->processEvents();
     QVERIFY(!window->isShaded());
-#ifndef Q_OS_MAC
-    QEXPECT_FAIL("", "QTBUG-27274", Continue);
-#endif
     QCOMPARE(window->geometry(), originalGeometry);
 
     window->showMinimized();
     QVERIFY(window->isMinimized());
     sendMouseDoubleClick(window, mousePosition);
     QVERIFY(!window->isMinimized());
-#ifndef Q_OS_MAC
-    QEXPECT_FAIL("", "QTBUG-27274", Continue);
-#endif
     QCOMPARE(window->geometry(), originalGeometry);
 }
 
@@ -1162,6 +1120,7 @@ void tst_QMdiSubWindow::restoreFocus()
     expectedFocusWindow->showMinimized();
     qApp->processEvents();
     QVERIFY(expectedFocusWindow->isMinimized());
+    qDebug() << expectedFocusWindow<< qApp->focusWidget();
     QCOMPARE(qApp->focusWidget(), static_cast<QWidget *>(expectedFocusWindow));
 
     // Minimized -> normal
@@ -1212,6 +1171,48 @@ void tst_QMdiSubWindow::restoreFocus()
     qApp->processEvents();
     QVERIFY(!complexWindow->isMinimized());
     QCOMPARE(qApp->focusWidget(), static_cast<QWidget *>(expectedFocusWindow));
+}
+
+class MultiWidget : public QWidget {
+public:
+    explicit MultiWidget(QWidget *parent = 0) : QWidget(parent)
+        , m_lineEdit1(new QLineEdit(this)), m_lineEdit2(new QLineEdit(this))
+    {
+        QVBoxLayout *lt = new QVBoxLayout(this);
+        lt->addWidget(m_lineEdit1);
+        lt->addWidget(m_lineEdit2);
+    }
+
+    QLineEdit *m_lineEdit1;
+    QLineEdit *m_lineEdit2;
+};
+
+void tst_QMdiSubWindow::restoreFocusOverCreation()
+{
+    // QTBUG-38378, verify that the focus child of a subwindow
+    // is not "forgotten" when adding yet another subwindow.
+    QMdiArea mdiArea;
+    mdiArea.resize(800, 800);
+    mdiArea.move(QGuiApplication::primaryScreen()->availableGeometry().center() - QPoint(400, 400));
+    mdiArea.setWindowTitle(QStringLiteral("restoreFocusOverCreation"));
+
+    MultiWidget *subWidget1 = new MultiWidget;
+    MultiWidget *subWidget2 = new MultiWidget;
+
+    QMdiSubWindow *subWindow1 = mdiArea.addSubWindow(subWidget1);
+    subWidget1->m_lineEdit2->setFocus();
+    subWindow1->show();
+    mdiArea.show();
+    QApplication::setActiveWindow(&mdiArea);
+    QVERIFY(QTest::qWaitForWindowActive(&mdiArea));
+    QCOMPARE(QApplication::focusWidget(), subWidget1->m_lineEdit2);
+
+    QMdiSubWindow *subWindow2 = mdiArea.addSubWindow(subWidget2);
+    subWindow2->show();
+    QTRY_COMPARE(QApplication::focusWidget(), subWidget2->m_lineEdit1);
+
+    mdiArea.setActiveSubWindow(subWindow1);
+    QTRY_COMPARE(QApplication::focusWidget(), subWidget1->m_lineEdit2);
 }
 
 void tst_QMdiSubWindow::changeFocusWithTab()
@@ -1514,6 +1515,9 @@ void tst_QMdiSubWindow::hideAndShow()
 
 #if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
     QVERIFY(menuBar->cornerWidget(Qt::TopRightCorner));
+#if defined Q_OS_QNX
+    QEXPECT_FAIL("", "QTBUG-38231", Abort);
+#endif
     QVERIFY(subWindow->maximizedButtonsWidget());
     QVERIFY(subWindow->maximizedSystemMenuIconWidget());
     QCOMPARE(menuBar->cornerWidget(Qt::TopRightCorner), subWindow->maximizedButtonsWidget());
@@ -1692,11 +1696,6 @@ void tst_QMdiSubWindow::fixedMinMaxSize()
     QStyleOptionTitleBar options;
     options.initFrom(subWindow);
     int minimizedHeight = subWindow->style()->pixelMetric(QStyle::PM_TitleBarHeight, &options);
-#if defined(Q_OS_MAC) && !defined(QT_NO_STYLE_MAC)
-    // ### Remove this after mac style has been fixed
-    if (subWindow->style()->inherits("QMacStyle"))
-        minimizedHeight -= 4;
-#endif
     if (!subWindow->style()->styleHint(QStyle::SH_TitleBar_NoBorder, &options, subWindow))
         minimizedHeight += 8;
     int minimizedWidth = subWindow->style()->pixelMetric(QStyle::PM_MDIMinimizedWidth, &options);
@@ -1743,6 +1742,9 @@ void tst_QMdiSubWindow::replaceMenuBarWhileMaximized()
 
     qApp->processEvents();
 
+#if defined Q_OS_QNX
+    QEXPECT_FAIL("", "QTBUG-38231", Abort);
+#endif
     QVERIFY(subWindow->maximizedButtonsWidget());
     QVERIFY(subWindow->maximizedSystemMenuIconWidget());
     QCOMPARE(menuBar->cornerWidget(Qt::TopLeftCorner), subWindow->maximizedSystemMenuIconWidget());
@@ -2047,6 +2049,19 @@ void tst_QMdiSubWindow::styleChange()
     // subWindowActivated should NOT be activated by a style change,
     // even if internally QMdiSubWindow un-minimizes subwindows temporarily.
     QCOMPARE(spy.count(), 0);
+}
+
+void tst_QMdiSubWindow::testFullScreenState()
+{
+    QMdiArea mdiArea;
+    mdiArea.showMaximized();
+
+    QMdiSubWindow *subWindow = mdiArea.addSubWindow(new QWidget);
+    subWindow->setGeometry(0, 0, 300, 300);
+    subWindow->showFullScreen(); // QMdiSubWindow does not support the fullscreen state. This call
+                                 // should be equivalent to setVisible(true) (and not showNormal())
+    QVERIFY(QTest::qWaitForWindowExposed(&mdiArea));
+    QCOMPARE(subWindow->size(), QSize(300, 300));
 }
 
 QTEST_MAIN(tst_QMdiSubWindow)

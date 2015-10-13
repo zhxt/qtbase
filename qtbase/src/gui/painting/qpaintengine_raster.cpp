@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -56,7 +48,6 @@
 
 //   #include <private/qdatabuffer_p.h>
 //   #include <private/qpainter_p.h>
-#include <private/qmath_p.h>
 #include <private/qtextengine_p.h>
 #include <private/qfontengine_p.h>
 #include <private/qpixmap_raster_p.h>
@@ -72,6 +63,7 @@
 #include "qoutlinemapper_p.h"
 
 #include <limits.h>
+#include <algorithm>
 
 #ifdef Q_OS_WIN
 #  include <qvarlengtharray.h>
@@ -157,6 +149,9 @@ static const qreal aliasedCoordinateDelta = 0.5 - 0.015625;
 
 static inline bool winClearTypeFontsEnabled()
 {
+#ifdef Q_OS_WINRT
+    return false;
+#else // Q_OS_WINRT
     UINT result = 0;
 #if !defined(SPI_GETFONTSMOOTHINGTYPE) // MinGW
 #    define SPI_GETFONTSMOOTHINGTYPE  0x200A
@@ -164,6 +159,7 @@ static inline bool winClearTypeFontsEnabled()
 #endif
     SystemParametersInfo(SPI_GETFONTSMOOTHINGTYPE, 0, &result, 0);
     return result == FE_FONTSMOOTHINGCLEARTYPE;
+#endif // !Q_OS_WINRT
 }
 
 /*!
@@ -230,21 +226,6 @@ static const QRectF boundingRect(const QPointF *points, int pointCount)
 }
 #endif
 
-template <typename T> static inline bool isRect(const T *pts, int elementCount) {
-    return (elementCount == 5 // 5-point polygon, check for closed rect
-            && pts[0] == pts[8] && pts[1] == pts[9] // last point == first point
-            && pts[0] == pts[6] && pts[2] == pts[4] // x values equal
-            && pts[1] == pts[3] && pts[5] == pts[7] // y values equal...
-            && pts[0] < pts[4] && pts[1] < pts[5]
-            ) ||
-           (elementCount == 4 // 4-point polygon, check for unclosed rect
-            && pts[0] == pts[6] && pts[2] == pts[4] // x values equal
-            && pts[1] == pts[3] && pts[5] == pts[7] // y values equal...
-            && pts[0] < pts[4] && pts[1] < pts[5]
-            );
-}
-
-
 static void qt_ft_outline_move_to(qfixed x, qfixed y, void *data)
 {
     ((QOutlineMapper *) data)->moveTo(QPointF(qt_fixed_to_real(x), qt_fixed_to_real(y)));
@@ -303,9 +284,9 @@ QRasterPaintEnginePrivate::QRasterPaintEnginePrivate() :
     of painting operations in Qt for Embedded Linux.
 
     Note that this functionality is only available in
-    \l{Qt for Embedded Linux}.
+    Qt for Embedded Linux.
 
-    In \l{Qt for Embedded Linux}, painting is a pure software
+    In Qt for Embedded Linux, painting is a pure software
     implementation. But starting with Qt 4.2, it is
     possible to add an accelerated graphics driver to take advantage
     of available hardware resources.
@@ -313,19 +294,15 @@ QRasterPaintEnginePrivate::QRasterPaintEnginePrivate() :
     Hardware acceleration is accomplished by creating a custom screen
     driver, accelerating the copying from memory to the screen, and
     implementing a custom paint engine accelerating the various
-    painting operations. Then a custom paint device (derived from the
-    QCustomRasterPaintDevice class) and a custom window surface
-    (derived from QWSWindowSurface) must be implemented to make
-    \l{Qt for Embedded Linux} aware of the accelerated driver.
+    painting operations. Then a custom paint device and a custom
+    window surface must be implemented to make
+    Qt for Embedded Linux aware of the accelerated driver.
 
     \note The QRasterPaintEngine class does not support 8-bit images.
     Instead, they need to be converted to a supported format, such as
     QImage::Format_ARGB32_Premultiplied.
 
-    See the \l {Adding an Accelerated Graphics Driver to Qt for Embedded Linux}
-    documentation for details.
-
-    \sa QCustomRasterPaintDevice, QPaintEngine
+    \sa QPaintEngine
 */
 
 /*!
@@ -429,27 +406,12 @@ void QRasterPaintEngine::init()
     case QImage::Format_Mono:
         d->mono_surface = true;
         break;
-    case QImage::Format_ARGB8565_Premultiplied:
-    case QImage::Format_ARGB8555_Premultiplied:
-    case QImage::Format_ARGB6666_Premultiplied:
-    case QImage::Format_ARGB4444_Premultiplied:
-    case QImage::Format_ARGB32_Premultiplied:
-    case QImage::Format_ARGB32:
-        gccaps |= PorterDuff;
-        break;
-    case QImage::Format_RGB32:
-    case QImage::Format_RGB444:
-    case QImage::Format_RGB555:
-    case QImage::Format_RGB666:
-    case QImage::Format_RGB888:
-    case QImage::Format_RGB16:
-        break;
     default:
+        if (QImage::toPixelFormat(format).alphaUsage() == QPixelFormat::UsesAlpha)
+            gccaps |= PorterDuff;
         break;
     }
 }
-
-
 
 
 /*!
@@ -519,7 +481,7 @@ bool QRasterPaintEngine::begin(QPaintDevice *device)
 #endif
 
     if (d->mono_surface)
-        d->glyphCacheType = QFontEngineGlyphCache::Raster_Mono;
+        d->glyphCacheFormat = QFontEngine::Format_Mono;
 #if defined(Q_OS_WIN)
     else if (clearTypeFontsEnabled())
 #else
@@ -528,11 +490,11 @@ bool QRasterPaintEngine::begin(QPaintDevice *device)
     {
         QImage::Format format = static_cast<QImage *>(d->device)->format();
         if (format == QImage::Format_ARGB32_Premultiplied || format == QImage::Format_RGB32)
-            d->glyphCacheType = QFontEngineGlyphCache::Raster_RGBMask;
+            d->glyphCacheFormat = QFontEngine::Format_A32;
         else
-            d->glyphCacheType = QFontEngineGlyphCache::Raster_A8;
+            d->glyphCacheFormat = QFontEngine::Format_A8;
     } else
-        d->glyphCacheType = QFontEngineGlyphCache::Raster_A8;
+        d->glyphCacheFormat = QFontEngine::Format_A8;
 
     setActive(true);
     return true;
@@ -928,7 +890,7 @@ void QRasterPaintEngine::renderHintsChanged()
     bool was_aa = s->flags.antialiased;
     bool was_bilinear = s->flags.bilinear;
 
-    s->flags.antialiased = bool(s->renderHints & QPainter::Antialiasing);
+    s->flags.antialiased = bool(s->renderHints & (QPainter::Antialiasing | QPainter::HighQualityAntialiasing));
     s->flags.bilinear = bool(s->renderHints & QPainter::SmoothPixmapTransform);
     s->flags.legacy_rounding = !bool(s->renderHints & QPainter::Antialiasing) && bool(s->renderHints & QPainter::Qt4CompatiblePainting);
 
@@ -1189,22 +1151,14 @@ void QRasterPaintEngine::clip(const QVectorPath &path, Qt::ClipOperation op)
     Q_D(QRasterPaintEngine);
     QRasterPaintEngineState *s = state();
 
-    const qreal *points = path.points();
-    const QPainterPath::ElementType *types = path.elements();
-
     // There are some cases that are not supported by clip(QRect)
     if (op != Qt::IntersectClip || !s->clip || s->clip->hasRectClip || s->clip->hasRegionClip) {
         if (s->matrix.type() <= QTransform::TxScale
-            && ((path.shape() == QVectorPath::RectangleHint)
-                || (isRect(points, path.elementCount())
-                    && (!types || (types[0] == QPainterPath::MoveToElement
-                                   && types[1] == QPainterPath::LineToElement
-                                   && types[2] == QPainterPath::LineToElement
-                                   && types[3] == QPainterPath::LineToElement))))) {
+            && path.isRect()) {
 #ifdef QT_DEBUG_DRAW
             qDebug() << " --- optimizing vector clip to rect clip...";
 #endif
-
+            const qreal *points = path.points();
             QRectF r(points[0], points[1], points[4]-points[0], points[5]-points[1]);
             if (setClipRectInDeviceCoords(s->matrix.mapRect(r).toRect(), op))
                 return;
@@ -1819,7 +1773,7 @@ void QRasterPaintEngine::fillRect(const QRectF &r, const QColor &color)
     Q_D(QRasterPaintEngine);
     QRasterPaintEngineState *s = state();
 
-    d->solid_color_filler.solid.color = PREMUL(ARGB_COMBINE_ALPHA(color.rgba(), s->intOpacity));
+    d->solid_color_filler.solid.color = qPremultiply(ARGB_COMBINE_ALPHA(color.rgba(), s->intOpacity));
     if ((d->solid_color_filler.solid.color & 0xff000000) == 0
         && s->composition_mode == QPainter::CompositionMode_SourceOver) {
         return;
@@ -1850,7 +1804,7 @@ static bool splitPolygon(const QPointF *points, int pointCount, QVector<QPointF>
     for (int i = 0; i < pointCount; ++i)
         sorted << points + i;
 
-    qSort(sorted.begin(), sorted.end(), isAbove);
+    std::sort(sorted.begin(), sorted.end(), isAbove);
 
     qreal splitY = sorted.at(sorted.size() / 2)->y();
 
@@ -1910,7 +1864,7 @@ void QRasterPaintEngine::fillPolygon(const QPointF *points, int pointCount, Poly
     }
 
     // Compose polygon fill..,
-    QVectorPath vp((qreal *) points, pointCount, 0, QVectorPath::polygonFlags(mode));
+    QVectorPath vp((const qreal *) points, pointCount, 0, QVectorPath::polygonFlags(mode));
     ensureOutlineMapper();
     QT_FT_Outline *outline = d->outlineMapper->convertPath(vp);
 
@@ -1935,7 +1889,7 @@ void QRasterPaintEngine::drawPolygon(const QPointF *points, int pointCount, Poly
 #endif
     Q_ASSERT(pointCount >= 2);
 
-    if (mode != PolylineMode && isRect((qreal *) points, pointCount)) {
+    if (mode != PolylineMode && QVectorPath::isRect((const qreal *) points, pointCount)) {
         QRectF r(points[0], points[2]);
         drawRects(&r, 1);
         return;
@@ -1951,7 +1905,7 @@ void QRasterPaintEngine::drawPolygon(const QPointF *points, int pointCount, Poly
 
     // Do the outline...
     if (s->penData.blend) {
-        QVectorPath vp((qreal *) points, pointCount, 0, QVectorPath::polygonFlags(mode));
+        QVectorPath vp((const qreal *) points, pointCount, 0, QVectorPath::polygonFlags(mode));
         if (s->flags.fast_pen) {
             QCosmeticStroker stroker(s, d->deviceRect, d->deviceRectUnclipped);
             stroker.setLegacyRoundingEnabled(s->flags.legacy_rounding);
@@ -1976,7 +1930,7 @@ void QRasterPaintEngine::drawPolygon(const QPoint *points, int pointCount, Polyg
         qDebug() << "   - " << points[i];
 #endif
     Q_ASSERT(pointCount >= 2);
-    if (mode != PolylineMode && isRect((int *) points, pointCount)) {
+    if (mode != PolylineMode && QVectorPath::isRect((const int *) points, pointCount)) {
         QRect r(points[0].x(),
                 points[0].y(),
                 points[2].x() - points[0].x(),
@@ -2014,7 +1968,7 @@ void QRasterPaintEngine::drawPolygon(const QPoint *points, int pointCount, Polyg
         int count = pointCount * 2;
         QVarLengthArray<qreal> fpoints(count);
         for (int i=0; i<count; ++i)
-            fpoints[i] = ((int *) points)[i];
+            fpoints[i] = ((const int *) points)[i];
         QVectorPath vp((qreal *) fpoints.data(), pointCount, 0, QVectorPath::polygonFlags(mode));
 
         if (s->flags.fast_pen) {
@@ -2261,13 +2215,16 @@ void QRasterPaintEngine::drawImage(const QRectF &r, const QImage &img, const QRe
         case QImage::Format_ARGB6666_Premultiplied:
         case QImage::Format_ARGB8555_Premultiplied:
         case QImage::Format_ARGB4444_Premultiplied:
+        case QImage::Format_RGBA8888_Premultiplied:
+        case QImage::Format_A2BGR30_Premultiplied:
+        case QImage::Format_A2RGB30_Premultiplied:
             // Combine premultiplied color with the opacity set on the painter.
             d->solid_color_filler.solid.color =
                 ((((color & 0x00ff00ff) * s->intOpacity) >> 8) & 0x00ff00ff)
                 | ((((color & 0xff00ff00) >> 8) * s->intOpacity) & 0xff00ff00);
             break;
         default:
-            d->solid_color_filler.solid.color = PREMUL(ARGB_COMBINE_ALPHA(color, s->intOpacity));
+            d->solid_color_filler.solid.color = qPremultiply(ARGB_COMBINE_ALPHA(color, s->intOpacity));
             break;
         }
 
@@ -2372,7 +2329,7 @@ void QRasterPaintEngine::drawImage(const QRectF &r, const QImage &img, const QRe
                 SrcOverScaleFunc func = qScaleFunctions[d->rasterBuffer->format][img.format()];
                 if (func && (!clip || clip->hasRectClip)) {
                     func(d->rasterBuffer->buffer(), d->rasterBuffer->bytesPerLine(),
-                         img.bits(), img.bytesPerLine(),
+                         img.bits(), img.bytesPerLine(), img.height(),
                          qt_mapRect_non_normalizing(r, s->matrix), sr,
                          !clip ? d->deviceRect : clip->clipRect,
                          s->intOpacity);
@@ -2621,7 +2578,7 @@ void QRasterPaintEngine::alphaPenBlt(const void* src, int bpl, int depth, int rx
                     return;
                 }
             }
-        } else if (d->deviceDepth == 32 && (depth == 8 || depth == 32)) {
+        } else if (d->deviceDepth == 32 && ((depth == 8 && s->penData.alphamapBlit) || (depth == 32 && s->penData.alphaRGBBlit))) {
             // (A)RGB Alpha mask where the alpha component is not used.
             if (!clip) {
                 int nx = qMax(0, rx);
@@ -2644,13 +2601,12 @@ void QRasterPaintEngine::alphaPenBlt(const void* src, int bpl, int depth, int rx
                 rx = nx;
                 ry = ny;
             }
-            if (depth == 8 && s->penData.alphamapBlit) {
+            if (depth == 8)
                 s->penData.alphamapBlit(rb, rx, ry, s->penData.solid.color,
                                         scanline, w, h, bpl, clip);
-            } else if (depth == 32 && s->penData.alphaRGBBlit) {
+            else if (depth == 32)
                 s->penData.alphaRGBBlit(rb, rx, ry, s->penData.solid.color,
                                         (const uint *) scanline, w, h, bpl / 4, clip);
-            }
             return;
         }
     }
@@ -2739,7 +2695,7 @@ void QRasterPaintEngine::alphaPenBlt(const void* src, int bpl, int depth, int rx
             scanline += bpl;
         }
     } else { // 32-bit alpha...
-        uint *sl = (uint *) src;
+        const uint *sl = (const uint *) scanline;
         for (int y = y0; y < y1; ++y) {
             for (int x = x0; x < x1; ) {
                 // Skip those with 0 coverage
@@ -2800,12 +2756,12 @@ bool QRasterPaintEngine::drawCachedGlyphs(int numGlyphs, const glyph_t *glyphs,
             QFixed spp = fontEngine->subPixelPositionForX(positions[i].x);
 
             QPoint offset;
-            QImage *alphaMap = fontEngine->lockedAlphaMapForGlyph(glyphs[i], spp, neededFormat, s->matrix,
-                                                                  &offset);
+            const QImage *alphaMap = fontEngine->lockedAlphaMapForGlyph(glyphs[i], spp, neededFormat, s->matrix,
+                                                                        &offset);
             if (alphaMap == 0 || alphaMap->isNull())
                 continue;
 
-            alphaPenBlt(alphaMap->bits(), alphaMap->bytesPerLine(), alphaMap->depth(),
+            alphaPenBlt(alphaMap->constBits(), alphaMap->bytesPerLine(), alphaMap->depth(),
                         qFloor(positions[i].x) + offset.x(),
                         qRound(positions[i].y) + offset.y(),
                         alphaMap->width(), alphaMap->height());
@@ -2814,12 +2770,12 @@ bool QRasterPaintEngine::drawCachedGlyphs(int numGlyphs, const glyph_t *glyphs,
         }
 
     } else {
-        QFontEngineGlyphCache::Type glyphType = fontEngine->glyphFormat >= 0 ? QFontEngineGlyphCache::Type(fontEngine->glyphFormat) : d->glyphCacheType;
+        QFontEngine::GlyphFormat glyphFormat = fontEngine->glyphFormat != QFontEngine::Format_None ? fontEngine->glyphFormat : d->glyphCacheFormat;
 
         QImageTextureGlyphCache *cache =
-            static_cast<QImageTextureGlyphCache *>(fontEngine->glyphCache(0, glyphType, s->matrix));
+            static_cast<QImageTextureGlyphCache *>(fontEngine->glyphCache(0, glyphFormat, s->matrix));
         if (!cache) {
-            cache = new QImageTextureGlyphCache(glyphType, s->matrix);
+            cache = new QImageTextureGlyphCache(glyphFormat, s->matrix);
             fontEngine->setGlyphCache(0, cache);
         }
 
@@ -2837,7 +2793,7 @@ bool QRasterPaintEngine::drawCachedGlyphs(int numGlyphs, const glyph_t *glyphs,
         else if (depth == 1)
             rightShift = 3; // divide by 8
 
-        int margin = fontEngine->glyphMargin(glyphType);
+        int margin = fontEngine->glyphMargin(glyphFormat);
         const uchar *bits = image.bits();
         for (int i=0; i<numGlyphs; ++i) {
 
@@ -2860,7 +2816,7 @@ bool QRasterPaintEngine::drawCachedGlyphs(int numGlyphs, const glyph_t *glyphs,
 
             const uchar *glyphBits = bits + ((c.x << leftShift) >> rightShift) + c.y * bpl;
 
-            if (glyphType == QFontEngineGlyphCache::Raster_ARGB) {
+            if (glyphFormat == QFontEngine::Format_ARGB) {
                 // The current state transform has already been applied to the positions,
                 // so we prevent drawImage() from re-applying the transform by clearing
                 // the state for the duration of the call.
@@ -2878,7 +2834,7 @@ bool QRasterPaintEngine::drawCachedGlyphs(int numGlyphs, const glyph_t *glyphs,
 
 
 /*!
- * Returns true if the rectangle is completely within the current clip
+ * Returns \c true if the rectangle is completely within the current clip
  * state of the paint engine.
  */
 bool QRasterPaintEnginePrivate::isUnclipped_normalized(const QRect &r) const
@@ -3059,7 +3015,7 @@ void QRasterPaintEngine::drawTextItem(const QPointF &p, const QTextItem &textIte
     Q_D(QRasterPaintEngine);
     fprintf(stderr," - QRasterPaintEngine::drawTextItem(), (%.2f,%.2f), string=%s ct=%d\n",
            p.x(), p.y(), QString::fromRawData(ti.chars, ti.num_chars).toLatin1().data(),
-           d->glyphCacheType);
+           d->glyphCacheFormat);
 #endif
 
     if (ti.glyphs.numGlyphs == 0)
@@ -3325,12 +3281,22 @@ bool QRasterPaintEngine::requiresPretransformedGlyphPositions(QFontEngine *fontE
     return QPaintEngineEx::requiresPretransformedGlyphPositions(fontEngine, m);
 }
 
+/*!
+   Indicates whether glyph caching is supported by the font engine
+   \a fontEngine with the given transform \a m applied.
+*/
 bool QRasterPaintEngine::shouldDrawCachedGlyphs(QFontEngine *fontEngine, const QTransform &m) const
 {
+    // The raster engine does not support projected cached glyph drawing
+    if (m.type() >= QTransform::TxProject)
+        return false;
+
     // The font engine might not support filling the glyph cache
     // with the given transform applied, in which case we need to
-    // fall back to the QPainterPath code-path.
-    if (!fontEngine->supportsTransformation(m))
+    // fall back to the QPainterPath code-path. This does not apply
+    // for engines with internal caching, as we don't use the engine
+    // to fill up our cache in that case.
+    if (!fontEngine->hasInternalCaching() && !fontEngine->supportsTransformation(m))
         return false;
 
     return QPaintEngineEx::shouldDrawCachedGlyphs(fontEngine, m);
@@ -3651,7 +3617,7 @@ QImage QRasterBuffer::colorizeBitmap(const QImage &image, const QColor &color)
     QImage sourceImage = image.convertToFormat(QImage::Format_MonoLSB);
     QImage dest = QImage(sourceImage.size(), QImage::Format_ARGB32_Premultiplied);
 
-    QRgb fg = PREMUL(color.rgba());
+    QRgb fg = qPremultiply(color.rgba());
     QRgb bg = 0;
 
     int height = sourceImage.height();
@@ -3691,8 +3657,8 @@ QImage::Format QRasterBuffer::prepare(QImage *image)
     drawHelper = qDrawHelper + format;
     if (image->depth() == 1 && image->colorTable().size() == 2) {
         monoDestinationWithClut = true;
-        destColor0 = PREMUL(image->colorTable()[0]);
-        destColor1 = PREMUL(image->colorTable()[1]);
+        destColor0 = qPremultiply(image->colorTable()[0]);
+        destColor1 = qPremultiply(image->colorTable()[1]);
     }
 
     return format;
@@ -4249,8 +4215,8 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
         }
 
         if (colorInterpolation) {
-            first_color = PREMUL(first_color);
-            second_color = PREMUL(second_color);
+            first_color = qPremultiply(first_color);
+            second_color = qPremultiply(second_color);
         }
 
         int first_index = qRound(first_stop * (GRADIENT_STOPTABLE_SIZE-1));
@@ -4271,7 +4237,7 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
             if (colorInterpolation)
                 colorTable[i] = first_color;
             else
-                colorTable[i] = PREMUL(first_color);
+                colorTable[i] = qPremultiply(first_color);
         }
 
         if (i < second_index) {
@@ -4300,7 +4266,7 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
                 if (colorInterpolation)
                     colorTable[i] = color;
                 else
-                    colorTable[i] = PREMUL(color);
+                    colorTable[i] = qPremultiply(color);
             }
         }
 
@@ -4308,7 +4274,7 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
             if (colorInterpolation)
                 colorTable[i] = second_color;
             else
-                colorTable[i] = PREMUL(second_color);
+                colorTable[i] = qPremultiply(second_color);
         }
 
         return;
@@ -4316,7 +4282,7 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
 
     uint current_color = ARGB_COMBINE_ALPHA(stops[0].second.rgba(), opacity);
     if (stopCount == 1) {
-        current_color = PREMUL(current_color);
+        current_color = qPremultiply(current_color);
         for (int i = 0; i < size; ++i)
             colorTable[i] = current_color;
         return;
@@ -4333,7 +4299,7 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
     qreal dpos = 1.5 * incr; // current position in gradient stop list (0 to 1)
 
      // Up to first point
-    colorTable[pos++] = PREMUL(current_color);
+    colorTable[pos++] = qPremultiply(current_color);
     while (dpos <= begin_pos) {
         colorTable[pos] = colorTable[pos - 1];
         ++pos;
@@ -4355,8 +4321,8 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
         next_color = ARGB_COMBINE_ALPHA(stops[current_stop+1].second.rgba(), opacity);
 
         if (colorInterpolation) {
-            current_color = PREMUL(current_color);
-            next_color = PREMUL(next_color);
+            current_color = qPremultiply(current_color);
+            next_color = qPremultiply(next_color);
         }
 
         qreal diff = stops[current_stop+1].first - stops[current_stop].first;
@@ -4373,7 +4339,7 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
             if (colorInterpolation)
                 colorTable[pos] = INTERPOLATE_PIXEL_256(current_color, idist, next_color, dist);
             else
-                colorTable[pos] = PREMUL(INTERPOLATE_PIXEL_256(current_color, idist, next_color, dist));
+                colorTable[pos] = qPremultiply(INTERPOLATE_PIXEL_256(current_color, idist, next_color, dist));
 
             ++pos;
             dpos += incr;
@@ -4397,8 +4363,8 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
 
                 if (colorInterpolation) {
                     if (skip != 1)
-                        current_color = PREMUL(current_color);
-                    next_color = PREMUL(next_color);
+                        current_color = qPremultiply(current_color);
+                    next_color = qPremultiply(next_color);
                 }
 
                 qreal diff = stops[current_stop+1].first - stops[current_stop].first;
@@ -4410,7 +4376,7 @@ void QGradientCache::generateGradientColorTable(const QGradient& gradient, uint 
     }
 
     // After last point
-    current_color = PREMUL(ARGB_COMBINE_ALPHA(stops[stopCount - 1].second.rgba(), opacity));
+    current_color = qPremultiply(ARGB_COMBINE_ALPHA(stops[stopCount - 1].second.rgba(), opacity));
     while (pos < size - 1) {
         colorTable[pos] = current_color;
         ++pos;
@@ -4444,7 +4410,7 @@ void QSpanData::setup(const QBrush &brush, int alpha, QPainter::CompositionMode 
         type = Solid;
         QColor c = qbrush_color(brush);
         QRgb rgba = c.rgba();
-        solid.color = PREMUL(ARGB_COMBINE_ALPHA(rgba, alpha));
+        solid.color = qPremultiply(ARGB_COMBINE_ALPHA(rgba, alpha));
         if ((solid.color & 0xff000000) == 0
             && compositionMode == QPainter::CompositionMode_SourceOver) {
             type = None;
@@ -4503,7 +4469,7 @@ void QSpanData::setup(const QBrush &brush, int alpha, QPainter::CompositionMode 
             QPointF center = g->center();
             conicalData.center.x = center.x();
             conicalData.center.y = center.y();
-            conicalData.angle = g->angle() * 2 * Q_PI / 360.0;
+            conicalData.angle = qDegreesToRadians(g->angle());
         }
         break;
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -134,3 +134,61 @@ return QVariant::fromValue(s);
 QObject *object = getObjectFromSomewhere();
 QVariant data = QVariant::fromValue(object);
 //! [8]
+
+//! [9]
+
+QList<int> intList;
+intList.push_back(7);
+intList.push_back(11);
+intList.push_back(42);
+
+QVariant variant = QVariant::fromValue(intList);
+if (variant.canConvert<QVariantList>()) {
+    QSequentialIterable iterable = variant.value<QSequentialIterable>();
+    // Can use foreach:
+    foreach (const QVariant &v, iterable) {
+        qDebug() << v;
+    }
+    // Can use C++11 range-for:
+    for (const QVariant &v : iterable) {
+        qDebug() << v;
+    }
+    // Can use iterators:
+    QSequentialIterable::const_iterator it = iterable.begin();
+    const QSequentialIterable::const_iterator end = iterable.end();
+    for ( ; it != end; ++it) {
+        qDebug() << *it;
+    }
+}
+
+//! [9]
+
+//! [10]
+
+QHash<int, QString> mapping;
+mapping.insert(7, "Seven");
+mapping.insert(11, "Eleven");
+mapping.insert(42, "Forty-two");
+
+QVariant variant = QVariant::fromValue(mapping);
+if (variant.canConvert<QVariantHash>()) {
+    QAssociativeIterable iterable = variant.value<QAssociativeIterable>();
+    // Can use foreach over the values:
+    foreach (const QVariant &v, iterable) {
+        qDebug() << v;
+    }
+    // Can use C++11 range-for over the values:
+    for (const QVariant &v : iterable) {
+        qDebug() << v;
+    }
+    // Can use iterators:
+    QAssociativeIterable::const_iterator it = iterable.begin();
+    const QAssociativeIterable::const_iterator end = iterable.end();
+    for ( ; it != end; ++it) {
+        qDebug() << *it; // The current value
+        qDebug() << it.key();
+        qDebug() << it.value();
+    }
+}
+
+//! [10]

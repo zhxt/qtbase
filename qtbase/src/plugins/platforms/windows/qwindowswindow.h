@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,23 +38,16 @@
 #ifdef Q_OS_WINCE
 #  include "qplatformfunctions_wince.h"
 #endif
+#include "qwindowsscaling.h"
 #include "qwindowscursor.h"
 
 #include <qpa/qplatformwindow.h>
-
-#ifdef QT_OPENGL_ES_2
-#  include <QtCore/QSharedPointer>
-#  include <EGL/egl.h>
-#endif
+#include <QtPlatformHeaders/qwindowswindowfunctions.h>
 
 QT_BEGIN_NAMESPACE
 
 class QWindowsOleDropTarget;
 class QDebug;
-
-#ifdef QT_OPENGL_ES_2
-class QWindowsEGLStaticContext;
-#endif
 
 struct QWindowsGeometryHint
 {
@@ -99,6 +84,7 @@ struct QWindowCreationContext
 #endif
 
     QWindowsGeometryHint geometryHint;
+    const QWindow *window;
     DWORD style;
     DWORD exStyle;
     QRect requestedGeometry;
@@ -111,102 +97,112 @@ struct QWindowCreationContext
     int frameHeight;
 };
 
+struct QWindowsWindowData
+{
+    QWindowsWindowData() : hwnd(0), embedded(false) {}
+
+    Qt::WindowFlags flags;
+    QRect geometry;
+    QMargins frame; // Do not use directly for windows, see FrameDirty.
+    QMargins customMargins; // User-defined, additional frame for NCCALCSIZE
+    HWND hwnd;
+    bool embedded;
+
+    static QWindowsWindowData create(const QWindow *w,
+                                     const QWindowsWindowData &parameters,
+                                     const QString &title);
+};
+
 class QWindowsWindow : public QPlatformWindow
 {
 public:
-#ifdef QT_OPENGL_ES_2
-    typedef QSharedPointer<QWindowsEGLStaticContext> QWindowsEGLStaticContextPtr;
-#endif
-
     enum Flags
     {
         AutoMouseCapture = 0x1, //! Automatic mouse capture on button press.
         WithinSetParent = 0x2,
         FrameDirty = 0x4,            //! Frame outdated by setStyle, recalculate in next query.
         OpenGLSurface = 0x10,
-        OpenGLDoubleBuffered = 0x20,
-        OpenGlPixelFormatInitialized = 0x40,
-        BlockedByModal = 0x80,
-        SizeGripOperation = 0x100,
-        FrameStrutEventsEnabled = 0x200,
-        SynchronousGeometryChangeEvent = 0x400,
-        WithinSetStyle = 0x800,
-        WithinDestroy = 0x1000,
-        TouchRegistered = 0x2000,
-        AlertState = 0x4000,
-        Exposed = 0x08000,
-        WithinCreate = 0x10000
+        OpenGL_ES2 = 0x20,
+        OpenGLDoubleBuffered = 0x40,
+        OpenGlPixelFormatInitialized = 0x80,
+        BlockedByModal = 0x100,
+        SizeGripOperation = 0x200,
+        FrameStrutEventsEnabled = 0x400,
+        SynchronousGeometryChangeEvent = 0x800,
+        WithinSetStyle = 0x1000,
+        WithinDestroy = 0x2000,
+        TouchRegistered = 0x4000,
+        AlertState = 0x8000,
+        Exposed = 0x10000,
+        WithinCreate = 0x20000,
+        WithinMaximize = 0x40000,
+        MaximizeToFullScreen = 0x80000,
+        InputMethodDisabled = 0x100000,
+        Compositing = 0x200000
     };
 
-    struct WindowData
-    {
-        WindowData() : hwnd(0) {}
-
-        Qt::WindowFlags flags;
-        QRect geometry;
-        QMargins frame; // Do not use directly for windows, see FrameDirty.
-        QMargins customMargins; // User-defined, additional frame for NCCALCSIZE
-        HWND hwnd;
-        bool embedded;
-
-        static WindowData create(const QWindow *w,
-                                 const WindowData &parameters,
-                                 const QString &title);
-    };
-
-    QWindowsWindow(QWindow *window, const WindowData &data);
+    QWindowsWindow(QWindow *window, const QWindowsWindowData &data);
     ~QWindowsWindow();
 
-    virtual QSurfaceFormat format() const { return m_format; }
-    virtual void setGeometry(const QRect &rect);
-    virtual QRect geometry() const { return m_data.geometry; }
-
-    virtual void setVisible(bool visible);
+    QSurfaceFormat format() const Q_DECL_OVERRIDE { return m_format; }
+    void setGeometryDp(const QRect &rectIn);
+    void setGeometry(const QRect &rect) Q_DECL_OVERRIDE
+        { setGeometryDp(QWindowsScaling::mapToNative(rect)); }
+    QRect geometryDp() const { return m_data.geometry; }
+    QRect geometry() const Q_DECL_OVERRIDE
+        { return QWindowsScaling::mapFromNative(geometryDp()); }
+    QRect normalGeometryDp() const;
+    QRect normalGeometry() const Q_DECL_OVERRIDE
+        { return QWindowsScaling::mapFromNative(normalGeometryDp()); }
+    qreal devicePixelRatio() const Q_DECL_OVERRIDE
+        { return qreal(QWindowsScaling::factor()); }
+    void setVisible(bool visible) Q_DECL_OVERRIDE;
     bool isVisible() const;
-    virtual bool isExposed() const { return testFlag(Exposed); }
-    virtual bool isActive() const;
-    virtual bool isEmbedded(const QPlatformWindow *parentWindow) const;
-    virtual QPoint mapToGlobal(const QPoint &pos) const;
-    virtual QPoint mapFromGlobal(const QPoint &pos) const;
-
-    virtual void setWindowFlags(Qt::WindowFlags flags);
-    virtual void setWindowState(Qt::WindowState state);
+    bool isExposed() const Q_DECL_OVERRIDE { return testFlag(Exposed); }
+    bool isActive() const Q_DECL_OVERRIDE;
+    bool isEmbedded(const QPlatformWindow *parentWindow) const Q_DECL_OVERRIDE;
+    QPoint mapToGlobalDp(const QPoint &pos) const;
+    QPoint mapToGlobal(const QPoint &pos) const Q_DECL_OVERRIDE
+        { return mapToGlobalDp(pos * QWindowsScaling::factor()) / QWindowsScaling::factor(); }
+    QPoint mapFromGlobalDp(const QPoint &pos) const;
+    QPoint mapFromGlobal(const QPoint &pos) const Q_DECL_OVERRIDE
+        { return mapFromGlobalDp(pos * QWindowsScaling::factor()) / QWindowsScaling::factor(); }
+    void setWindowFlags(Qt::WindowFlags flags) Q_DECL_OVERRIDE;
+    void setWindowState(Qt::WindowState state) Q_DECL_OVERRIDE;
 
     HWND handle() const { return m_data.hwnd; }
 
-    virtual WId winId() const { return WId(m_data.hwnd); }
-    virtual void setParent(const QPlatformWindow *window);
+    WId winId() const Q_DECL_OVERRIDE { return WId(m_data.hwnd); }
+    void setParent(const QPlatformWindow *window) Q_DECL_OVERRIDE;
 
-    virtual void setWindowTitle(const QString &title);
-    virtual void raise();
-    virtual void lower();
+    void setWindowTitle(const QString &title) Q_DECL_OVERRIDE;
+    void raise() Q_DECL_OVERRIDE;
+    void lower() Q_DECL_OVERRIDE;
 
     void windowEvent(QEvent *event);
 
-    virtual void propagateSizeHints();
-    virtual QMargins frameMargins() const;
+    void propagateSizeHints() Q_DECL_OVERRIDE;
+    static bool handleGeometryChangingMessage(MSG *message, const QWindow *qWindow, const QMargins &marginsDp);
+    bool handleGeometryChanging(MSG *message) const;
+    QMargins frameMarginsDp() const;
+    QMargins frameMargins() const Q_DECL_OVERRIDE { return frameMarginsDp() / QWindowsScaling::factor(); }
 
-    virtual void setOpacity(qreal level);
-    virtual void setMask(const QRegion &region);
+    void setOpacity(qreal level) Q_DECL_OVERRIDE;
+    void setMask(const QRegion &region) Q_DECL_OVERRIDE;
     qreal opacity() const { return m_opacity; }
-    virtual void requestActivateWindow();
+    void requestActivateWindow() Q_DECL_OVERRIDE;
 
-    virtual bool setKeyboardGrabEnabled(bool grab);
-    virtual bool setMouseGrabEnabled(bool grab);
+    bool setKeyboardGrabEnabled(bool grab) Q_DECL_OVERRIDE;
+    bool setMouseGrabEnabled(bool grab) Q_DECL_OVERRIDE;
     inline bool hasMouseCapture() const { return GetCapture() == m_data.hwnd; }
 
-    virtual bool startSystemResize(const QPoint &pos, Qt::Corner corner);
+    bool startSystemResize(const QPoint &, Qt::Corner corner) Q_DECL_OVERRIDE;
 
     void setFrameStrutEventsEnabled(bool enabled);
     bool frameStrutEventsEnabled() const { return testFlag(FrameStrutEventsEnabled); }
 
     QMargins customMargins() const { return m_data.customMargins; }
     void setCustomMargins(const QMargins &m);
-
-#ifdef QT_OPENGL_ES_2
-    EGLSurface eglSurfaceHandle() const { return m_eglSurface;}
-    EGLSurface ensureEglSurfaceHandle(const QWindowsEGLStaticContextPtr &staticContext, EGLConfig config);
-#endif
 
     inline unsigned style() const
         { return GetWindowLongPtr(m_data.hwnd, GWL_STYLE); }
@@ -220,6 +216,7 @@ public:
     void handleMoved();
     void handleResized(int wParam);
     void handleHidden();
+    void handleCompositionSettingsChanged();
 
     static inline HWND handleOf(const QWindow *w);
     static inline QWindowsWindow *baseWindowOf(const QWindow *w);
@@ -228,25 +225,20 @@ public:
     static inline void setUserDataOf(HWND hwnd, void *ud);
 
     static bool setWindowLayered(HWND hwnd, Qt::WindowFlags flags, bool hasAlpha, qreal opacity);
+    bool isLayered() const;
 
     HDC getDC();
     void releaseDC();
 #ifndef Q_OS_WINCE // maybe available on some SDKs revisit WM_GETMINMAXINFO
     void getSizeHints(MINMAXINFO *mmi) const;
-#endif
+    bool handleNonClientHitTest(const QPoint &globalPos, LRESULT *result) const;
+#endif // !Q_OS_WINCE
 
 #ifndef QT_NO_CURSOR
     QWindowsWindowCursor cursor() const { return m_cursor; }
 #endif
     void setCursor(const QWindowsWindowCursor &c);
     void applyCursor();
-
-    QWindowsWindow *childAt(const QPoint &clientPoint,
-                                unsigned cwexflags = CWP_SKIPINVISIBLE) const;
-    QWindowsWindow *childAtScreenPoint(const QPoint &screenPoint,
-                                           unsigned cwexflags = CWP_SKIPINVISIBLE) const;
-
-    static QByteArray debugWindowFlags(Qt::WindowFlags wf);
 
     inline bool testFlag(unsigned f) const  { return (m_flags & f) != 0; }
     inline void setFlag(unsigned f) const   { m_flags |= f; }
@@ -256,6 +248,10 @@ public:
     bool isEnabled() const;
     void setWindowIcon(const QIcon &icon);
 
+    void *surface(void *nativeConfig, int *err);
+    void invalidateSurface() Q_DECL_OVERRIDE;
+    void aboutToMakeCurrent();
+
 #ifndef Q_OS_WINCE
     void setAlertState(bool enabled);
     bool isAlertState() const { return testFlag(AlertState); }
@@ -263,26 +259,30 @@ public:
     void stopAlertWindow();
 #endif
 
+    static void setTouchWindowTouchTypeStatic(QWindow *window, QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes);
+    void registerTouchWindow(QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes = QWindowsWindowFunctions::NormalTouch);
+
 private:
     inline void show_sys() const;
     inline void hide_sys() const;
     inline void setGeometry_sys(const QRect &rect) const;
     inline QRect frameGeometry_sys() const;
     inline QRect geometry_sys() const;
-    inline WindowData setWindowFlags_sys(Qt::WindowFlags wt, unsigned flags = 0) const;
+    inline QWindowsWindowData setWindowFlags_sys(Qt::WindowFlags wt, unsigned flags = 0) const;
     inline bool isFullScreen_sys() const;
     inline void setWindowState_sys(Qt::WindowState newState);
-    inline void setParent_sys(const QPlatformWindow *parent) const;
+    inline void setParent_sys(const QPlatformWindow *parent);
     inline void updateTransientParent() const;
     void destroyWindow();
-    void registerDropSite();
-    void unregisterDropSite();
+    inline bool isDropSiteEnabled() const { return m_dropTarget != 0; }
+    void setDropSiteEnabled(bool enabled);
+    void updateDropSite(bool topLevel);
     void handleGeometryChange();
     void handleWindowStateChange(Qt::WindowState state);
     inline void destroyIcon();
     void fireExpose(const QRegion &region, bool force=false);
 
-    mutable WindowData m_data;
+    mutable QWindowsWindowData m_data;
     mutable unsigned m_flags;
     HDC m_hdc;
     Qt::WindowState m_windowState;
@@ -294,15 +294,12 @@ private:
     unsigned m_savedStyle;
     QRect m_savedFrameGeometry;
     const QSurfaceFormat m_format;
-#ifdef QT_OPENGL_ES_2
-    EGLSurface m_eglSurface;
-    QSharedPointer<QWindowsEGLStaticContext> m_staticEglContext;
-#endif
 #ifdef Q_OS_WINCE
     bool m_previouslyHidden;
 #endif
     HICON m_iconSmall;
     HICON m_iconBig;
+    void *m_surface;
 };
 
 // Debug
@@ -371,6 +368,15 @@ inline void QWindowsWindow::destroyIcon()
         DestroyIcon(m_iconSmall);
         m_iconSmall = 0;
     }
+}
+
+inline bool QWindowsWindow::isLayered() const
+{
+#ifndef Q_OS_WINCE
+    return GetWindowLongPtr(m_data.hwnd, GWL_EXSTYLE) & WS_EX_LAYERED;
+#else
+    return false;
+#endif
 }
 
 QT_END_NAMESPACE

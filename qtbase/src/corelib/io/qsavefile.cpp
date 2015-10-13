@@ -1,46 +1,41 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 David Faure <faure@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
-#include "qplatformdefs.h"
 #include "qsavefile.h"
+
+#ifndef QT_NO_TEMPORARYFILE
+
+#include "qplatformdefs.h"
 #include "private/qsavefile_p.h"
 #include "qfileinfo.h"
 #include "qabstractfileengine_p.h"
@@ -202,14 +197,33 @@ bool QSaveFile::open(OpenMode mode)
         d->writeError = QFileDevice::WriteError;
         return false;
     }
-    d->fileEngine = new QTemporaryFileEngine(d->fileName);
+
+    if (existingFile.isDir()) {
+        d->setError(QFileDevice::WriteError, QSaveFile::tr("Filename refers to a directory"));
+        d->writeError = QFileDevice::WriteError;
+        return false;
+    }
+
+    // Resolve symlinks. Don't use QFileInfo::canonicalFilePath so it still give the expected
+    // target even if the file does not exist
+    d->finalFileName = d->fileName;
+    if (existingFile.isSymLink()) {
+        int maxDepth = 128;
+        while (--maxDepth && existingFile.isSymLink())
+            existingFile.setFile(existingFile.symLinkTarget());
+        if (maxDepth > 0)
+            d->finalFileName = existingFile.filePath();
+    }
+
+    d->fileEngine = new QTemporaryFileEngine;
+    static_cast<QTemporaryFileEngine *>(d->fileEngine)->initialize(d->finalFileName, 0666);
     // Same as in QFile: QIODevice provides the buffering, so there's no need to request it from the file engine.
     if (!d->fileEngine->open(mode | QIODevice::Unbuffered)) {
         QFileDevice::FileError err = d->fileEngine->error();
 #ifdef Q_OS_UNIX
         if (d->directWriteFallback && err == QFileDevice::OpenError && errno == EACCES) {
             delete d->fileEngine;
-            d->fileEngine = QAbstractFileEngine::create(d->fileName);
+            d->fileEngine = QAbstractFileEngine::create(d->finalFileName);
             if (d->fileEngine->open(mode | QIODevice::Unbuffered)) {
                 d->useTemporaryFile = false;
                 QFileDevice::open(mode);
@@ -250,8 +264,8 @@ void QSaveFile::close()
   It is mandatory to call this at the end of the saving operation, otherwise the file will be
   discarded.
 
-  If an error happened during writing, deletes the temporary file and returns false.
-  Otherwise, renames it to the final fileName and returns true on success.
+  If an error happened during writing, deletes the temporary file and returns \c false.
+  Otherwise, renames it to the final fileName and returns \c true on success.
   Finally, closes the device.
 
   \sa cancelWriting()
@@ -282,7 +296,7 @@ bool QSaveFile::commit()
         // atomically replace old file with new file
         // Can't use QFile::rename for that, must use the file engine directly
         Q_ASSERT(d->fileEngine);
-        if (!d->fileEngine->renameOverwrite(d->fileName)) {
+        if (!d->fileEngine->renameOverwrite(d->finalFileName)) {
             d->setError(d->fileEngine->error(), d->fileEngine->errorString());
             d->fileEngine->remove();
             delete d->fileEngine;
@@ -369,7 +383,7 @@ void QSaveFile::setDirectWriteFallback(bool enabled)
 }
 
 /*!
-  Returns true if the fallback solution for saving files in read-only
+  Returns \c true if the fallback solution for saving files in read-only
   directories is enabled.
 
   \sa setDirectWriteFallback()
@@ -381,3 +395,5 @@ bool QSaveFile::directWriteFallback() const
 }
 
 QT_END_NAMESPACE
+
+#endif // QT_NO_TEMPORARYFILE

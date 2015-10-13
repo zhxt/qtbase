@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -60,7 +52,7 @@ QT_BEGIN_NAMESPACE
     QScopedPointer guarantees that the object pointed to will get deleted when
     the current scope disappears.
 
-    Consider this function which does heap allocations, and have various exit points:
+    Consider this function which does heap allocations, and has various exit points:
 
     \snippet code/src_corelib_tools_qscopedpointer.cpp 0
 
@@ -81,7 +73,7 @@ QT_BEGIN_NAMESPACE
 
     \snippet code/src_corelib_tools_qscopedpointer.cpp 2
 
-    \section1 Custom cleanup handlers
+    \section1 Custom Cleanup Handlers
 
     Arrays as well as pointers that have been allocated with \c malloc must
     not be deleted using \c delete. QScopedPointer's second template parameter
@@ -95,6 +87,9 @@ QT_BEGIN_NAMESPACE
        this handler for pointers that were allocated with \c{new []}.
     \li QScopedPointerPodDeleter - deletes the pointer using \c{free()}. Use this
        handler for pointers that were allocated with \c{malloc()}.
+    \li QScopedPointerDeleteLater - deletes a pointer by calling \c{deleteLater()}
+       on it. Use this handler for pointers to QObject's that are actively
+       participating in a QEventLoop.
     \endlist
 
     You can pass your own classes as handlers, provided that they have a public
@@ -177,18 +172,18 @@ QT_BEGIN_NAMESPACE
 /*!
     \fn bool operator==(const QScopedPointer<T, Cleanup> &lhs, const QScopedPointer<T, Cleanup> &rhs)
 
-    Equality operator. Returns true if the scoped pointers
+    Equality operator. Returns \c true if the scoped pointers
     \a lhs and \a rhs are pointing to the same object.
-    Otherwise returns false.
+    Otherwise returns \c false.
 */
 
 
 /*!
     \fn bool operator!=(const QScopedPointer<T, Cleanup> &lhs, const QScopedPointer<T, Cleanup> &rhs)
 
-    Inequality operator. Returns true if the scoped pointers
+    Inequality operator. Returns \c true if the scoped pointers
     \a lhs and \a rhs are \e not pointing to the same object.
-    Otherwise returns false.
+    Otherwise returns \c false.
 */
 
 /*!
@@ -257,6 +252,13 @@ QT_BEGIN_NAMESPACE
     \fn QScopedArrayPointer::QScopedArrayPointer()
 
     Constructs a QScopedArrayPointer instance.
+*/
+
+/*!
+    \fn QScopedArrayPointer::QScopedArrayPointer(D * p, QtPrivate::QScopedArrayEnsureSameType<T, D>::Type = 0)
+    \internal
+
+    Constructs a QScopedArrayPointer and stores the array of objects.
 */
 
 /*!

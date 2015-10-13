@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -55,6 +47,7 @@
 
 #include <private/qstandarditemmodel_p.h>
 #include <qdebug.h>
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -254,10 +247,10 @@ void QStandardItemPrivate::sortChildren(int column, Qt::SortOrder order)
 
     if (order == Qt::AscendingOrder) {
         QStandardItemModelLessThan lt;
-        qStableSort(sortable.begin(), sortable.end(), lt);
+        std::stable_sort(sortable.begin(), sortable.end(), lt);
     } else {
         QStandardItemModelGreaterThan gt;
-        qStableSort(sortable.begin(), sortable.end(), gt);
+        std::stable_sort(sortable.begin(), sortable.end(), gt);
     }
 
     QModelIndexList changedPersistentIndexesFrom, changedPersistentIndexesTo;
@@ -1558,8 +1551,8 @@ void QStandardItem::insertColumns(int column, int count)
     \fn bool QStandardItemModel::insertRow(int row, const QModelIndex &parent)
 
     Inserts a single row before the given \a row in the child items of the
-    \a parent specified. Returns true if the row is inserted; otherwise
-    returns false.
+    \a parent specified. Returns \c true if the row is inserted; otherwise
+    returns \c false.
 
     \sa insertRows(), insertColumn(), removeRow()
 */
@@ -1568,8 +1561,8 @@ void QStandardItem::insertColumns(int column, int count)
     \fn bool QStandardItemModel::insertColumn(int column, const QModelIndex &parent)
 
     Inserts a single column before the given \a column in the child items of
-    the \a parent specified. Returns true if the column is inserted; otherwise
-    returns false.
+    the \a parent specified. Returns \c true if the column is inserted; otherwise
+    returns \c false.
 
     \sa insertColumns(), insertRow(), removeColumn()
 */
@@ -1671,7 +1664,7 @@ void QStandardItem::removeColumns(int column, int count)
 }
 
 /*!
-    Returns true if this item has any children; otherwise returns false.
+    Returns \c true if this item has any children; otherwise returns \c false.
 
     \sa rowCount(), columnCount(), child()
 */
@@ -1802,7 +1795,7 @@ QList<QStandardItem*> QStandardItem::takeColumn(int column)
 }
 
 /*!
-    Returns true if this item is less than \a other; otherwise returns false.
+    Returns \c true if this item is less than \a other; otherwise returns \c false.
 
     The default implementation uses the data for the item's sort role (see
     QStandardItemModel::sortRole) to perform the comparison if the item
@@ -1818,9 +1811,11 @@ bool QStandardItem::operator<(const QStandardItem &other) const
     const int role = model() ? model()->sortRole() : Qt::DisplayRole;
     const QVariant l = data(role), r = other.data(role);
     // this code is copied from QSortFilterProxyModel::lessThan()
+    if (l.userType() == QVariant::Invalid)
+        return false;
+    if (r.userType() == QVariant::Invalid)
+        return true;
     switch (l.userType()) {
-    case QVariant::Invalid:
-        return (r.type() == QVariant::Invalid);
     case QVariant::Int:
         return l.toInt() < r.toInt();
     case QVariant::UInt:
@@ -2916,12 +2911,6 @@ void QStandardItemModel::sort(int column, Qt::SortOrder order)
 }
 
 /*!
-  \fn QObject *QStandardItemModel::parent() const
-  \internal
-*/
-
-
-/*!
   \reimp
 */
 QStringList QStandardItemModel::mimeTypes() const
@@ -2949,9 +2938,13 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
     itemsSet.reserve(indexes.count());
     stack.reserve(indexes.count());
     for (int i = 0; i < indexes.count(); ++i) {
-        QStandardItem *item = itemFromIndex(indexes.at(i));
-        itemsSet << item;
-        stack.push(item);
+        if (QStandardItem *item = itemFromIndex(indexes.at(i))) {
+            itemsSet << item;
+            stack.push(item);
+        } else {
+            qWarning() << "QStandardItemModel::mimeData: No item associated with invalid index";
+            return 0;
+        }
     }
 
     //remove duplicates childrens
@@ -2985,16 +2978,11 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
     //stream everything recursively
     while (!stack.isEmpty()) {
         QStandardItem *item = stack.pop();
-        if(itemsSet.contains(item)) { //if the item is selection 'top-level', strem its position
+        if (itemsSet.contains(item)) //if the item is selection 'top-level', stream its position
             stream << item->row() << item->column();
-        }
-        if(item) {
-            stream << *item << item->columnCount() << item->d_ptr->children.count();
-            stack += item->d_ptr->children;
-        } else {
-            QStandardItem dummy;
-            stream << dummy << 0 << 0;
-        }
+
+        stream << *item << item->columnCount() << item->d_ptr->children.count();
+        stack += item->d_ptr->children;
     }
 
     data->setData(format, encoded);

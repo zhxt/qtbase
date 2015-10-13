@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +33,7 @@
 
 #include "qwindowsdrag.h"
 #include "qwindowscontext.h"
+#include "qwindowsscaling.h"
 #ifndef QT_NO_CLIPBOARD
 #  include "qwindowsclipboard.h"
 #endif
@@ -50,10 +43,12 @@
 #include "qwindowswindow.h"
 #include "qwindowsmousehandler.h"
 #include "qwindowscursor.h"
+#include "qwindowsscaling.h"
 
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPixmap>
 #include <QtGui/QPainter>
+#include <QtGui/QRasterWindow>
 #include <QtGui/QGuiApplication>
 #include <qpa/qwindowsysteminterface_p.h>
 #include <QtGui/private/qguiapplication_p.h>
@@ -66,145 +61,62 @@
 
 QT_BEGIN_NAMESPACE
 
-// These pixmaps approximate the images in the Windows User Interface Guidelines.
-// XPM
+/*!
+    \class QWindowsDragCursorWindow
+    \brief A toplevel window showing the drag icon in case of touch drag.
 
-static const char * const moveDragCursorXpmC[] = {
-"11 20 3 1",
-".        c None",
-"a        c #FFFFFF",
-"X        c #000000", // X11 cursor is traditionally black
-"aa.........",
-"aXa........",
-"aXXa.......",
-"aXXXa......",
-"aXXXXa.....",
-"aXXXXXa....",
-"aXXXXXXa...",
-"aXXXXXXXa..",
-"aXXXXXXXXa.",
-"aXXXXXXXXXa",
-"aXXXXXXaaaa",
-"aXXXaXXa...",
-"aXXaaXXa...",
-"aXa..aXXa..",
-"aa...aXXa..",
-"a.....aXXa.",
-"......aXXa.",
-".......aXXa",
-".......aXXa",
-"........aa."};
+    \sa QWindowsOleDropSource
+    \internal
+    \ingroup qt-lighthouse-win
+*/
 
+class QWindowsDragCursorWindow : public QRasterWindow
+{
+public:
+    explicit QWindowsDragCursorWindow(QWindow *parent = 0);
 
-/* XPM */
-static const char * const copyDragCursorXpmC[] = {
-"24 30 3 1",
-".        c None",
-"a        c #000000",
-"X        c #FFFFFF",
-"XX......................",
-"XaX.....................",
-"XaaX....................",
-"XaaaX...................",
-"XaaaaX..................",
-"XaaaaaX.................",
-"XaaaaaaX................",
-"XaaaaaaaX...............",
-"XaaaaaaaaX..............",
-"XaaaaaaaaaX.............",
-"XaaaaaaXXXX.............",
-"XaaaXaaX................",
-"XaaXXaaX................",
-"XaX..XaaX...............",
-"XX...XaaX...............",
-"X.....XaaX..............",
-"......XaaX..............",
-".......XaaX.............",
-".......XaaX.............",
-"........XX...aaaaaaaaaaa",
-".............aXXXXXXXXXa",
-".............aXXXXXXXXXa",
-".............aXXXXaXXXXa",
-".............aXXXXaXXXXa",
-".............aXXaaaaaXXa",
-".............aXXXXaXXXXa",
-".............aXXXXaXXXXa",
-".............aXXXXXXXXXa",
-".............aXXXXXXXXXa",
-".............aaaaaaaaaaa"};
+    void setPixmap(const QPixmap &p);
 
-/* XPM */
-static const char * const linkDragCursorXpmC[] = {
-"24 30 3 1",
-".        c None",
-"a        c #000000",
-"X        c #FFFFFF",
-"XX......................",
-"XaX.....................",
-"XaaX....................",
-"XaaaX...................",
-"XaaaaX..................",
-"XaaaaaX.................",
-"XaaaaaaX................",
-"XaaaaaaaX...............",
-"XaaaaaaaaX..............",
-"XaaaaaaaaaX.............",
-"XaaaaaaXXXX.............",
-"XaaaXaaX................",
-"XaaXXaaX................",
-"XaX..XaaX...............",
-"XX...XaaX...............",
-"X.....XaaX..............",
-"......XaaX..............",
-".......XaaX.............",
-".......XaaX.............",
-"........XX...aaaaaaaaaaa",
-".............aXXXXXXXXXa",
-".............aXXXaaaaXXa",
-".............aXXXXaaaXXa",
-".............aXXXaaaaXXa",
-".............aXXaaaXaXXa",
-".............aXXaaXXXXXa",
-".............aXXaXXXXXXa",
-".............aXXXaXXXXXa",
-".............aXXXXXXXXXa",
-".............aaaaaaaaaaa"};
+protected:
+    void paintEvent(QPaintEvent *)
+    {
+        QPainter painter(this);
+        painter.drawPixmap(0, 0, m_pixmap);
+    }
 
-static const char * const ignoreDragCursorXpmC[] = {
-"24 30 3 1",
-".        c None",
-"a        c #000000",
-"X        c #FFFFFF",
-"aa......................",
-"aXa.....................",
-"aXXa....................",
-"aXXXa...................",
-"aXXXXa..................",
-"aXXXXXa.................",
-"aXXXXXXa................",
-"aXXXXXXXa...............",
-"aXXXXXXXXa..............",
-"aXXXXXXXXXa.............",
-"aXXXXXXaaaa.............",
-"aXXXaXXa................",
-"aXXaaXXa................",
-"aXa..aXXa...............",
-"aa...aXXa...............",
-"a.....aXXa..............",
-"......aXXa.....XXXX.....",
-".......aXXa..XXaaaaXX...",
-".......aXXa.XaaaaaaaaX..",
-"........aa.XaaaXXXXaaaX.",
-"...........XaaaaX..XaaX.",
-"..........XaaXaaaX..XaaX",
-"..........XaaXXaaaX.XaaX",
-"..........XaaX.XaaaXXaaX",
-"..........XaaX..XaaaXaaX",
-"...........XaaX..XaaaaX.",
-"...........XaaaXXXXaaaX.",
-"............XaaaaaaaaX..",
-".............XXaaaaXX...",
-"...............XXXX....."};
+private:
+    QPixmap m_pixmap;
+};
+
+QWindowsDragCursorWindow::QWindowsDragCursorWindow(QWindow *parent)
+    : QRasterWindow(parent)
+{
+    QSurfaceFormat windowFormat = format();
+    windowFormat.setAlphaBufferSize(8);
+    setFormat(windowFormat);
+    setObjectName(QStringLiteral("QWindowsDragCursorWindow"));
+    setFlags(Qt::Popup | Qt::NoDropShadowWindowHint
+             | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint
+             | Qt::WindowDoesNotAcceptFocus | Qt::WindowTransparentForInput);
+}
+
+void QWindowsDragCursorWindow::setPixmap(const QPixmap &p)
+{
+    if (p.cacheKey() == m_pixmap.cacheKey())
+        return;
+    const QSize oldSize = m_pixmap.size();
+    QSize newSize = p.size();
+    qCDebug(lcQpaMime) << __FUNCTION__ << p.cacheKey() << newSize;
+    m_pixmap = p;
+    if (oldSize != newSize) {
+        const qreal pixDevicePixelRatio = p.devicePixelRatio();
+        if (pixDevicePixelRatio > 1.0 && qFuzzyCompare(pixDevicePixelRatio, devicePixelRatio()))
+            newSize /= qRound(pixDevicePixelRatio);
+        resize(newSize);
+    }
+    if (isVisible())
+        update();
+}
 
 /*!
     \class QWindowsDropMimeData
@@ -286,6 +198,11 @@ static inline Qt::KeyboardModifiers toQtKeyboardModifiers(DWORD keyState)
 class QWindowsOleDropSource : public IDropSource
 {
 public:
+    enum Mode {
+        MouseDrag,
+        TouchDrag // Mouse cursor suppressed, use window as cursor.
+    };
+
     explicit QWindowsOleDropSource(QWindowsDrag *drag);
     virtual ~QWindowsOleDropSource();
 
@@ -304,34 +221,64 @@ private:
     class DragCursorHandle {
         Q_DISABLE_COPY(DragCursorHandle)
     public:
-        DragCursorHandle(HCURSOR c, qint64 k) :  cursor(c), cacheKey(k) {}
+        DragCursorHandle(HCURSOR c) : cursor(c) {}
         ~DragCursorHandle() { DestroyCursor(cursor); }
-        HCURSOR cursor;
-        qint64 cacheKey;
+        const HCURSOR cursor;
     };
-    typedef QMap <Qt::DropAction, QSharedPointer<DragCursorHandle> > ActionCursorMap;
+    typedef QSharedPointer<DragCursorHandle> DragCursorHandlePtr;
 
+    struct CursorEntry {
+        CursorEntry() : cacheKey(0) {}
+        CursorEntry(const QPixmap &p, qint64 cK, const DragCursorHandlePtr &c, const QPoint &h) :
+            pixmap(p), cacheKey(cK), cursor(c), hotSpot(h) {}
+
+        QPixmap pixmap;
+        qint64 cacheKey; // Cache key of cursor
+        DragCursorHandlePtr cursor;
+        QPoint hotSpot;
+    };
+
+    typedef QMap<Qt::DropAction, CursorEntry> ActionCursorMap;
+    typedef ActionCursorMap::Iterator ActionCursorMapIt;
+    typedef ActionCursorMap::ConstIterator ActionCursorMapConstIt;
+
+    const Mode m_mode;
     QWindowsDrag *m_drag;
     Qt::MouseButtons m_currentButtons;
     ActionCursorMap m_cursors;
+    QWindowsDragCursorWindow *m_touchDragWindow;
 
     ULONG m_refs;
+#ifndef QT_NO_DEBUG_OUTPUT
+    friend QDebug operator<<(QDebug, const QWindowsOleDropSource::CursorEntry &);
+#endif
 };
 
-QWindowsOleDropSource::QWindowsOleDropSource(QWindowsDrag *drag) :
-    m_drag(drag), m_currentButtons(Qt::NoButton),
-    m_refs(1)
+QWindowsOleDropSource::QWindowsOleDropSource(QWindowsDrag *drag)
+    : m_mode(QWindowsCursor::cursorState() != QWindowsCursor::CursorSuppressed ? MouseDrag : TouchDrag)
+    , m_drag(drag)
+    , m_currentButtons(Qt::NoButton)
+    , m_touchDragWindow(0)
+    , m_refs(1)
 {
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s", __FUNCTION__);
+    qCDebug(lcQpaMime) << __FUNCTION__ << m_mode;
 }
 
 QWindowsOleDropSource::~QWindowsOleDropSource()
 {
     m_cursors.clear();
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s", __FUNCTION__);
+    delete m_touchDragWindow;
+    qCDebug(lcQpaMime) << __FUNCTION__;
 }
+
+#ifndef QT_NO_DEBUG_OUTPUT
+QDebug operator<<(QDebug d, const QWindowsOleDropSource::CursorEntry &e)
+{
+    d << "CursorEntry:" << e.pixmap.size() << '#' << e.cacheKey
+      << "HCURSOR" << e.cursor->cursor << "hotspot:" << e.hotSpot;
+    return d;
+}
+#endif // !QT_NO_DEBUG_OUTPUT
 
 /*!
     \brief Blend custom pixmap with cursors.
@@ -342,60 +289,63 @@ void QWindowsOleDropSource::createCursors()
     const QDrag *drag = m_drag->currentDrag();
     const QPixmap pixmap = drag->pixmap();
     const bool hasPixmap = !pixmap.isNull();
+    const int scaleFactor = QWindowsScaling::factor();
+    const QSize pixmapSizeDp = pixmap.size() * scaleFactor;
+    const bool scalePixmap = hasPixmap
+        && m_mode != TouchDrag // Touch drag: pixmap is shown in a separate QWindow, which will be scaled.
+        && (scaleFactor != 1 && scaleFactor != qRound(pixmap.devicePixelRatio()));
+    const QPixmap drawPixmap = scalePixmap
+        ? pixmap.scaled(pixmapSizeDp, Qt::KeepAspectRatio, Qt::SmoothTransformation) : pixmap;
 
-    QList<Qt::DropAction> actions;
-    actions << Qt::MoveAction << Qt::CopyAction << Qt::LinkAction;
-    if (hasPixmap)
-        actions << Qt::IgnoreAction;
-    const QPoint hotSpot = drag->hotSpot();
-    for (int cnum = 0; cnum < actions.size(); ++cnum) {
-        const Qt::DropAction action = actions.at(cnum);
-        QPixmap cpm = drag->dragCursor(action);
-        if (cpm.isNull())
-            cpm = m_drag->defaultCursor(action);
-        QSharedPointer<DragCursorHandle> cursorHandler = m_cursors.value(action);
-        if (!cursorHandler.isNull() && cpm.cacheKey() == cursorHandler->cacheKey)
+    Qt::DropAction actions[] = { Qt::MoveAction, Qt::CopyAction, Qt::LinkAction, Qt::IgnoreAction };
+    int actionCount = int(sizeof(actions) / sizeof(actions[0]));
+    if (!hasPixmap)
+        --actionCount; // No Qt::IgnoreAction unless pixmap
+    const QPoint hotSpot = drag->hotSpot() * scaleFactor;
+    for (int cnum = 0; cnum < actionCount; ++cnum) {
+        const Qt::DropAction action = actions[cnum];
+        QPixmap cursorPixmap = drag->dragCursor(action);
+        if (cursorPixmap.isNull())
+            cursorPixmap = m_drag->defaultCursor(action);
+        const qint64 cacheKey = cursorPixmap.cacheKey();
+        const ActionCursorMapIt it = m_cursors.find(action);
+        if (it != m_cursors.end() && it.value().cacheKey == cacheKey)
             continue;
-        if (cpm.isNull()) {
+        if (cursorPixmap.isNull()) {
             qWarning("%s: Unable to obtain drag cursor for %d.", __FUNCTION__, action);
             continue;
         }
 
-        int w = cpm.width();
-        int h = cpm.height();
+        QPoint newHotSpot(0, 0);
+        QPixmap newPixmap = cursorPixmap;
 
         if (hasPixmap) {
             const int x1 = qMin(-hotSpot.x(), 0);
-            const int x2 = qMax(pixmap.width() - hotSpot.x(), cpm.width());
+            const int x2 = qMax(pixmapSizeDp.width() - hotSpot.x(), cursorPixmap.width());
             const int y1 = qMin(-hotSpot.y(), 0);
-            const int y2 = qMax(pixmap.height() - hotSpot.y(), cpm.height());
-
-            w = x2 - x1 + 1;
-            h = y2 - y1 + 1;
-        }
-
-        const QPoint newHotSpot = hotSpot;
-        QPixmap newCursor(w, h);
-        if (hasPixmap) {
+            const int y2 = qMax(pixmapSizeDp.height() - hotSpot.y(), cursorPixmap.height());
+            QPixmap newCursor(x2 - x1 + 1, y2 - y1 + 1);
             newCursor.fill(Qt::transparent);
             QPainter p(&newCursor);
-            const QRect srcRect = pixmap.rect();
             const QPoint pmDest = QPoint(qMax(0, -hotSpot.x()), qMax(0, -hotSpot.y()));
-            p.drawPixmap(pmDest, pixmap, srcRect);
-            p.drawPixmap(qMax(0,newHotSpot.x()),qMax(0,newHotSpot.y()),cpm);
-        } else {
-            newCursor = cpm;
+            p.drawPixmap(pmDest, drawPixmap);
+            p.drawPixmap(qMax(0, hotSpot.x()),qMax(0, hotSpot.y()), cursorPixmap);
+            newPixmap = newCursor;
+            newHotSpot = QPoint(qMax(0, hotSpot.x()), qMax(0, hotSpot.y()));
         }
 
-        const int hotX = hasPixmap ? qMax(0,newHotSpot.x()) : 0;
-        const int hotY = hasPixmap ? qMax(0,newHotSpot.y()) : 0;
-
-        if (const HCURSOR sysCursor = QWindowsCursor::createPixmapCursor(newCursor, hotX, hotY)) {
-            m_cursors.insert(action, QSharedPointer<DragCursorHandle>(new DragCursorHandle(sysCursor, cpm.cacheKey())));
+        if (const HCURSOR sysCursor = QWindowsCursor::createPixmapCursor(newPixmap, newHotSpot)) {
+            const CursorEntry entry(newPixmap, cacheKey, DragCursorHandlePtr(new DragCursorHandle(sysCursor)), newHotSpot);
+            if (it == m_cursors.end())
+                m_cursors.insert(action, entry);
+            else
+                it.value() = entry;
         }
     }
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s %d cursors", __FUNCTION__, m_cursors.size());
+#ifndef QT_NO_DEBUG_OUTPUT
+    if (lcQpaMime().isDebugEnabled())
+        qCDebug(lcQpaMime) << __FUNCTION__ << "pixmap" << pixmap.size() << m_cursors.size() << "cursors:\n" << m_cursors;
+#endif // !QT_NO_DEBUG_OUTPUT
 }
 
 //---------------------------------------------------------------------
@@ -468,11 +418,11 @@ QWindowsOleDropSource::QueryContinueDrag(BOOL fEscapePressed, DWORD grfKeyState)
 
     } while (false);
 
-    if (QWindowsContext::verboseOLE
-        && (QWindowsContext::verboseOLE > 1 || hr != S_OK))
-        qDebug("%s fEscapePressed=%d, grfKeyState=%lu buttons=%d returns 0x%x",
-               __FUNCTION__, fEscapePressed,grfKeyState, int(m_currentButtons),
-               int(hr));
+    if (QWindowsContext::verbose > 1 || hr != S_OK) {
+        qCDebug(lcQpaMime) << __FUNCTION__ << "fEscapePressed=" << fEscapePressed
+            << "grfKeyState=" << grfKeyState << "buttons" << m_currentButtons
+            << "returns 0x" << hex <<int(hr) << dec;
+    }
     return hr;
 }
 
@@ -486,17 +436,29 @@ QWindowsOleDropSource::GiveFeedback(DWORD dwEffect)
     const Qt::DropAction action = translateToQDragDropAction(dwEffect);
     m_drag->updateAction(action);
 
-    if (QWindowsContext::verboseOLE > 2)
-        qDebug("%s dwEffect=%lu, action=%d", __FUNCTION__, dwEffect, action);
-
-    QSharedPointer<DragCursorHandle> cursorHandler = m_cursors.value(action);
-    qint64 currentCacheKey = m_drag->currentDrag()->dragCursor(action).cacheKey();
-    if (cursorHandler.isNull() || currentCacheKey != cursorHandler->cacheKey)
+    const qint64 currentCacheKey = m_drag->currentDrag()->dragCursor(action).cacheKey();
+    ActionCursorMapConstIt it = m_cursors.constFind(action);
+    // If a custom drag cursor is set, check its cache key to detect changes.
+    if (it == m_cursors.constEnd() || (currentCacheKey && currentCacheKey != it.value().cacheKey)) {
         createCursors();
+        it = m_cursors.constFind(action);
+    }
 
-    const ActionCursorMap::const_iterator it = m_cursors.constFind(action);
     if (it != m_cursors.constEnd()) {
-        SetCursor(it.value()->cursor);
+        const CursorEntry &e = it.value();
+        switch (m_mode) {
+        case MouseDrag:
+            SetCursor(e.cursor->cursor);
+            break;
+        case TouchDrag:
+            if (!m_touchDragWindow)
+                m_touchDragWindow = new QWindowsDragCursorWindow;
+            m_touchDragWindow->setPixmap(e.pixmap);
+            m_touchDragWindow->setFramePosition((QWindowsCursor::mousePosition() - e.hotSpot) / QWindowsScaling::factor());
+            if (!m_touchDragWindow->isVisible())
+                m_touchDragWindow->show();
+            break;
+        }
         return ResultFromScode(S_OK);
     }
 
@@ -519,14 +481,12 @@ QWindowsOleDropSource::GiveFeedback(DWORD dwEffect)
 QWindowsOleDropTarget::QWindowsOleDropTarget(QWindow *w) :
     m_refs(1), m_window(w), m_chosenEffect(0), m_lastKeyState(0)
 {
-    if (QWindowsContext::verboseOLE)
-        qDebug() << __FUNCTION__ <<  this << w;
+    qCDebug(lcQpaMime) << __FUNCTION__ << this << w;
 }
 
 QWindowsOleDropTarget::~QWindowsOleDropTarget()
 {
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s %p", __FUNCTION__, this);
+    qCDebug(lcQpaMime) << __FUNCTION__ <<  this;
 }
 
 STDMETHODIMP
@@ -557,14 +517,6 @@ QWindowsOleDropTarget::Release(void)
     return m_refs;
 }
 
-QWindow *QWindowsOleDropTarget::findDragOverWindow(const POINTL &pt) const
-{
-    if (QWindowsWindow *child =
-            QWindowsWindow::baseWindowOf(m_window)->childAtScreenPoint(QPoint(pt.x, pt.y)))
-            return child->window();
-    return m_window;
-}
-
 void QWindowsOleDropTarget::handleDrag(QWindow *window, DWORD grfKeyState,
                                        const QPoint &point, LPDWORD pdwEffect)
 {
@@ -578,7 +530,9 @@ void QWindowsOleDropTarget::handleDrag(QWindow *window, DWORD grfKeyState,
     QGuiApplicationPrivate::mouse_buttons = QWindowsMouseHandler::keyStateToMouseButtons(grfKeyState);
 
     const QPlatformDragQtResponse response =
-          QWindowSystemInterface::handleDrag(window, windowsDrag->dropData(), m_lastPoint, actions);
+          QWindowSystemInterface::handleDrag(window, windowsDrag->dropData(),
+                                             m_lastPoint / QWindowsScaling::factor(),
+                                             actions);
 
     m_answerRect = response.answerRect();
     const Qt::DropAction action = response.acceptedAction();
@@ -588,13 +542,12 @@ void QWindowsOleDropTarget::handleDrag(QWindow *window, DWORD grfKeyState,
         m_chosenEffect = DROPEFFECT_NONE;
     }
     *pdwEffect = m_chosenEffect;
-    if (QWindowsContext::verboseOLE)
-        qDebug() << __FUNCTION__ << m_window
-                 << windowsDrag->dropData() << " supported actions=" << actions
-                 << " mods=" << QGuiApplicationPrivate::modifier_buttons
-                 << " mouse=" << QGuiApplicationPrivate::mouse_buttons
-                 << " accepted: " << response.isAccepted() << action
-                 << m_answerRect << " effect" << *pdwEffect;
+    qCDebug(lcQpaMime) << __FUNCTION__ << m_window
+        << windowsDrag->dropData() << " supported actions=" << actions
+        << " mods=" << QGuiApplicationPrivate::modifier_buttons
+        << " mouse=" << QGuiApplicationPrivate::mouse_buttons
+        << " accepted: " << response.isAccepted() << action
+        << m_answerRect << " effect" << *pdwEffect;
 }
 
 QT_ENSURE_STACK_ALIGNED_FOR_SSE STDMETHODIMP
@@ -604,8 +557,8 @@ QWindowsOleDropTarget::DragEnter(LPDATAOBJECT pDataObj, DWORD grfKeyState,
     if (IDropTargetHelper* dh = QWindowsDrag::instance()->dropHelper())
         dh->DragEnter(reinterpret_cast<HWND>(m_window->winId()), pDataObj, reinterpret_cast<POINT*>(&pt), *pdwEffect);
 
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s widget=%p key=%lu, pt=%ld,%ld", __FUNCTION__, m_window, grfKeyState, pt.x, pt.y);
+    qCDebug(lcQpaMime) << __FUNCTION__ << "widget=" << m_window << " key=" << grfKeyState
+        << "pt=" << pt.x << pt.y;
 
     QWindowsDrag::instance()->setDropDataObject(pDataObj);
     pDataObj->AddRef();
@@ -620,20 +573,18 @@ QWindowsOleDropTarget::DragOver(DWORD grfKeyState, POINTL pt, LPDWORD pdwEffect)
     if (IDropTargetHelper* dh = QWindowsDrag::instance()->dropHelper())
         dh->DragOver(reinterpret_cast<POINT*>(&pt), *pdwEffect);
 
-    QWindow *dragOverWindow = findDragOverWindow(pt);
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s widget=%p key=%lu, pt=%ld,%ld", __FUNCTION__, dragOverWindow, grfKeyState, pt.x, pt.y);
-    const QPoint tmpPoint = QWindowsGeometryHint::mapFromGlobal(dragOverWindow, QPoint(pt.x,pt.y));
+    qCDebug(lcQpaMime) << __FUNCTION__ << "m_window" << m_window << "key=" << grfKeyState
+        << "pt=" << pt.x << pt.y;
+    const QPoint tmpPoint = QWindowsGeometryHint::mapFromGlobal(m_window, QPoint(pt.x,pt.y));
     // see if we should compress this event
     if ((tmpPoint == m_lastPoint || m_answerRect.contains(tmpPoint))
         && m_lastKeyState == grfKeyState) {
         *pdwEffect = m_chosenEffect;
-        if (QWindowsContext::verboseOLE)
-            qDebug("%s: compressed event", __FUNCTION__);
+        qCDebug(lcQpaMime) << __FUNCTION__ << "compressed event";
         return NOERROR;
     }
 
-    handleDrag(dragOverWindow, grfKeyState, tmpPoint, pdwEffect);
+    handleDrag(m_window, grfKeyState, tmpPoint, pdwEffect);
     return NOERROR;
 }
 
@@ -643,8 +594,7 @@ QWindowsOleDropTarget::DragLeave()
     if (IDropTargetHelper* dh = QWindowsDrag::instance()->dropHelper())
         dh->DragLeave();
 
-    if (QWindowsContext::verboseOLE)
-        qDebug().nospace() <<__FUNCTION__ << ' ' << m_window;
+    qCDebug(lcQpaMime) << __FUNCTION__ << ' ' << m_window;
 
     QWindowSystemInterface::handleDrag(m_window, 0, QPoint(), Qt::IgnoreAction);
     QWindowsDrag::instance()->releaseDropDataObject();
@@ -661,15 +611,10 @@ QWindowsOleDropTarget::Drop(LPDATAOBJECT pDataObj, DWORD grfKeyState,
     if (IDropTargetHelper* dh = QWindowsDrag::instance()->dropHelper())
         dh->Drop(pDataObj, reinterpret_cast<POINT*>(&pt), *pdwEffect);
 
-    QWindow *dropWindow = findDragOverWindow(pt);
+    qCDebug(lcQpaMime) << __FUNCTION__ << ' ' << m_window
+        << "keys=" << grfKeyState << "pt=" << pt.x << ',' << pt.y;
 
-    if (QWindowsContext::verboseOLE)
-        qDebug().nospace() << __FUNCTION__ << ' ' << m_window
-                           << " on " << dropWindow
-                           << " keys=" << grfKeyState << " pt="
-                           << pt.x << ',' << pt.y;
-
-    m_lastPoint = QWindowsGeometryHint::mapFromGlobal(dropWindow, QPoint(pt.x,pt.y));
+    m_lastPoint = QWindowsGeometryHint::mapFromGlobal(m_window, QPoint(pt.x,pt.y));
     // grfKeyState does not all ways contain button state in the drop so if
     // it doesn't then use the last known button state;
     if ((grfKeyState & KEY_STATE_BUTTON_MASK) == 0)
@@ -679,7 +624,8 @@ QWindowsOleDropTarget::Drop(LPDATAOBJECT pDataObj, DWORD grfKeyState,
     QWindowsDrag *windowsDrag = QWindowsDrag::instance();
 
     const QPlatformDropQtResponse response =
-        QWindowSystemInterface::handleDrop(dropWindow, windowsDrag->dropData(), m_lastPoint,
+        QWindowSystemInterface::handleDrop(m_window, windowsDrag->dropData(),
+                                           m_lastPoint / QWindowsScaling::factor(),
                                            translateToQDragDropActions(*pdwEffect));
 
     if (response.isAccepted()) {
@@ -765,22 +711,86 @@ QPixmap QWindowsDrag::defaultCursor(Qt::DropAction action) const
     switch (action) {
     case Qt::CopyAction:
         if (m_copyDragCursor.isNull())
-            m_copyDragCursor = QPixmap(copyDragCursorXpmC);
+            m_copyDragCursor = QWindowsCursor::customCursor(Qt::DragCopyCursor).pixmap();
         return m_copyDragCursor;
     case Qt::TargetMoveAction:
     case Qt::MoveAction:
         if (m_moveDragCursor.isNull())
-            m_moveDragCursor = QPixmap(moveDragCursorXpmC);
+            m_moveDragCursor = QWindowsCursor::customCursor(Qt::DragMoveCursor).pixmap();
         return m_moveDragCursor;
     case Qt::LinkAction:
         if (m_linkDragCursor.isNull())
-            m_linkDragCursor = QPixmap(linkDragCursorXpmC);
+            m_linkDragCursor = QWindowsCursor::customCursor(Qt::DragLinkCursor).pixmap();
         return m_linkDragCursor;
     default:
         break;
     }
-    if (m_ignoreDragCursor.isNull())
+
+    static const char * const ignoreDragCursorXpmC[] = {
+    "24 30 3 1",
+    ".        c None",
+    "a        c #000000",
+    "X        c #FFFFFF",
+    "aa......................",
+    "aXa.....................",
+    "aXXa....................",
+    "aXXXa...................",
+    "aXXXXa..................",
+    "aXXXXXa.................",
+    "aXXXXXXa................",
+    "aXXXXXXXa...............",
+    "aXXXXXXXXa..............",
+    "aXXXXXXXXXa.............",
+    "aXXXXXXaaaa.............",
+    "aXXXaXXa................",
+    "aXXaaXXa................",
+    "aXa..aXXa...............",
+    "aa...aXXa...............",
+    "a.....aXXa..............",
+    "......aXXa.....XXXX.....",
+    ".......aXXa..XXaaaaXX...",
+    ".......aXXa.XaaaaaaaaX..",
+    "........aa.XaaaXXXXaaaX.",
+    "...........XaaaaX..XaaX.",
+    "..........XaaXaaaX..XaaX",
+    "..........XaaXXaaaX.XaaX",
+    "..........XaaX.XaaaXXaaX",
+    "..........XaaX..XaaaXaaX",
+    "...........XaaX..XaaaaX.",
+    "...........XaaaXXXXaaaX.",
+    "............XaaaaaaaaX..",
+    ".............XXaaaaXX...",
+    "...............XXXX....."};
+
+    if (m_ignoreDragCursor.isNull()) {
+#if !defined (Q_OS_WINCE)
+        HCURSOR cursor = LoadCursor(NULL, IDC_NO);
+        ICONINFO iconInfo = {0, 0, 0, 0, 0};
+        GetIconInfo(cursor, &iconInfo);
+        BITMAP bmColor = {0, 0, 0, 0, 0, 0, 0};
+
+        if (iconInfo.hbmColor
+            && GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bmColor)
+            && bmColor.bmWidth == bmColor.bmWidthBytes / 4) {
+            const int colorBitsLength = bmColor.bmHeight * bmColor.bmWidthBytes;
+            uchar *colorBits = new uchar[colorBitsLength];
+            GetBitmapBits(iconInfo.hbmColor, colorBitsLength, colorBits);
+            const QImage colorImage(colorBits, bmColor.bmWidth, bmColor.bmHeight,
+                                    bmColor.bmWidthBytes, QImage::Format_ARGB32);
+
+            m_ignoreDragCursor = QPixmap::fromImage(colorImage);
+            delete [] colorBits;
+        } else {
+            m_ignoreDragCursor = QPixmap(ignoreDragCursorXpmC);
+        }
+
+        DeleteObject(iconInfo.hbmMask);
+        DeleteObject(iconInfo.hbmColor);
+        DestroyCursor(cursor);
+#else // !Q_OS_WINCE
         m_ignoreDragCursor = QPixmap(ignoreDragCursorXpmC);
+#endif // !Q_OS_WINCE
+    }
     return m_ignoreDragCursor;
 }
 
@@ -796,9 +806,8 @@ Qt::DropAction QWindowsDrag::drag(QDrag *drag)
     QWindowsOleDataObject *dropDataObject = new QWindowsOleDataObject(dropData);
     const Qt::DropActions possibleActions = drag->supportedActions();
     const DWORD allowedEffects = translateToWinDragEffects(possibleActions);
-    if (QWindowsContext::verboseOLE)
-          qDebug(">%s possible Actions=%x, effects=0x%lx", __FUNCTION__,
-                 int(possibleActions), allowedEffects);
+    qCDebug(lcQpaMime) << '>' << __FUNCTION__ << "possible Actions=0x"
+        << hex << int(possibleActions) << "effects=0x" << allowedEffects << dec;
     const HRESULT r = DoDragDrop(dropDataObject, windowDropSource, allowedEffects, &resultEffect);
     const DWORD  reportedPerformedEffect = dropDataObject->reportedPerformedEffect();
     if (r == DRAGDROP_S_DROP) {
@@ -819,10 +828,9 @@ Qt::DropAction QWindowsDrag::drag(QDrag *drag)
     dropDataObject->releaseQt();
     dropDataObject->Release();        // Will delete obj if refcount becomes 0
     windowDropSource->Release();        // Will delete src if refcount becomes 0
-    if (QWindowsContext::verboseOLE)
-        qDebug("<%s allowedEffects=0x%lx, reportedPerformedEffect=0x%lx, resultEffect=0x%lx, hr=0x%x, dropAction=%d",
-               __FUNCTION__, allowedEffects, reportedPerformedEffect,
-               resultEffect, int(r), dragResult);
+    qCDebug(lcQpaMime) << '<' << __FUNCTION__ << hex << "allowedEffects=0x" << allowedEffects
+        << "reportedPerformedEffect=0x" << reportedPerformedEffect
+        <<  " resultEffect=0x" << resultEffect << "hr=0x" << int(r) << dec << "dropAction=" << dragResult;
     return dragResult;
 }
 
@@ -833,8 +841,7 @@ QWindowsDrag *QWindowsDrag::instance()
 
 void QWindowsDrag::releaseDropDataObject()
 {
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s %p", __FUNCTION__, m_dropDataObject);
+    qCDebug(lcQpaMime) << __FUNCTION__ << m_dropDataObject;
     if (m_dropDataObject) {
         m_dropDataObject->Release();
         m_dropDataObject = 0;

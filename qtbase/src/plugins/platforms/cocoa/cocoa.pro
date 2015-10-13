@@ -2,6 +2,7 @@ TARGET = qcocoa
 
 PLUGIN_TYPE = platforms
 PLUGIN_CLASS_NAME = QCocoaIntegrationPlugin
+!equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
 load(qt_plugin)
 
 OBJECTIVE_SOURCES += main.mm \
@@ -13,7 +14,6 @@ OBJECTIVE_SOURCES += main.mm \
     qnsviewaccessibility.mm \
     qcocoaautoreleasepool.mm \
     qnswindowdelegate.mm \
-    qcocoaglcontext.mm \
     qcocoanativeinterface.mm \
     qcocoaeventdispatcher.mm \
     qcocoaapplicationdelegate.mm \
@@ -33,13 +33,13 @@ OBJECTIVE_SOURCES += main.mm \
     qcocoaclipboard.mm \
     qcocoadrag.mm \
     qmacclipboard.mm \
-    qmacmime.mm \
     qcocoasystemsettings.mm \
     qcocoainputcontext.mm \
     qcocoaservices.mm \
     qcocoasystemtrayicon.mm \
     qcocoaintrospection.mm \
     qcocoakeymapper.mm \
+    qcocoamimetypes.mm
 
 SOURCES += messages.cpp
 
@@ -50,7 +50,6 @@ HEADERS += qcocoaintegration.h \
     qnsview.h \
     qcocoaautoreleasepool.h \
     qnswindowdelegate.h \
-    qcocoaglcontext.h \
     qcocoanativeinterface.h \
     qcocoaeventdispatcher.h \
     qcocoaapplicationdelegate.h \
@@ -70,18 +69,24 @@ HEADERS += qcocoaintegration.h \
     qcocoaclipboard.h \
     qcocoadrag.h \
     qmacclipboard.h \
-    qmacmime.h \
     qcocoasystemsettings.h \
     qcocoainputcontext.h \
     qcocoaservices.h \
     qcocoasystemtrayicon.h \
     qcocoaintrospection.h \
     qcocoakeymapper.h \
-    messages.h
+    messages.h \
+    qcocoamimetypes.h
+
+contains(QT_CONFIG, opengl.*) {
+    OBJECTIVE_SOURCES += qcocoaglcontext.mm
+
+    HEADERS += qcocoaglcontext.h
+}
 
 RESOURCES += qcocoaresources.qrc
 
-LIBS += -framework Cocoa -framework Carbon -framework IOKit
+LIBS += -framework Cocoa -framework Carbon -framework IOKit -lcups
 
 QT += core-private gui-private platformsupport-private
 
@@ -90,11 +95,13 @@ qtHaveModule(widgets) {
         qpaintengine_mac.mm \
         qprintengine_mac.mm \
         qcocoaprintersupport.mm \
+        qcocoaprintdevice.mm \
 
     HEADERS += \
         qpaintengine_mac_p.h \
         qprintengine_mac_p.h \
         qcocoaprintersupport.h \
+        qcocoaprintdevice.h \
 
     QT += widgets-private printsupport-private
 }

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,12 +41,16 @@
 #ifdef Q_OS_UNIX
 #include <unistd.h>
 #endif
-#if defined(Q_OS_WIN32) || defined(Q_OS_WINCE)
-#include <windows.h>
-#define sleep(X) Sleep(X)
+#if defined(Q_OS_WIN)
+#  include <qt_windows.h>
+#  ifndef Q_OS_WINRT
+#    define sleep(X) Sleep(X)
+#  else
+#    define sleep(X) WaitForSingleObjectEx(GetCurrentThread(), X, FALSE);
+#  endif
 #endif
 
-//on solaris, threads that loop one the release bool variable
+//on solaris, threads that loop on the release bool variable
 //needs to sleep more than 1 usec.
 #ifdef Q_OS_SOLARIS
 # define RWTESTSLEEP usleep(10);
@@ -416,7 +412,7 @@ void tst_QReadWriteLock::tryWriteLock()
 }
 
 bool threadDone;
-volatile bool release;
+QAtomicInt release;
 
 /*
     write-lock
@@ -466,7 +462,7 @@ public:
     void run()
     {
         testRwlock.lockForWrite();
-        while(release==false) {
+        while(release.load()==false) {
             RWTESTSLEEP
         }
         testRwlock.unlock();
@@ -486,7 +482,7 @@ public:
     void run()
     {
         testRwlock.lockForRead();
-        while(release==false) {
+        while(release.load()==false) {
             RWTESTSLEEP
         }
         testRwlock.unlock();
@@ -685,7 +681,7 @@ void tst_QReadWriteLock::multipleReadersBlockRelease()
 {
 
     QReadWriteLock testLock;
-    release=false;
+    release.store(false);
     threadDone=false;
     ReadLockReleasableThread rlt1(testLock);
     ReadLockReleasableThread rlt2(testLock);
@@ -695,7 +691,7 @@ void tst_QReadWriteLock::multipleReadersBlockRelease()
     WriteLockThread wlt(testLock);
     wlt.start();
     sleep(1);
-    release=true;
+    release.store(true);
     wlt.wait();
     rlt1.wait();
     rlt2.wait();

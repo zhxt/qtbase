@@ -8,7 +8,6 @@ HEADERS += \
         widgets/qabstractslider_p.h \
         widgets/qabstractspinbox.h \
         widgets/qabstractspinbox_p.h \
-        widgets/qcalendartextnavigator_p.h \
         widgets/qcalendarwidget.h \
         widgets/qcheckbox.h \
         widgets/qcombobox.h \
@@ -25,6 +24,8 @@ HEADERS += \
         widgets/qframe.h \
         widgets/qframe_p.h \
         widgets/qgroupbox.h \
+        widgets/qkeysequenceedit.h \
+        widgets/qkeysequenceedit_p.h \
         widgets/qlabel.h \
         widgets/qlabel_p.h \
         widgets/qlcdnumber.h \
@@ -99,6 +100,7 @@ SOURCES += \
         widgets/qfontcombobox.cpp \
         widgets/qframe.cpp \
         widgets/qgroupbox.cpp \
+        widgets/qkeysequenceedit.cpp \
         widgets/qlabel.cpp \
         widgets/qlcdnumber.cpp \
         widgets/qlineedit_p.cpp \
@@ -141,21 +143,29 @@ SOURCES += \
         widgets/qtoolbararealayout.cpp \
         widgets/qplaintextedit.cpp
 
-# TODO
-false:mac {
-    HEADERS += widgets/qmacnativewidget_mac.h \
-               widgets/qmaccocoaviewcontainer_mac.h
-    OBJECTIVE_HEADERS += widgets/qcocoatoolbardelegate_mac_p.h \
-                         widgets/qcocoamenu_mac_p.h
-    OBJECTIVE_SOURCES += widgets/qmaccocoaviewcontainer_mac.mm \
-                         widgets/qcocoatoolbardelegate_mac.mm \
-                         widgets/qmainwindowlayout_mac.mm \
-                         widgets/qmacnativewidget_mac.mm \
+macx {
+    HEADERS += \
+        widgets/qmacnativewidget_mac.h \
+        widgets/qmaccocoaviewcontainer_mac.h
+
+    OBJECTIVE_SOURCES += \
+        widgets/qmenu_mac.mm \
+        widgets/qmacnativewidget_mac.mm \
+        widgets/qmaccocoaviewcontainer_mac.mm
 }
 
-wince*: {
+wince {
     SOURCES += widgets/qmenu_wince.cpp
     HEADERS += widgets/qmenu_wince_resource_p.h
     RC_FILE = widgets/qmenu_wince.rc
     !static: QMAKE_WRITE_DEFAULT_RC = 1
+    !isEmpty(QT_LIBINFIX) {
+       ORIG_RCFILE = $${TARGET}_resource.rc
+       copyrcc.commands = $$QMAKE_COPY ${QMAKE_FILE_IN} ${QMAKE_FILE_OUT}
+       copyrcc.input = ORIG_RCFILE
+       CONFIG(debug, debug|release):copyrcc.output = $${ORIG_TARGET}d_resource.rc
+       else:copyrcc.output = $${ORIG_TARGET}_resource.rc
+       copyrcc.CONFIG = target_predeps no_link
+       QMAKE_EXTRA_COMPILERS += copyrcc
+    }
 }

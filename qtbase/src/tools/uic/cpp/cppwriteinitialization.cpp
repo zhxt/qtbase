@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -50,6 +42,8 @@
 
 #include <qtextstream.h>
 #include <qdebug.h>
+
+#include <algorithm>
 
 #include <ctype.h>
 
@@ -311,13 +305,6 @@ int IconHandle::compare(const IconHandle &rhs) const
     return 0;
 }
 
-
-#if defined(Q_OS_MAC) && defined(Q_CC_GNU) && (__GNUC__ == 3 && __GNUC_MINOR__ == 3)
-inline uint qHash(const SizePolicyHandle &handle) { return qHash(handle.m_domSizePolicy); }
-inline uint qHash(const FontHandle &handle) { return qHash(handle.m_domFont); }
-inline uint qHash(const IconHandle &handle) { return qHash(handle.m_domIcon); }
-#endif
-
 SizePolicyHandle::SizePolicyHandle(const DomSizePolicy *domSizePolicy) :
     m_domSizePolicy(domSizePolicy)
 {
@@ -362,8 +349,8 @@ int SizePolicyHandle::compare(const SizePolicyHandle &rhs) const
 
 WriteInitialization::LayoutDefaultHandler::LayoutDefaultHandler()
 {
-    qFill(m_state, m_state + NumProperties, 0u);
-    qFill(m_defaultValues, m_defaultValues + NumProperties, 0);
+    std::fill_n(m_state, int(NumProperties), 0u);
+    std::fill_n(m_defaultValues, int(NumProperties), 0);
 }
 
 
@@ -919,6 +906,7 @@ void WriteInitialization::acceptLayout(DomLayout *node)
     m_layoutMarginType = SubLayoutMargin;
 
     DomPropertyList propList = node->elementProperty();
+    DomPropertyList newPropList;
     if (m_layoutWidget) {
         bool left, top, right, bottom;
         left = top = right = bottom = false;
@@ -938,30 +926,37 @@ void WriteInitialization::acceptLayout(DomLayout *node)
             DomProperty *p = new DomProperty();
             p->setAttributeName(QLatin1String("leftMargin"));
             p->setElementNumber(0);
-            propList.append(p);
+            newPropList.append(p);
         }
         if (!top) {
             DomProperty *p = new DomProperty();
             p->setAttributeName(QLatin1String("topMargin"));
             p->setElementNumber(0);
-            propList.append(p);
+            newPropList.append(p);
         }
         if (!right) {
             DomProperty *p = new DomProperty();
             p->setAttributeName(QLatin1String("rightMargin"));
             p->setElementNumber(0);
-            propList.append(p);
+            newPropList.append(p);
         }
         if (!bottom) {
             DomProperty *p = new DomProperty();
             p->setAttributeName(QLatin1String("bottomMargin"));
             p->setElementNumber(0);
-            propList.append(p);
+            newPropList.append(p);
         }
         m_layoutWidget = false;
     }
 
+    propList.append(newPropList);
+
     writeProperties(varName, className, propList, WritePropertyIgnoreMargin|WritePropertyIgnoreSpacing);
+
+    // Clean up again:
+    propList.clear();
+    qDeleteAll(newPropList);
+    newPropList.clear();
 
     m_layoutChain.push(node);
     TreeWalker::acceptLayout(node);
@@ -1181,6 +1176,7 @@ void WriteInitialization::writeProperties(const QString &varName,
             continue;
         QString propertyName = p->attributeName();
         QString propertyValue;
+        bool delayProperty = false;
 
         // special case for the property `geometry': Do not use position
         if (isTopLevel && propertyName == QLatin1String("geometry") && p->elementRect()) {
@@ -1209,6 +1205,10 @@ void WriteInitialization::writeProperties(const QString &varName,
                     && m_uic->customWidgetsInfo()->extends(className, QLatin1String("QAxWidget"))) {
             // already done ;)
             continue;
+        } else if (propertyName == QLatin1String("default")
+                   && m_uic->customWidgetsInfo()->extends(className, QLatin1String("QPushButton"))) {
+            // QTBUG-44406: Setting of QPushButton::default needs to be delayed until the parent is set
+            delayProperty = true;
         } else if (propertyName == QLatin1String("database")
                     && p->elementStringList()) {
             // Sql support
@@ -1484,7 +1484,7 @@ void WriteInitialization::writeProperties(const QString &varName,
             else if (propertyName == QLatin1String("accessibleName") || propertyName == QLatin1String("accessibleDescription"))
                 defineC = accessibilityDefineC;
 
-            QTextStream &o = autoTrOutput(p);
+            QTextStream &o = delayProperty ? m_delayedOut : autoTrOutput(p);
 
             if (defineC)
                 openIfndef(o, QLatin1String(defineC));

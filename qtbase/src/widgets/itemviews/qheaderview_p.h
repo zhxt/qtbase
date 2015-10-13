@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -92,14 +84,17 @@ public:
           cascadingResizing(false),
           resizeRecursionBlock(false),
           allowUserMoveOfSection0(true), // will be false for QTreeView and true for QTableView
+          customDefaultSectionSize(false),
           stretchSections(0),
           contentsSections(0),
           minimumSectionSize(-1),
+          maximumSectionSize(-1),
           lastSectionSize(0),
           sectionIndicatorOffset(0),
           sectionIndicator(0),
           globalResizeMode(QHeaderView::Interactive),
-          sectionStartposRecalc(true)
+          sectionStartposRecalc(true),
+          resizeContentsPrecision(1000)
     {}
 
 
@@ -114,6 +109,8 @@ public:
     void _q_layoutChanged();
 
     bool isSectionSelected(int section) const;
+    bool isFirstVisibleSection(int section) const;
+    bool isLastVisibleSection(int section) const;
 
     inline bool rowIntersectsSelection(int row) const {
         return (selectionModel ? selectionModel->rowIntersectsSelection(row, root) : false);
@@ -159,19 +156,18 @@ public:
 
     inline void setDefaultValues(Qt::Orientation o) {
         orientation = o;
-        defaultSectionSize = (o == Qt::Horizontal ? 100
-                              : qMax(q_func()->minimumSectionSize(), 30));
+        updateDefaultSectionSizeFromStyle();
         defaultAlignment = (o == Qt::Horizontal
                             ? Qt::Alignment(Qt::AlignCenter)
                             : Qt::AlignLeft|Qt::AlignVCenter);
     }
 
     inline bool isVisualIndexHidden(int visual) const {
-        return !sectionHidden.isEmpty() && sectionHidden.at(visual);
+        return sectionItems.at(visual).isHidden;
     }
 
     inline void setVisualIndexHidden(int visual, bool hidden) {
-        if (!sectionHidden.isEmpty()) sectionHidden.setBit(visual, hidden);
+        sectionItems[visual].isHidden = hidden;
     }
 
     inline bool hasAutoResizeSections() const {
@@ -254,7 +250,6 @@ public:
     mutable QVector<int> visualIndices; // visualIndex = visualIndices.at(logicalIndex)
     mutable QVector<int> logicalIndices; // logicalIndex = row or column in the model
     mutable QBitArray sectionSelected; // from logical index to bit
-    mutable QBitArray sectionHidden; // from visual index to bit
     mutable QHash<int, int> hiddenSectionSize; // from logical index to section size
     mutable QHash<int, int> cascadingSectionSize; // from visual index to section size
     mutable QSize cachedSizeHint;
@@ -280,10 +275,12 @@ public:
     bool cascadingResizing;
     bool resizeRecursionBlock;
     bool allowUserMoveOfSection0;
+    bool customDefaultSectionSize;
     int stretchSections;
     int contentsSections;
     int defaultSectionSize;
     int minimumSectionSize;
+    int maximumSectionSize;
     int lastSectionSize; // $$$
     int sectionIndicatorOffset;
     Qt::Alignment defaultAlignment;
@@ -291,26 +288,31 @@ public:
     QHeaderView::ResizeMode globalResizeMode;
     QList<QPersistentModelIndex> persistentHiddenSections;
     mutable bool sectionStartposRecalc;
+    int resizeContentsPrecision;
     // header sections
 
     struct SectionItem {
-        int size;
+        uint size : 20;
+        uint isHidden : 1;
+        uint resizeMode : 5;  // (holding QHeaderView::ResizeMode)
+        uint currentlyUnusedPadding : 6;
+
         union { // This union is made in order to save space and ensure good vector performance (on remove)
             mutable int calculated_startpos; // <- this is the primary used member.
             mutable int tmpLogIdx;         // When one of these 'tmp'-members has been used we call
             int tmpDataStreamSectionCount; // recalcSectionStartPos() or set sectionStartposRecalc to true
         };                                 // to ensure that calculated_startpos will be calculated afterwards.
-        QHeaderView::ResizeMode resizeMode;
-        inline SectionItem() : size(0), resizeMode(QHeaderView::Interactive) {}
+
+        inline SectionItem() : size(0), isHidden(0), resizeMode(QHeaderView::Interactive) {}
         inline SectionItem(int length, QHeaderView::ResizeMode mode)
-            : size(length), calculated_startpos(-1), resizeMode(mode) {}
+            : size(length), isHidden(0), resizeMode(mode), calculated_startpos(-1) {}
         inline int sectionSize() const { return size; }
         inline int calculatedEndPos() const { return calculated_startpos + size; }
 #ifndef QT_NO_DATASTREAM
         inline void write(QDataStream &out) const
-        { out << size; out << 1; out << (int)resizeMode; }
+        { out << static_cast<int>(size); out << 1; out << (int)resizeMode; }
         inline void read(QDataStream &in)
-        { in >> size; in >> tmpDataStreamSectionCount; int m; in >> m; resizeMode = (QHeaderView::ResizeMode)m; }
+        { int m; in >> m; size = m; in >> tmpDataStreamSectionCount; in >> m; resizeMode = m; }
 #endif
     };
 
@@ -320,6 +322,7 @@ public:
     void removeSectionsFromSectionItems(int start, int end);
     void resizeSectionItem(int visualIndex, int oldSize, int newSize);
     void setDefaultSectionSize(int size);
+    void updateDefaultSectionSizeFromStyle();
     void recalcSectionStartPos() const; // not really const
 
     inline int headerLength() const { // for debugging
@@ -327,6 +330,23 @@ public:
         for (int i = 0; i < sectionItems.count(); ++i)
             len += sectionItems.at(i).size;
         return len;
+    }
+
+    QBitArray sectionsHiddenToBitVector() const
+    {
+        QBitArray sectionHidden;
+        if (!hiddenSectionSize.isEmpty()) {
+            sectionHidden.resize(sectionItems.size());
+            for (int u = 0; u < sectionItems.size(); ++u)
+                sectionHidden[u] = sectionItems.at(u).isHidden;
+        }
+        return sectionHidden;
+    }
+
+    void setHiddenSectionsFromBitVector(const QBitArray &sectionHidden) {
+        SectionItem *sectionData = sectionItems.data();
+        for (int i = 0; i < sectionHidden.count(); ++i)
+            sectionData[i].isHidden = sectionHidden.at(i);
     }
 
     int headerSectionSize(int visual) const;
@@ -341,6 +361,7 @@ public:
     // other
     int viewSectionSizeHint(int logical) const;
     int adjustedVisualIndex(int visualIndex) const;
+    void setScrollOffset(const QScrollBar *scrollBar, QAbstractItemView::ScrollMode scrollMode);
 
 #ifndef QT_NO_DATASTREAM
     void write(QDataStream &out) const;

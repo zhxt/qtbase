@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -47,7 +47,7 @@ class WorkerThread : public QThread
     Q_OBJECT
     void run() Q_DECL_OVERRIDE {
         QString result;
-        /* expensive or blocking operation  */
+        /* ... here is the expensive or blocking operation ... */
         emit resultReady(result);
     }
 signals:
@@ -68,11 +68,11 @@ void MyObject::startWorkInAThread()
 class Worker : public QObject
 {
     Q_OBJECT
-    QThread workerThread;
 
 public slots:
     void doWork(const QString &parameter) {
-        // ...
+        QString result;
+        /* ... here is the expensive or blocking operation ... */
         emit resultReady(result);
     }
 
@@ -88,7 +88,7 @@ public:
     Controller() {
         Worker *worker = new Worker;
         worker->moveToThread(&workerThread);
-        connect(workerThread, &QThread::finished, worker, &QObject::deleteLater);
+        connect(&workerThread, &QThread::finished, worker, &QObject::deleteLater);
         connect(this, &Controller::operate, worker, &Worker::doWork);
         connect(worker, &Worker::resultReady, this, &Controller::handleResults);
         workerThread.start();

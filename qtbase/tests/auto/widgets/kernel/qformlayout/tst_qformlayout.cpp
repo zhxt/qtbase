@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +39,7 @@
 #include <qproxystyle.h>
 #include <qsizepolicy.h>
 
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
@@ -122,6 +115,7 @@ private slots:
     void itemAt();
     void takeAt();
     void layoutAlone();
+    void replaceWidget();
 /*
     void setGeometry(const QRect &rect);
     QSize minimumSize() const;
@@ -133,6 +127,8 @@ private slots:
 */
 
     void taskQTBUG_27420_takeAtShouldUnparentLayout();
+    void taskQTBUG_40609_addingWidgetToItsOwnLayout();
+    void taskQTBUG_40609_addingLayoutToItself();
 
 };
 
@@ -261,7 +257,7 @@ void tst_QFormLayout::wrapping()
 {
     QWidget *w = new QWidget;
     QFormLayout *fl = new QFormLayout(w);
-	fl->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    fl->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
     QLineEdit *le = new QLineEdit;
     QLabel *lbl = new QLabel("A long label");
@@ -345,6 +341,19 @@ void tst_QFormLayout::spacing()
     //QCOMPARE(fl->spacing(), -1);
     style->hspacing = 20;
     //QCOMPARE(fl->spacing(), 20);
+
+
+
+    // Do not assert if spacings are negative (QTBUG-34731)
+    style->vspacing = -1;
+    style->hspacing = -1;
+    QLabel *label = new QLabel(tr("Asserts"));
+    QCheckBox *checkBox = new QCheckBox(tr("Yes"));
+    fl->setWidget(0, QFormLayout::LabelRole, label);
+    fl->setWidget(1, QFormLayout::FieldRole, checkBox);
+    w->resize(200, 100);
+    w->show();
+    QVERIFY(QTest::qWaitForWindowExposed(w));
 
     delete w;
     delete style;
@@ -932,6 +941,76 @@ void tst_QFormLayout::taskQTBUG_27420_takeAtShouldUnparentLayout()
         delete item; // success: a taken item/layout should not be deleted when the old parent is deleted
     else
         QVERIFY(!inner.isNull());
+}
+
+void tst_QFormLayout::taskQTBUG_40609_addingWidgetToItsOwnLayout(){
+    QWidget widget;
+    widget.setObjectName("6435cbada60548b4522cbb6");
+    QFormLayout layout(&widget);
+    layout.setObjectName("c03c0e22c0b6d019a93a248");
+
+    QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add parent widget QWidget/6435cbada60548b4522cbb6 to its child layout QFormLayout/c03c0e22c0b6d019a93a248");
+    layout.addRow(QLatin1String("48c81f39b7320082f8"), &widget);
+    QCOMPARE(layout.count(), 0);
+}
+
+void tst_QFormLayout::taskQTBUG_40609_addingLayoutToItself(){
+    QWidget widget;
+    widget.setObjectName("2bc425637d084c07ce65956");
+    QFormLayout layout(&widget);
+    layout.setObjectName("60e31de0c8800eaba713a4f2");
+
+    QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add layout QFormLayout/60e31de0c8800eaba713a4f2 to itself");
+    layout.addRow(QLatin1String("9a2cd4f40c06b489f889"), &layout);
+    QCOMPARE(layout.count(), 0);
+}
+
+void tst_QFormLayout::replaceWidget()
+{
+    QWidget w;
+    QFormLayout *layout = new QFormLayout();
+    w.setLayout(layout);
+    QLineEdit *edit1 = new QLineEdit();
+    QLineEdit *edit2 = new QLineEdit();
+    QLineEdit *edit3 = new QLineEdit();
+    QLabel *label1 = new QLabel();
+    QLabel *label2 = new QLabel();
+
+    layout->addRow("Label", edit1);
+    layout->addRow(label1, edit2);
+
+    // Verify controls not in layout
+    QCOMPARE(layout->indexOf(edit3), -1);
+    QCOMPARE(layout->indexOf(label2), -1);
+
+    // Verify controls in layout
+    int editIndex = layout->indexOf(edit1);
+    int labelIndex = layout->indexOf(label1);
+    QVERIFY(editIndex > 0);
+    QVERIFY(labelIndex > 0);
+    int rownum;
+    QFormLayout::ItemRole role;
+
+    // replace editor
+    layout->replaceWidget(edit1, edit3);
+    edit1->hide(); // Not strictly needed for the test, but for normal usage it is.
+    QCOMPARE(layout->indexOf(edit1), -1);
+    QCOMPARE(layout->indexOf(edit3), editIndex);
+    QCOMPARE(layout->indexOf(label1), labelIndex);
+    rownum = -1;
+    role = QFormLayout::SpanningRole;
+    layout->getWidgetPosition(edit3, &rownum, &role);
+    QCOMPARE(rownum, 0);
+    QCOMPARE(role, QFormLayout::FieldRole);
+
+    layout->replaceWidget(label1, label2);
+    label1->hide();
+    QCOMPARE(layout->indexOf(label1), -1);
+    QCOMPARE(layout->indexOf(label2), labelIndex);
+    layout->getWidgetPosition(label2, &rownum, &role);
+    QCOMPARE(rownum, 1);
+    QCOMPARE(role, QFormLayout::LabelRole);
+
 }
 
 QTEST_MAIN(tst_QFormLayout)

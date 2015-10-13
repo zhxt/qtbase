@@ -3,9 +3,8 @@ CONFIG += parallel_test
 testcase.timeout = 300 # this test is slow
 
 SOURCES += tst_qsslsocket_onDemandCertificates_member.cpp
-!wince*:win32:LIBS += -lws2_32
-QT += core-private network-private testlib
-QT -= gui
+win32:!wince: LIBS += -lws2_32
+QT = core core-private network-private testlib
 
 TARGET = tst_qsslsocket_onDemandCertificates_member
 
@@ -24,4 +23,3 @@ wince* {
 }
 
 requires(contains(QT_CONFIG,private_tests))
-DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0

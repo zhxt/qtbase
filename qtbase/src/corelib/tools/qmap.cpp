@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -395,7 +387,7 @@ void QMapDataBase::freeData(QMapDataBase *d)
     differences are:
 
     \list
-    \li QHash provides faster lookups than QMap. (See \l{Algorithmic
+    \li QHash provides average faster lookups than QMap. (See \l{Algorithmic
        Complexity} for details.)
     \li When iterating over a QHash, the items are arbitrarily ordered.
        With QMap, the items are always sorted by key.
@@ -516,6 +508,15 @@ void QMapDataBase::freeData(QMapDataBase *d)
     \sa clear()
 */
 
+/*!
+    \fn QMap::QMap(QMap<Key, T> &&other)
+
+    Move-constructs a QMap instance, making it point at the same
+    object that \a other was pointing to.
+
+    \since 5.2
+*/
+
 /*! \fn QMap::QMap(const QMap<Key, T> &other)
 
     Constructs a copy of \a other.
@@ -567,6 +568,14 @@ void QMapDataBase::freeData(QMapDataBase *d)
     Assigns \a other to this map and returns a reference to this map.
 */
 
+/*!
+    \fn QMap<Key, T> &QMap::operator=(QMap<Key, T> &&other)
+
+    Move-assigns \a other to this QMap instance.
+
+    \since 5.2
+*/
+
 /*! \fn void QMap::swap(QMap<Key, T> &other)
     \since 4.8
 
@@ -583,7 +592,7 @@ void QMapDataBase::freeData(QMapDataBase *d)
 
 /*! \fn bool QMap::operator==(const QMap<Key, T> &other) const
 
-    Returns true if \a other is equal to this map; otherwise returns
+    Returns \c true if \a other is equal to this map; otherwise returns
     false.
 
     Two maps are considered equal if they contain the same (key,
@@ -597,8 +606,8 @@ void QMapDataBase::freeData(QMapDataBase *d)
 
 /*! \fn bool QMap::operator!=(const QMap<Key, T> &other) const
 
-    Returns true if \a other is not equal to this map; otherwise
-    returns false.
+    Returns \c true if \a other is not equal to this map; otherwise
+    returns \c false.
 
     Two maps are considered equal if they contain the same (key,
     value) pairs.
@@ -619,7 +628,7 @@ void QMapDataBase::freeData(QMapDataBase *d)
 /*!
     \fn bool QMap::isEmpty() const
 
-    Returns true if the map contains no items; otherwise returns
+    Returns \c true if the map contains no items; otherwise returns
     false.
 
     \sa size()
@@ -639,8 +648,8 @@ void QMapDataBase::freeData(QMapDataBase *d)
 
     \internal
 
-    Returns true if the map's internal data isn't shared with any
-    other map object; otherwise returns false.
+    Returns \c true if the map's internal data isn't shared with any
+    other map object; otherwise returns \c false.
 
     \sa detach()
 */
@@ -689,8 +698,8 @@ void QMapDataBase::freeData(QMapDataBase *d)
 
 /*! \fn bool QMap::contains(const Key &key) const
 
-    Returns true if the map contains an item with key \a key;
-    otherwise returns false.
+    Returns \c true if the map contains an item with key \a key;
+    otherwise returns \c false.
 
     \sa count(), QMultiMap::contains()
 */
@@ -879,6 +888,62 @@ void QMapDataBase::freeData(QMapDataBase *d)
     \sa constBegin(), end()
 */
 
+/*! \fn const Key &QMap::firstKey() const
+    \since 5.2
+
+    Returns a reference to the smallest key in the map.
+    This function assumes that the map is not empty.
+
+    This executes in \l{constant time}.
+
+    \sa lastKey(), first(), isEmpty()
+*/
+
+/*! \fn const Key &QMap::lastKey() const
+    \since 5.2
+
+    Returns a reference to the largest key in the map.
+    This function assumes that the map is not empty.
+
+    This executes in \l{logarithmic time}.
+
+    \sa firstKey(), last(), isEmpty()
+*/
+
+/*! \fn T &QMap::first()
+    \since 5.2
+
+    Returns a reference to the first value in the map, that is the value mapped
+    to the smallest key. This function assumes that the map is not empty.
+
+    When unshared (or const version is called), this executes in \l{constant time}.
+
+    \sa last(), firstKey(), isEmpty()
+*/
+
+/*! \fn const T &QMap::first() const
+    \since 5.2
+
+    \overload
+*/
+
+/*! \fn T &QMap::last()
+    \since 5.2
+
+    Returns a reference to the last value in the map, that is the value mapped
+    to the largest key. This function assumes that the map is not empty.
+
+    When unshared (or const version is called), this executes in \l{logarithmic time}.
+
+    \sa first(), lastKey(), isEmpty()
+*/
+
+/*! \fn const T &QMap::last() const
+    \since 5.2
+
+    \overload
+*/
+
 /*! \fn QMap::iterator QMap::erase(iterator pos)
 
     Removes the (key, value) pair pointed to by the iterator \a pos
@@ -998,8 +1063,11 @@ void QMapDataBase::freeData(QMapDataBase *d)
     If there are multiple items with the key \a key, then exactly one of them
     is replaced with \a value.
 
+    If the hint is correct and the map is unshared, the insert executes in amortized \l{constant time}.
+
     When creating a map from sorted data inserting the largest key first with constBegin()
-    is faster than inserting in sorted order with constEnd()
+    is faster than inserting in sorted order with constEnd(), since constEnd() - 1 (which is needed
+    to check if the hint is valid) needs \l{logarithmic time}.
 
     \b {Note:} Be careful with the hint. Providing an iterator from an older shared instance might
     crash but there is also a risk that it will silently corrupt both the map and the \a pos map.
@@ -1156,6 +1224,11 @@ void QMapDataBase::freeData(QMapDataBase *d)
     items from the map, iterators that point to the removed items
     will become dangling iterators.
 
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
     \sa QMap::const_iterator, QMutableMapIterator
 */
 
@@ -1244,8 +1317,8 @@ void QMapDataBase::freeData(QMapDataBase *d)
     \fn bool QMap::iterator::operator==(const iterator &other) const
     \fn bool QMap::iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same item as this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
@@ -1254,8 +1327,8 @@ void QMapDataBase::freeData(QMapDataBase *d)
     \fn bool QMap::iterator::operator!=(const iterator &other) const
     \fn bool QMap::iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different item than this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
 
     \sa operator==()
 */
@@ -1374,6 +1447,11 @@ void QMapDataBase::freeData(QMapDataBase *d)
     items from the map, iterators that point to the removed items
     will become dangling iterators.
 
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
     \sa QMap::iterator, QMapIterator
 */
 
@@ -1456,16 +1534,16 @@ void QMapDataBase::freeData(QMapDataBase *d)
 
 /*! \fn bool QMap::const_iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same item as this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
 
 /*! \fn bool QMap::const_iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different item than this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
 
     \sa operator==()
 */
@@ -1713,15 +1791,9 @@ void QMapDataBase::freeData(QMapDataBase *d)
     \fn bool QMultiMap::contains(const Key &key, const T &value) const
     \since 4.3
 
-    Returns true if the map contains an item with key \a key and
-    value \a value; otherwise returns false.
+    Returns \c true if the map contains an item with key \a key and
+    value \a value; otherwise returns \c false.
 
-    \sa QMap::contains()
-*/
-
-/*!
-    \fn bool QMultiMap::contains(const Key &key) const
-    \overload
     \sa QMap::contains()
 */
 
@@ -1736,29 +1808,11 @@ void QMapDataBase::freeData(QMapDataBase *d)
 */
 
 /*!
-    \fn int QMultiMap::remove(const Key &key)
-    \overload
-    \sa QMap::remove()
-*/
-
-/*!
     \fn int QMultiMap::count(const Key &key, const T &value) const
     \since 4.3
 
     Returns the number of items with key \a key and value \a value.
 
-    \sa QMap::count()
-*/
-
-/*!
-    \fn int QMultiMap::count(const Key &key) const
-    \overload
-    \sa QMap::count()
-*/
-
-/*!
-    \fn int QMultiMap::count() const
-    \overload
     \sa QMap::count()
 */
 
@@ -1775,12 +1829,6 @@ void QMapDataBase::freeData(QMapDataBase *d)
     function returns an iterator that points to the most recently
     inserted value.
 
-    \sa QMap::find()
-*/
-
-/*!
-    \fn typename QMap<Key, T>::iterator QMultiMap::find(const Key &key)
-    \overload
     \sa QMap::find()
 */
 
@@ -1802,13 +1850,6 @@ void QMapDataBase::freeData(QMapDataBase *d)
 */
 
 /*!
-    \fn typename QMap<Key, T>::const_iterator QMultiMap::find(const Key &key) const
-    \since 4.3
-    \overload
-    \sa QMap::find()
-*/
-
-/*!
     \fn typename QMap<Key, T>::const_iterator QMultiMap::constFind(const Key &key, const T &value) const
     \since 4.3
 
@@ -1818,12 +1859,6 @@ void QMapDataBase::freeData(QMapDataBase *d)
     If the map contains no such item, the function returns
     constEnd().
 
-    \sa QMap::constFind()
-*/
-
-/*!
-    \fn typename QMap<Key, T>::const_iterator QMultiMap::constFind(const Key &key) const
-    \overload
     \sa QMap::constFind()
 */
 

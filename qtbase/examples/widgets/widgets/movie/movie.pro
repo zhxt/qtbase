@@ -11,10 +11,8 @@ target.path = $$[QT_INSTALL_EXAMPLES]/widgets/widgets/movie
 INSTALLS += target
 
 
-wince*: {
+wince {
    addFiles.files += *.gif
    addFiles.path = .
    DEPLOYMENT += addFiles
 }
-
-simulator: warning(This example might not fully work on Simulator platform)

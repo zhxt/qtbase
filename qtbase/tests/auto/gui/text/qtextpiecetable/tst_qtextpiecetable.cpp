@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -158,12 +150,12 @@ void tst_QTextPieceTable::insertion3()
 {
     QString compare;
     for (int i = 0; i < 20000; ++i) {
-	int pos = rand() % (i+1);
-	QChar c((unsigned short)(i & 0xff) + 1);
-	QString str;
-	str += c;
-	table->insert(pos, str, charFormatIndex);
-	compare.insert(pos, str);
+        int pos = rand() % (i+1);
+        QChar c((unsigned short)(i & 0xff) + 1);
+        QString str;
+        str += c;
+        table->insert(pos, str, charFormatIndex);
+        compare.insert(pos, str);
     }
     QVERIFY(table->plainText() == compare);
 }
@@ -172,17 +164,17 @@ void tst_QTextPieceTable::insertion4()
 {
     QString compare;
     for (int i = 0; i < 20000; ++i) {
-	int pos = rand() % (i+1);
-	QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
-	QString str;
-	str += c;
-	str += c;
-	table->insert(pos, str, charFormatIndex);
-	compare.insert(pos, str);
-	// 	    if (table->text() != compare) {
-	// 		qDebug("compare failed: i=%d (current char=%c) insert at %d\nexpected '%s'\ngot      '%s'", i, (i % 26) + (i>25?'A':'a'), pos, compare.latin1(), table->text().latin1());
-	// 		exit(12);
-	// 	    }
+        int pos = rand() % (i+1);
+        QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
+        QString str;
+        str += c;
+        str += c;
+        table->insert(pos, str, charFormatIndex);
+        compare.insert(pos, str);
+//        if (table->text() != compare) {
+//            qDebug("compare failed: i=%d (current char=%c) insert at %d\nexpected '%s'\ngot      '%s'", i, (i % 26) + (i>25?'A':'a'), pos, compare.latin1(), table->text().latin1());
+//            exit(12);
+//        }
     }
     QVERIFY(table->plainText() == compare);
 }
@@ -191,23 +183,23 @@ void tst_QTextPieceTable::insertion5()
 {
     QString compare;
     for (int i = 0; i < 20000; ++i) {
-	int pos = rand() % (i+1);
-	QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
-	QString str;
-	str += c;
-	str += c;
-	if (c == 'a') {
-	    table->insertBlock(pos, blockFormatIndex, charFormatIndex);
-	    str = QChar(QChar::ParagraphSeparator);
-	} else {
-	    table->insert(pos, str, charFormatIndex);
-	}
-	compare.insert(pos, str);
+        int pos = rand() % (i+1);
+        QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
+        QString str;
+        str += c;
+        str += c;
+        if (c == 'a') {
+            table->insertBlock(pos, blockFormatIndex, charFormatIndex);
+            str = QChar(QChar::ParagraphSeparator);
+        } else {
+            table->insert(pos, str, charFormatIndex);
+        }
+        compare.insert(pos, str);
     }
     QVERIFY(table->plainText() == compare);
     for (QTextBlock it = table->blocksBegin(); it != table->blocksEnd(); it = it.next()) {
-	QTextDocumentPrivate::FragmentIterator fit = table->find(it.position());
-	QVERIFY(fit.position() == it.position());
+        QTextDocumentPrivate::FragmentIterator fit = table->find(it.position());
+        QVERIFY(fit.position() == it.position());
     }
 }
 
@@ -249,24 +241,24 @@ void tst_QTextPieceTable::removal3()
     QString compare;
     int l = 0;
     for (int i = 0; i < 20000; ++i) {
-	bool remove = l && (rand() % 2);
-	int pos = rand() % (remove ? l : (l+1));
-	QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
-	QString str;
-	str += c;
-	str += c;
-	if (remove && pos < table->length()) {
-	    compare.remove(pos, 1);
-	    table->remove(pos, 1);
-	} else {
-	    compare.insert(pos, str);
-	    table->insert(pos, str, charFormatIndex);
-	}
-	l += remove ? -1 : 2;
-	// 	    if (table->text() != compare) {
-	// 		qDebug("compare failed: i=%d (current char=%c) insert at %d\nexpected '%s'\ngot      '%s'", i, (i % 26) + (i>25?'A':'a'), pos, compare.latin1(), table->text().latin1());
-	// 		exit(12);
-	// 	    }
+        bool remove = l && (rand() % 2);
+        int pos = rand() % (remove ? l : (l+1));
+        QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
+        QString str;
+        str += c;
+        str += c;
+        if (remove && pos < table->length()) {
+            compare.remove(pos, 1);
+            table->remove(pos, 1);
+        } else {
+            compare.insert(pos, str);
+            table->insert(pos, str, charFormatIndex);
+        }
+        l += remove ? -1 : 2;
+//        if (table->text() != compare) {
+//            qDebug("compare failed: i=%d (current char=%c) insert at %d\nexpected '%s'\ngot      '%s'", i, (i % 26) + (i>25?'A':'a'), pos, compare.latin1(), table->text().latin1());
+//            exit(12);
+//        }
     }
     QVERIFY(table->plainText() == compare);
 }
@@ -276,31 +268,31 @@ void tst_QTextPieceTable::removal4()
     QString compare;
     int l = 0;
     for (int i = 0; i < 20000; ++i) {
-	bool remove = l && (rand() % 2);
-	int pos = (l > 1) ? rand() % (remove ? l-1 : l) : 0;
-	QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
-	QString str;
-	if (c != 'a') {
-	    str += c;
-	    str += c;
-	} else {
-	    str = QChar(QChar::ParagraphSeparator);
-	}
-	if (remove && pos < table->length() - 1) {
-	    compare.remove(pos, 1);
-	    table->remove(pos, 1);
-	} else {
-	    if (str[0] == QChar(QChar::ParagraphSeparator))
-		table->insertBlock(pos, blockFormatIndex, charFormatIndex);
-	    else
-		table->insert(pos, str, charFormatIndex);
-	    compare.insert(pos, str);
-	}
-	l += remove ? -1 : 2;
-// 	if (table->plainText() != compare) {
-// 	    qDebug("compare failed: i=%d (current char=%c) insert at %d\nexpected '%s'\ngot      '%s'", i, (i % 26) + (i>25?'A':'a'), pos, compare.latin1(), table->plainText().latin1());
-// 	    exit(12);
-// 	}
+        bool remove = l && (rand() % 2);
+        int pos = (l > 1) ? rand() % (remove ? l-1 : l) : 0;
+        QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
+        QString str;
+        if (c != 'a') {
+            str += c;
+            str += c;
+        } else {
+            str = QChar(QChar::ParagraphSeparator);
+        }
+        if (remove && pos < table->length() - 1) {
+            compare.remove(pos, 1);
+            table->remove(pos, 1);
+        } else {
+            if (str[0] == QChar(QChar::ParagraphSeparator))
+                table->insertBlock(pos, blockFormatIndex, charFormatIndex);
+            else
+                table->insert(pos, str, charFormatIndex);
+            compare.insert(pos, str);
+        }
+        l += remove ? -1 : 2;
+//        if (table->plainText() != compare) {
+//            qDebug("compare failed: i=%d (current char=%c) insert at %d\nexpected '%s'\ngot      '%s'", i, (i % 26) + (i>25?'A':'a'), pos, compare.latin1(), table->plainText().latin1());
+//            exit(12);
+//        }
     }
     QVERIFY(table->plainText() == compare);
 }
@@ -490,27 +482,27 @@ void tst_QTextPieceTable::undoRedo11()
     QString compare;
     int l = 0;
     for (int i = 0; i < loops; ++i) {
-	bool remove = l && (rand() % 2);
-	int pos = (l > 1) ? rand() % (remove ? l-1 : l) : 0;
-	QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
-	QString str;
-	str += c;
-	str += c;
-	if (remove) {
-	    compare.remove(pos, 1);
-	    table->remove(pos, 1);
-	} else {
-	    compare.insert(pos, str);
-	    table->insert(pos, str, charFormatIndex);
-	}
-	l += remove ? -1 : 2;
+        bool remove = l && (rand() % 2);
+        int pos = (l > 1) ? rand() % (remove ? l-1 : l) : 0;
+        QChar c((unsigned short)((i % 26) + (i>25?'A':'a')));
+        QString str;
+        str += c;
+        str += c;
+        if (remove) {
+            compare.remove(pos, 1);
+            table->remove(pos, 1);
+        } else {
+            compare.insert(pos, str);
+            table->insert(pos, str, charFormatIndex);
+        }
+        l += remove ? -1 : 2;
     }
     QVERIFY(table->plainText() == compare);
     for (int i = 0; i < loops; ++i)
-	table->undo();
+        table->undo();
     QVERIFY(table->plainText() == QString(""));
     for (int i = 0; i < loops; ++i)
-	table->redo();
+        table->redo();
     QVERIFY(table->plainText() == compare);
 }
 

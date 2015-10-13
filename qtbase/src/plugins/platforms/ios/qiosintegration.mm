@@ -1,90 +1,152 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qiosintegration.h"
+#include "qioseventdispatcher.h"
+#include "qiosglobal.h"
 #include "qioswindow.h"
 #include "qiosbackingstore.h"
 #include "qiosscreen.h"
-#include "qioseventdispatcher.h"
+#include "qiosplatformaccessibility.h"
 #include "qioscontext.h"
+#include "qiosclipboard.h"
 #include "qiosinputcontext.h"
 #include "qiostheme.h"
+#include "qiosservices.h"
+
+#include <QtGui/private/qguiapplication_p.h>
+
+#include <qoffscreensurface.h>
+#include <qpa/qplatformoffscreensurface.h>
 
 #include <QtPlatformSupport/private/qcoretextfontdatabase_p.h>
+#include <QtPlatformSupport/private/qmacmime_p.h>
+#include <QDir>
 
 #include <QtDebug>
 
 QT_BEGIN_NAMESPACE
 
+QIOSIntegration *QIOSIntegration::instance()
+{
+    return static_cast<QIOSIntegration *>(QGuiApplicationPrivate::platformIntegration());
+}
+
 QIOSIntegration::QIOSIntegration()
     : m_fontDatabase(new QCoreTextFontDatabase)
-    , m_inputContext(new QIOSInputContext)
-    , m_screen(new QIOSScreen(QIOSScreen::MainScreen))
+    , m_clipboard(new QIOSClipboard)
+    , m_inputContext(0)
+    , m_platformServices(new QIOSServices)
+    , m_accessibility(0)
+    , m_debugWindowManagement(false)
 {
     if (![UIApplication sharedApplication]) {
-        qWarning()
-            << "Error: You are creating QApplication before calling UIApplicationMain.\n"
-            << "If you are writing a native iOS application, and only want to use Qt for\n"
-            << "parts of the application, a good place to create QApplication is from within\n"
-            << "'applicationDidFinishLaunching' inside your UIApplication delegate.\n"
-            << "If you instead create a cross-platform Qt application and do not intend to call\n"
-            << "UIApplicationMain, you need to link in libqtmain.a, and substitute main with qt_main.\n"
-            << "This is normally done automatically by qmake.\n";
-        exit(-1);
+        qFatal("Error: You are creating QApplication before calling UIApplicationMain.\n" \
+               "If you are writing a native iOS application, and only want to use Qt for\n" \
+               "parts of the application, a good place to create QApplication is from within\n" \
+               "'applicationDidFinishLaunching' inside your UIApplication delegate.\n");
     }
 
-    screenAdded(m_screen);
+    // The backingstore needs a global share context in order to support composition in
+    // QPlatformBackingStore.
+    qApp->setAttribute(Qt::AA_ShareOpenGLContexts, true);
+    // And that context must match the format used for the backingstore's context.
+    QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
+    fmt.setDepthBufferSize(16);
+    fmt.setStencilBufferSize(8);
+    QSurfaceFormat::setDefaultFormat(fmt);
+
+    // Set current directory to app bundle folder
+    QDir::setCurrent(QString::fromUtf8([[[NSBundle mainBundle] bundlePath] UTF8String]));
+
+    NSMutableArray *screens = [[[UIScreen screens] mutableCopy] autorelease];
+    if (![screens containsObject:[UIScreen mainScreen]]) {
+        // Fallback for iOS 7.1 (QTBUG-42345)
+        [screens insertObject:[UIScreen mainScreen] atIndex:0];
+    }
+
+    for (UIScreen *screen in screens)
+        addScreen(new QIOSScreen(screen));
+
+    // Depends on a primary screen being present
+    m_inputContext = new QIOSInputContext;
 
     m_touchDevice = new QTouchDevice;
     m_touchDevice->setType(QTouchDevice::TouchScreen);
     m_touchDevice->setCapabilities(QTouchDevice::Position | QTouchDevice::NormalizedPosition);
     QWindowSystemInterface::registerTouchDevice(m_touchDevice);
+    QMacInternalPasteboardMime::initializeMimeTypes();
+}
+
+QIOSIntegration::~QIOSIntegration()
+{
+    delete m_fontDatabase;
+    m_fontDatabase = 0;
+
+    delete m_clipboard;
+    m_clipboard = 0;
+    QMacInternalPasteboardMime::destroyMimeTypes();
+
+    delete m_inputContext;
+    m_inputContext = 0;
+
+    foreach (QScreen *screen, QGuiApplication::screens())
+        destroyScreen(screen->handle());
+
+    delete m_platformServices;
+    m_platformServices = 0;
+
+    delete m_accessibility;
+    m_accessibility = 0;
 }
 
 bool QIOSIntegration::hasCapability(Capability cap) const
 {
     switch (cap) {
+    case BufferQueueingOpenGL:
+        return true;
     case OpenGL:
+    case ThreadedOpenGL:
+        return true;
+    case ThreadedPixmaps:
         return true;
     case MultipleWindows:
+        return true;
+    case WindowManagement:
+        return false;
+    case ApplicationState:
+        return true;
+    case RasterGLSurface:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
@@ -105,13 +167,33 @@ QPlatformBackingStore *QIOSIntegration::createPlatformBackingStore(QWindow *wind
 // Used when the QWindow's surface type is set by the client to QSurface::OpenGLSurface
 QPlatformOpenGLContext *QIOSIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
-    Q_UNUSED(context);
     return new QIOSContext(context);
 }
 
-QAbstractEventDispatcher *QIOSIntegration::guiThreadEventDispatcher() const
+class QIOSOffscreenSurface : public QPlatformOffscreenSurface
 {
-    return new QIOSEventDispatcher();
+public:
+    QIOSOffscreenSurface(QOffscreenSurface *offscreenSurface) : QPlatformOffscreenSurface(offscreenSurface) {}
+
+    QSurfaceFormat format() const Q_DECL_OVERRIDE
+    {
+        Q_ASSERT(offscreenSurface());
+        return offscreenSurface()->requestedFormat();
+    }
+    bool isValid() const Q_DECL_OVERRIDE { return true; }
+};
+
+QPlatformOffscreenSurface *QIOSIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
+{
+    return new QIOSOffscreenSurface(surface);
+}
+
+QAbstractEventDispatcher *QIOSIntegration::createEventDispatcher() const
+{
+    if (isQtApplication())
+        return new QIOSEventDispatcher;
+    else
+        return new QEventDispatcherCoreFoundation;
 }
 
 QPlatformFontDatabase * QIOSIntegration::fontDatabase() const
@@ -119,15 +201,27 @@ QPlatformFontDatabase * QIOSIntegration::fontDatabase() const
     return m_fontDatabase;
 }
 
+QPlatformClipboard *QIOSIntegration::clipboard() const
+{
+    return m_clipboard;
+}
+
 QPlatformInputContext *QIOSIntegration::inputContext() const
 {
     return m_inputContext;
 }
 
+QPlatformServices *QIOSIntegration::services() const
+{
+    return m_platformServices;
+}
+
 QVariant QIOSIntegration::styleHint(StyleHint hint) const
 {
     switch (hint) {
-    case ShowIsFullScreen:
+    case ShowIsMaximized:
+        return true;
+    case SetFocusOnTouchRelease:
         return true;
     default:
         return QPlatformIntegration::styleHint(hint);
@@ -147,10 +241,24 @@ QPlatformTheme *QIOSIntegration::createPlatformTheme(const QString &name) const
     return QPlatformIntegration::createPlatformTheme(name);
 }
 
+QTouchDevice *QIOSIntegration::touchDevice()
+{
+    return m_touchDevice;
+}
+
+QPlatformAccessibility *QIOSIntegration::accessibility() const
+{
+    if (!m_accessibility)
+        m_accessibility = new QIOSPlatformAccessibility;
+    return m_accessibility;
+}
+
 QPlatformNativeInterface *QIOSIntegration::nativeInterface() const
 {
     return const_cast<QIOSIntegration *>(this);
 }
+
+// ---------------------------------------------------------
 
 void *QIOSIntegration::nativeResourceForWindow(const QByteArray &resource, QWindow *window)
 {
@@ -167,9 +275,18 @@ void *QIOSIntegration::nativeResourceForWindow(const QByteArray &resource, QWind
     return 0;
 }
 
-QTouchDevice *QIOSIntegration::touchDevice()
+void QIOSIntegration::setDebugWindowManagement(bool enabled)
 {
-    return m_touchDevice;
+    m_debugWindowManagement = enabled;
 }
+
+bool QIOSIntegration::debugWindowManagement() const
+{
+    return m_debugWindowManagement;
+}
+
+// ---------------------------------------------------------
+
+#include "moc_qiosintegration.cpp"
 
 QT_END_NAMESPACE

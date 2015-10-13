@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -56,13 +48,16 @@
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
+#ifdef Q_OS_OSX
+#include <qpa/qplatformnativeinterface.h>
+#endif
 
 #include "qdebug.h"
 #include "private/qtabbar_p.h"
 
 #ifndef QT_NO_TABBAR
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 #include <private/qt_mac_p.h>
 #include <private/qt_cocoa_helpers_mac_p.h>
 #endif
@@ -80,35 +75,44 @@ inline static bool verticalTabs(QTabBar::Shape shape)
 
 void QTabBarPrivate::updateMacBorderMetrics()
 {
-#if defined(Q_WS_MAC)
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_5) {
-        Q_Q(QTabBar);
-        ::HIContentBorderMetrics metrics;
+#if defined(Q_OS_OSX)
+    Q_Q(QTabBar);
+    // Extend the unified title and toolbar area to cover the tab bar iff
+    // 1) the tab bar is in document mode
+    // 2) the tab bar is directly below an "unified" area.
+    // The extending itself is done in the Cocoa platform plugin and Mac style,
+    // this function registers geometry and visibility state for the tab bar.
 
-        // TODO: get metrics to preserve the bottom value
-        // TODO: test tab bar position
-
-        OSWindowRef window = qt_mac_window_for(q);
-
-        // push base line separator down to the client are so we can paint over it (Carbon)
-        metrics.top = (documentMode && q->isVisible()) ? 1 : 0;
-        metrics.bottom = 0;
-        metrics.left = 0;
-        metrics.right = 0;
-        qt_mac_updateContentBorderMetricts(window, metrics);
-        // In Cocoa we need to keep track of the drawRect method.
-        // If documentMode is enabled we need to change it, unless
-        // a toolbar is present.
-        // Notice that all the information is kept in the window,
-        // that's why we get the private widget for it instead of
-        // the private widget for this widget.
-        QWidgetPrivate *privateWidget = qt_widget_private(q->window());
-        if(privateWidget)
-            privateWidget->changeMethods = documentMode;
-        // Since in Cocoa there is no simple way to remove the baseline, so we just ask the
-        // top level to do the magic for us.
-        privateWidget->syncUnifiedMode();
+    // Calculate geometry
+    int upper, lower;
+    if (documentMode) {
+        QPoint windowPos = q->mapTo(q->window(), QPoint(0,0));
+        upper = windowPos.y();
+        int tabStripHeight = q->tabSizeHint(0).height();
+        int pixelTweak = -3;
+        lower = upper + tabStripHeight + pixelTweak;
+    } else {
+        upper = 0;
+        lower = 0;
     }
+
+    QPlatformNativeInterface *nativeInterface = QGuiApplication::platformNativeInterface();
+    quintptr identifier = reinterpret_cast<quintptr>(q);
+
+    // Set geometry
+    QPlatformNativeInterface::NativeResourceForIntegrationFunction function =
+        nativeInterface->nativeResourceFunctionForIntegration("registerContentBorderArea");
+    if (!function)
+        return; // Not Cocoa platform plugin.
+    typedef void (*RegisterContentBorderAreaFunction)(QWindow *window, quintptr identifier, int upper, int lower);
+    (reinterpret_cast<RegisterContentBorderAreaFunction>(function))(q->window()->windowHandle(), identifier, upper, lower);
+
+    // Set visibility state
+    function = nativeInterface->nativeResourceFunctionForIntegration("setContentBorderAreaEnabled");
+    if (!function)
+        return;
+    typedef void (*SetContentBorderAreaEnabledFunction)(QWindow *window, quintptr identifier, bool enable);
+    (reinterpret_cast<SetContentBorderAreaEnabledFunction>(function))(q->window()->windowHandle(), identifier, q->isVisible());
 #endif
 }
 
@@ -327,6 +331,26 @@ void QTabBar::initStyleOption(QStyleOptionTab *option, int tabIndex) const
     this signal is emitted from its tab bar.
 
     \sa moveTab()
+*/
+
+/*!
+    \fn void QTabBar::tabBarClicked(int index)
+
+    This signal is emitted when user clicks on a tab at an \a index.
+
+    \a index is the index of a clicked tab, or -1 if no tab is under the cursor.
+
+    \since 5.2
+*/
+
+/*!
+    \fn void QTabBar::tabBarDoubleClicked(int index)
+
+    This signal is emitted when the user double clicks on a tab at \a index.
+
+    \a index refers to the tab clicked, or -1 if no tab is under the cursor.
+
+    \since 5.2
 */
 
 int QTabBarPrivate::extraWidth() const
@@ -556,6 +580,16 @@ void QTabBarPrivate::makeVisible(int index)
     }
 }
 
+void QTabBarPrivate::killSwitchTabTimer()
+{
+    Q_Q(QTabBar);
+    if (switchTabTimerId) {
+        q->killTimer(switchTabTimerId);
+        switchTabTimerId = 0;
+    }
+    switchTabCurrentIndex = -1;
+}
+
 void QTabBarPrivate::layoutTab(int index)
 {
     Q_Q(QTabBar);
@@ -598,6 +632,14 @@ void QTabBarPrivate::layoutWidgets(int start)
     for (int i = start; i < q->count(); ++i) {
         layoutTab(i);
     }
+}
+
+void QTabBarPrivate::autoHideTabs()
+{
+    Q_Q(QTabBar);
+
+    if (autoHide)
+        q->setVisible(q->count() > 1);
 }
 
 void QTabBarPrivate::_q_closeTab()
@@ -829,6 +871,7 @@ int QTabBar::insertTab(int index, const QIcon& icon, const QString &text)
     }
 
     tabInserted(index);
+    d->autoHideTabs();
     return index;
 }
 
@@ -904,14 +947,15 @@ void QTabBar::removeTab(int index)
             setCurrentIndex(d->currentIndex - 1);
         }
         d->refresh();
+        d->autoHideTabs();
         tabRemoved(index);
     }
 }
 
 
 /*!
-    Returns true if the tab at position \a index is enabled; otherwise
-    returns false.
+    Returns \c true if the tab at position \a index is enabled; otherwise
+    returns \c false.
 */
 bool QTabBar::isTabEnabled(int index) const
 {
@@ -1476,6 +1520,35 @@ bool QTabBar::event(QEvent *event)
             }
         }
 #endif
+    } else if (event->type() == QEvent::MouseButtonDblClick) { // ### fixme Qt 6: move to mouseDoubleClickEvent(), here for BC reasons.
+        const QPoint pos = static_cast<const QMouseEvent *>(event)->pos();
+        const bool isEventInCornerButtons = (!d->leftB->isHidden() && d->leftB->geometry().contains(pos))
+                                            || (!d->rightB->isHidden() && d->rightB->geometry().contains(pos));
+        if (!isEventInCornerButtons)
+            emit tabBarDoubleClicked(tabAt(pos));
+    } else if (event->type() == QEvent::Move) {
+        d->updateMacBorderMetrics();
+        return QWidget::event(event);
+
+#ifndef QT_NO_DRAGANDDROP
+    } else if (event->type() == QEvent::DragEnter) {
+        if (d->changeCurrentOnDrag)
+            event->accept();
+    } else if (event->type() == QEvent::DragMove) {
+        if (d->changeCurrentOnDrag) {
+            const int tabIndex = tabAt(static_cast<QDragMoveEvent *>(event)->pos());
+            if (isTabEnabled(tabIndex) && d->switchTabCurrentIndex != tabIndex) {
+                d->switchTabCurrentIndex = tabIndex;
+                if (d->switchTabTimerId)
+                    killTimer(d->switchTabTimerId);
+                d->switchTabTimerId = startTimer(style()->styleHint(QStyle::SH_TabBar_ChangeCurrentDelay));
+            }
+            event->ignore();
+        }
+    } else if (event->type() == QEvent::DragLeave || event->type() == QEvent::Drop) {
+        d->killSwitchTabTimer();
+        event->ignore();
+#endif
     }
     return QWidget::event(event);
 }
@@ -1655,6 +1728,7 @@ void QTabBar::moveTab(int from, int to)
         d->tabList[i].lastTab = d->calculateNewPosition(from, to, d->tabList[i].lastTab);
 
     // update external variables
+    int previousIndex = d->currentIndex;
     d->currentIndex = d->calculateNewPosition(from, to, d->currentIndex);
 
     // If we are in the middle of a drag update the dragStartPosition
@@ -1673,6 +1747,8 @@ void QTabBar::moveTab(int from, int to)
     d->layoutWidgets(start);
     update();
     emit tabMoved(from, to);
+    if (previousIndex != d->currentIndex)
+        emit currentChanged(d->currentIndex);
     emit tabLayoutChange();
 }
 
@@ -1708,6 +1784,15 @@ void QTabBarPrivate::moveTab(int index, int offset)
 void QTabBar::mousePressEvent(QMouseEvent *event)
 {
     Q_D(QTabBar);
+
+    const QPoint pos = event->pos();
+    const bool isEventInCornerButtons = (!d->leftB->isHidden() && d->leftB->geometry().contains(pos))
+                                     || (!d->rightB->isHidden() && d->rightB->geometry().contains(pos));
+    if (!isEventInCornerButtons) {
+        const int index = d->indexAtPos(pos);
+        emit tabBarClicked(index);
+    }
+
     if (event->button() != Qt::LeftButton) {
         event->ignore();
         return;
@@ -1717,7 +1802,7 @@ void QTabBar::mousePressEvent(QMouseEvent *event)
         d->moveTabFinished(d->pressedIndex);
 
     d->pressedIndex = d->indexAtPos(event->pos());
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     d->previousPressedIndex = d->pressedIndex;
 #endif
     if (d->validIndex(d->pressedIndex)) {
@@ -1800,7 +1885,7 @@ void QTabBar::mouseMoveEvent(QMouseEvent *event)
 
             update();
         }
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     } else if (!d->documentMode && event->buttons() == Qt::LeftButton && d->previousPressedIndex != -1) {
         int newPressedIndex = d->indexAtPos(event->pos());
         if (d->pressedIndex == -1 && d->previousPressedIndex == newPressedIndex) {
@@ -1903,7 +1988,7 @@ void QTabBar::mouseReleaseEvent(QMouseEvent *event)
         event->ignore();
         return;
     }
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     d->previousPressedIndex = -1;
 #endif
     if (d->movable && d->dragInProgress && d->validIndex(d->pressedIndex)) {
@@ -1946,10 +2031,14 @@ void QTabBar::keyPressEvent(QKeyEvent *event)
 #ifndef QT_NO_WHEELEVENT
 void QTabBar::wheelEvent(QWheelEvent *event)
 {
+#ifndef Q_OS_MAC
     Q_D(QTabBar);
     int offset = event->delta() > 0 ? -1 : 1;
     d->setCurrentNextEnabledIndex(offset);
     QWidget::wheelEvent(event);
+#else
+    Q_UNUSED(event)
+#endif
 }
 #endif //QT_NO_WHEELEVENT
 
@@ -1979,6 +2068,21 @@ void QTabBar::changeEvent(QEvent *event)
         d->refresh();
     }
     QWidget::changeEvent(event);
+}
+
+/*!
+    \reimp
+*/
+void QTabBar::timerEvent(QTimerEvent *event)
+{
+    Q_D(QTabBar);
+    if (event->timerId() == d->switchTabTimerId) {
+        killTimer(d->switchTabTimerId);
+        d->switchTabTimerId = 0;
+        setCurrentIndex(d->switchTabCurrentIndex);
+        d->switchTabCurrentIndex = -1;
+    }
+    QWidget::timerEvent(event);
 }
 
 /*!
@@ -2173,7 +2277,7 @@ void QTabBar::setExpanding(bool enabled)
 
     \since 4.5
 
-    By default, this property is false;
+    By default, this property is \c false;
 */
 
 bool QTabBar::isMovable() const
@@ -2195,7 +2299,7 @@ void QTabBar::setMovable(bool movable)
     \since 4.5
 
     This property is used as a hint for styles to draw the tabs in a different
-    way then they would normally look in a tab widget.  On Mac OS X this will
+    way then they would normally look in a tab widget.  On OS X this will
     look similar to the tabs in Safari or Leopard's Terminal.app.
 
     \sa QTabWidget::documentMode
@@ -2211,6 +2315,62 @@ void QTabBar::setDocumentMode(bool enabled)
 
     d->documentMode = enabled;
     d->updateMacBorderMetrics();
+}
+
+/*!
+    \property QTabBar::autoHide
+    \brief If true, the tab bar is automatically hidden when it contains less
+    than 2 tabs.
+    \since 5.4
+
+    By default, this property is false.
+
+    \sa QWidget::visible
+*/
+
+bool QTabBar::autoHide() const
+{
+    Q_D(const QTabBar);
+    return d->autoHide;
+}
+
+void QTabBar::setAutoHide(bool hide)
+{
+    Q_D(QTabBar);
+    if (d->autoHide == hide)
+        return;
+
+    d->autoHide = hide;
+    if (hide)
+        d->autoHideTabs();
+    else
+        setVisible(true);
+}
+
+/*!
+    \property QTabBar::changeCurrentOnDrag
+    \brief If true, then the current tab is automatically changed when dragging
+    over the tabbar.
+    \since 5.4
+
+    \note You should also set acceptDrops property to true to make this feature
+    work.
+
+    By default, this property is false.
+*/
+
+bool QTabBar::changeCurrentOnDrag() const
+{
+    Q_D(const QTabBar);
+    return d->changeCurrentOnDrag;
+}
+
+void QTabBar::setChangeCurrentOnDrag(bool change)
+{
+    Q_D(QTabBar);
+    d->changeCurrentOnDrag = change;
+    if (!change)
+        d->killSwitchTabTimer();
 }
 
 /*!
@@ -2324,8 +2484,22 @@ void CloseButton::paintEvent(QPaintEvent *)
     style()->drawPrimitive(QStyle::PE_IndicatorTabClose, &opt, &p, this);
 }
 
+#ifndef QT_NO_ANIMATION
+void QTabBarPrivate::Tab::TabBarAnimation::updateCurrentValue(const QVariant &current)
+{
+    priv->moveTab(priv->tabList.indexOf(*tab), current.toInt());
+}
+
+void QTabBarPrivate::Tab::TabBarAnimation::updateState(QAbstractAnimation::State, QAbstractAnimation::State newState)
+{
+    if (newState == Stopped) priv->moveTabFinished(priv->tabList.indexOf(*tab));
+}
+#endif
+
 QT_END_NAMESPACE
 
 #include "moc_qtabbar.cpp"
 
 #endif // QT_NO_TABBAR
+
+

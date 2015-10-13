@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -90,18 +82,18 @@ public:
     explicit QHttpNetworkReply(const QUrl &url = QUrl(), QObject *parent = 0);
     virtual ~QHttpNetworkReply();
 
-    QUrl url() const;
-    void setUrl(const QUrl &url);
+    QUrl url() const Q_DECL_OVERRIDE;
+    void setUrl(const QUrl &url) Q_DECL_OVERRIDE;
 
-    int majorVersion() const;
-    int minorVersion() const;
+    int majorVersion() const Q_DECL_OVERRIDE;
+    int minorVersion() const Q_DECL_OVERRIDE;
 
-    qint64 contentLength() const;
-    void setContentLength(qint64 length);
+    qint64 contentLength() const Q_DECL_OVERRIDE;
+    void setContentLength(qint64 length) Q_DECL_OVERRIDE;
 
-    QList<QPair<QByteArray, QByteArray> > header() const;
-    QByteArray headerField(const QByteArray &name, const QByteArray &defaultValue = QByteArray()) const;
-    void setHeaderField(const QByteArray &name, const QByteArray &data);
+    QList<QPair<QByteArray, QByteArray> > header() const Q_DECL_OVERRIDE;
+    QByteArray headerField(const QByteArray &name, const QByteArray &defaultValue = QByteArray()) const Q_DECL_OVERRIDE;
+    void setHeaderField(const QByteArray &name, const QByteArray &data) Q_DECL_OVERRIDE;
     void parseHeader(const QByteArray &header); // mainly for testing
 
     QHttpNetworkRequest request() const;
@@ -129,9 +121,14 @@ public:
     void setUserProvidedDownloadBuffer(char*);
     char* userProvidedDownloadBuffer();
 
+    void abort();
+
+    bool isAborted() const;
     bool isFinished() const;
 
     bool isPipeliningUsed() const;
+    bool isSpdyUsed() const;
+    void setSpdyWasUsed(bool spdy);
 
     QHttpNetworkConnection* connection();
 
@@ -144,6 +141,7 @@ public:
 Q_SIGNALS:
     void encrypted();
     void sslErrors(const QList<QSslError> &errors);
+    void preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator *authenticator);
 #endif
 
 Q_SIGNALS:
@@ -164,6 +162,8 @@ private:
     friend class QHttpNetworkConnection;
     friend class QHttpNetworkConnectionPrivate;
     friend class QHttpNetworkConnectionChannel;
+    friend class QHttpProtocolHandler;
+    friend class QSpdyProtocolHandler;
 };
 
 
@@ -204,7 +204,12 @@ public:
         ReadingStatusState,
         ReadingHeaderState,
         ReadingDataState,
-        AllDoneState
+        AllDoneState,
+        SPDYSYNSent,
+        SPDYUploading,
+        SPDYHalfClosed,
+        SPDYClosed,
+        Aborted
     } state;
 
     QHttpNetworkRequest request;
@@ -225,6 +230,11 @@ public:
     qint64 currentChunkSize;
     qint64 currentChunkRead;
     qint64 readBufferMaxSize;
+    qint32 windowSizeDownload; // only for SPDY
+    qint32 windowSizeUpload; // only for SPDY
+    qint32 currentlyReceivedDataInWindow; // only for SPDY
+    qint32 currentlyUploadedDataInWindow; // only for SPDY
+    qint64 totallyUploadedData; // only for SPDY
     QPointer<QHttpNetworkConnection> connection;
     QPointer<QHttpNetworkConnectionChannel> connectionChannel;
 
@@ -235,12 +245,14 @@ public:
     bool requestIsPrepared;
 
     bool pipeliningUsed;
+    bool spdyUsed;
     bool downstreamLimited;
 
     char* userProvidedDownloadBuffer;
 
 #ifndef QT_NO_COMPRESS
     z_stream_s *inflateStrm;
+    int initializeInflateStream();
     qint64 uncompressBodyData(QByteDataBuffer *in, QByteDataBuffer *out);
 #endif
 };

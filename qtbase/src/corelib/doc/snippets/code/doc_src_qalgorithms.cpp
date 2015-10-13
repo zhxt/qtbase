@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -274,9 +274,9 @@ list.insert(i, 12);
 QVector<int> vect;
 vect << 3 << 3 << 6 << 6 << 6 << 8;
 QVector<int>::iterator begin6 =
-	qLowerBound(vect.begin(), vect.end(), 6);
+        qLowerBound(vect.begin(), vect.end(), 6);
 QVector<int>::iterator end6 =
-	qUpperBound(begin6, vect.end(), 6);
+        qUpperBound(begin6, vect.end(), 6);
 
 QVector<int>::iterator i = begin6;
 while (i != end6) {
@@ -305,9 +305,9 @@ list.insert(i, 12);
 QVector<int> vect;
 vect << 3 << 3 << 6 << 6 << 6 << 8;
 QVector<int>::iterator begin6 =
-	qLowerBound(vect.begin(), vect.end(), 6);
+        qLowerBound(vect.begin(), vect.end(), 6);
 QVector<int>::iterator end6 =
-	qUpperBound(vect.begin(), vect.end(), 6);
+        qUpperBound(vect.begin(), vect.end(), 6);
 
 QVector<int>::iterator i = begin6;
 while (i != end6) {
@@ -323,7 +323,7 @@ QVector<int> vect;
 vect << 3 << 3 << 6 << 6 << 6 << 8;
 
 QVector<int>::iterator i =
-	qBinaryFind(vect.begin(), vect.end(), 6);
+        qBinaryFind(vect.begin(), vect.end(), 6);
 // i == vect.begin() + 2 (or 3 or 4)
 //! [22]
 

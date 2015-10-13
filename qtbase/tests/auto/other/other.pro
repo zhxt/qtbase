@@ -1,13 +1,8 @@
 TEMPLATE=subdirs
 SUBDIRS=\
    # atwrapper \ # QTBUG-19452
-   baselineexample \
-   collections \
    compiler \
-   exceptionsafety \
-   # exceptionsafety_objects \    # QObjectPrivate is not safe
    gestures \
-   headersclean \
    lancelot \
    languagechange \
    macgui \
@@ -16,41 +11,38 @@ SUBDIRS=\
    modeltest \
    networkselftest \
    qaccessibility \
-   qaccessibilitylinux \
+   # qaccessibilitylinux \ # QTBUG-44434
+   qaccessibilitymac \
    qcomplextext \
    qfocusevent \
    qnetworkaccessmanager_and_qprogressdialog \
    qobjectperformance \
    qobjectrace \
    qsharedpointer_and_qwidget \
+   qprocess_and_guieventloop \
    qtokenautomaton \
    windowsmobile \
+   toolsupport \
 
 !qtHaveModule(widgets): SUBDIRS -= \
-   baselineexample \
    gestures \
-   headersclean \
    lancelot \
    languagechange \
    modeltest \
    qaccessibility \
-   qcomplextext \
    qfocusevent \
    qnetworkaccessmanager_and_qprogressdialog \
    qsharedpointer_and_qwidget \
    windowsmobile \
    qaccessibility \
    qaccessibilitylinux \
+   qaccessibilitymac \
 
 !qtHaveModule(network): SUBDIRS -= \
-   baselineexample \
-   headersclean \
    lancelot \
    networkselftest \
    qnetworkaccessmanager_and_qprogressdialog \
    qobjectperformance
-
-testcocoon: SUBDIRS -= headersclean
 
 cross_compile: SUBDIRS -= \
    atwrapper \
@@ -63,9 +55,14 @@ wince*|!contains(QT_CONFIG, accessibility): SUBDIRS -= qaccessibility
 !mac: SUBDIRS -= \
            macgui \
            macnativeevents \
-           macplist
+           macplist \
+           qaccessibilitymac
 
-!embedded|wince*: SUBDIRS -= \
+!embedded|wince: SUBDIRS -= \
            qdirectpainter
 
-!linux*-g++*:SUBDIRS -= exceptionsafety_objects
+winrt: SUBDIRS -= \
+   qprocess_and_guieventloop
+
+android: SUBDIRS += \
+    android

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,7 @@ QT_BEGIN_NAMESPACE
     \class QJsonValue
     \inmodule QtCore
     \ingroup json
+    \ingroup shared
     \reentrant
     \since 5.0
 
@@ -81,6 +74,22 @@ QT_BEGIN_NAMESPACE
     Values are strictly typed internally and contrary to QVariant will not attempt to do any implicit type
     conversions. This implies that converting to a type that is not stored in the value will return a default
     constructed return value.
+
+    \section1 QJsonValueRef
+
+    QJsonValueRef is a helper class for QJsonArray and QJsonObject.
+    When you get an object of type QJsonValueRef, you can
+    use it as if it were a reference to a QJsonValue. If you assign to it,
+    the assignment will apply to the element in the QJsonArray or QJsonObject
+    from which you got the reference.
+
+    The following methods return QJsonValueRef:
+    \list
+    \li \l {QJsonArray}::operator[](int i)
+    \li \l {QJsonObject}::operator[](const QString & key) const
+    \endlist
+
+    \sa {JSON Support in Qt}, {JSON Save Game Example}
 */
 
 /*!
@@ -156,12 +165,41 @@ QJsonValue::QJsonValue(int n)
 }
 
 /*!
+    \overload
+    Creates a value of type Double, with value \a n.
+    NOTE: the integer limits for IEEE 754 double precision data is 2^53 (-9007199254740992 to +9007199254740992).
+    If you pass in values outside this range expect a loss of precision to occur.
+ */
+QJsonValue::QJsonValue(qint64 n)
+    : d(0), t(Double)
+{
+    this->dbl = n;
+}
+
+/*!
     Creates a value of type String, with value \a s.
  */
 QJsonValue::QJsonValue(const QString &s)
     : d(0), t(String)
 {
-    stringData = *(QStringData **)(&s);
+    stringDataFromQStringHelper(s);
+}
+
+/*!
+    \fn QJsonValue::QJsonValue(const char *s)
+
+    Creates a value of type String with value \a s, assuming
+    UTF-8 encoding of the input.
+
+    You can disable this constructor by defining \c
+    QT_NO_CAST_FROM_ASCII when you compile your applications.
+
+    \since 5.3
+ */
+
+void QJsonValue::stringDataFromQStringHelper(const QString &string)
+{
+    stringData = *(QStringData **)(&string);
     stringData->ref.ref();
 }
 
@@ -173,8 +211,7 @@ QJsonValue::QJsonValue(QLatin1String s)
 {
     // ### FIXME: Avoid creating the temp QString below
     QString str(s);
-    stringData = *(QStringData **)(&str);
-    stringData->ref.ref();
+    stringDataFromQStringHelper(str);
 }
 
 /*!
@@ -257,13 +294,13 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 /*!
     \fn bool QJsonValue::isNull() const
 
-    Returns true if the value is null.
+    Returns \c true if the value is null.
 */
 
 /*!
     \fn bool QJsonValue::isBool() const
 
-    Returns true if the value contains a boolean.
+    Returns \c true if the value contains a boolean.
 
     \sa toBool()
  */
@@ -271,7 +308,7 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 /*!
     \fn bool QJsonValue::isDouble() const
 
-    Returns true if the value contains a double.
+    Returns \c true if the value contains a double.
 
     \sa toDouble()
  */
@@ -279,7 +316,7 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 /*!
     \fn bool QJsonValue::isString() const
 
-    Returns true if the value contains a string.
+    Returns \c true if the value contains a string.
 
     \sa toString()
  */
@@ -287,7 +324,7 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 /*!
     \fn bool QJsonValue::isArray() const
 
-    Returns true if the value contains an array.
+    Returns \c true if the value contains an array.
 
     \sa toArray()
  */
@@ -295,7 +332,7 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 /*!
     \fn bool QJsonValue::isObject() const
 
-    Returns true if the value contains an object.
+    Returns \c true if the value contains an object.
 
     \sa toObject()
  */
@@ -303,7 +340,7 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 /*!
     \fn bool QJsonValue::isUndefined() const
 
-    Returns true if the value is undefined. This can happen in certain
+    Returns \c true if the value is undefined. This can happen in certain
     error cases as e.g. accessing a non existing key in a QJsonObject.
  */
 
@@ -313,18 +350,48 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 
     The conversion will convert QVariant types as follows:
 
-    \list
-    \li QVariant::Bool to Bool
-    \li QVariant::Int
-    \li QVariant::Double
-    \li QVariant::LongLong
-    \li QVariant::ULongLong
-    \li QVariant::UInt to Double
-    \li QVariant::String to String
-    \li QVariant::StringList
-    \li QVariant::VariantList to Array
-    \li QVariant::VariantMap to Object
-    \endlist
+    \table
+    \header
+        \li Source type
+        \li Destination type
+    \row
+        \li
+            \list
+                \li QMetaType::Bool
+            \endlist
+        \li QJsonValue::Bool
+    \row
+        \li
+            \list
+                \li QMetaType::Int
+                \li QMetaType::UInt
+                \li QMetaType::LongLong
+                \li QMetaType::ULongLong
+                \li QMetaType::Float
+                \li QMetaType::Double
+            \endlist
+        \li QJsonValue::Double
+    \row
+        \li
+            \list
+                \li QMetaType::QString
+            \endlist
+        \li QJsonValue::String
+    \row
+        \li
+            \list
+                \li QMetaType::QStringList
+                \li QMetaType::QVariantList
+            \endlist
+        \li QJsonValue::Array
+    \row
+        \li
+            \list
+                \li QMetaType::QVariantMap
+                \li QMetaType::QVariantHash
+            \endlist
+        \li QJsonValue::Object
+    \endtable
 
     For all other QVariant types a conversion to a QString will be attempted. If the returned string
     is empty, a Null QJsonValue will be stored, otherwise a String value using the returned QString.
@@ -333,10 +400,11 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
  */
 QJsonValue QJsonValue::fromVariant(const QVariant &variant)
 {
-    switch (variant.type()) {
+    switch (variant.userType()) {
     case QVariant::Bool:
         return QJsonValue(variant.toBool());
     case QVariant::Int:
+    case QMetaType::Float:
     case QVariant::Double:
     case QVariant::LongLong:
     case QVariant::ULongLong:
@@ -350,6 +418,8 @@ QJsonValue QJsonValue::fromVariant(const QVariant &variant)
         return QJsonValue(QJsonArray::fromVariantList(variant.toList()));
     case QVariant::Map:
         return QJsonValue(QJsonObject::fromVariantMap(variant.toMap()));
+    case QVariant::Hash:
+        return QJsonValue(QJsonObject::fromVariantHash(variant.toHash()));
     default:
         break;
     }
@@ -360,17 +430,17 @@ QJsonValue QJsonValue::fromVariant(const QVariant &variant)
 }
 
 /*!
-    Converts the value to a QVariant.
+    Converts the value to a \l {QVariant::}{QVariant()}.
 
     The QJsonValue types will be converted as follows:
 
-    \value Null     QVariant()
-    \value Bool     QVariant::Bool
-    \value Double   QVariant::Double
-    \value String   QVariant::String
+    \value Null     \l {QVariant::}{QVariant()}
+    \value Bool     QMetaType::Bool
+    \value Double   QMetaType::Double
+    \value String   QString
     \value Array    QVariantList
     \value Object   QVariantMap
-    \value Undefined QVariant()
+    \value Undefined \l {QVariant::}{QVariant()}
 
     \sa fromVariant()
  */
@@ -384,9 +454,13 @@ QVariant QJsonValue::toVariant() const
     case String:
         return toString();
     case Array:
-        return QJsonArray(d, static_cast<QJsonPrivate::Array *>(base)).toVariantList();
+        return d ?
+               QJsonArray(d, static_cast<QJsonPrivate::Array *>(base)).toVariantList() :
+               QVariantList();
     case Object:
-        return QJsonObject(d, static_cast<QJsonPrivate::Object *>(base)).toVariantMap();
+        return d ?
+               QJsonObject(d, static_cast<QJsonPrivate::Object *>(base)).toVariantMap() :
+               QVariantMap();
     case Null:
     case Undefined:
         break;
@@ -433,6 +507,19 @@ bool QJsonValue::toBool(bool defaultValue) const
 }
 
 /*!
+    Converts the value to an int and returns it.
+
+    If type() is not Double or the value is not a whole number,
+    the \a defaultValue will be returned.
+ */
+int QJsonValue::toInt(int defaultValue) const
+{
+    if (t == Double && int(dbl) == dbl)
+        return dbl;
+    return defaultValue;
+}
+
+/*!
     Converts the value to a double and returns it.
 
     If type() is not Double, the \a defaultValue will be returned.
@@ -476,7 +563,7 @@ QJsonArray QJsonValue::toArray(const QJsonArray &defaultValue) const
 
     Converts the value to an array and returns it.
 
-    If type() is not Array, a QJsonArray() will be returned.
+    If type() is not Array, a \l{QJsonArray::}{QJsonArray()} will be returned.
  */
 QJsonArray QJsonValue::toArray() const
 {
@@ -501,15 +588,15 @@ QJsonObject QJsonValue::toObject(const QJsonObject &defaultValue) const
 
     Converts the value to an object and returns it.
 
-    If type() is not Object, the QJsonObject() will be returned.
- */
+    If type() is not Object, the \l {QJsonObject::}{QJsonObject()} will be returned.
+*/
 QJsonObject QJsonValue::toObject() const
 {
     return toObject(QJsonObject());
 }
 
 /*!
-    Returns true if the value is equal to \a other.
+    Returns \c true if the value is equal to \a other.
  */
 bool QJsonValue::operator==(const QJsonValue &other) const
 {
@@ -529,15 +616,19 @@ bool QJsonValue::operator==(const QJsonValue &other) const
     case Array:
         if (base == other.base)
             return true;
-        if (!base || !other.base)
-            return false;
+        if (!base)
+            return !other.base->length;
+        if (!other.base)
+            return !base->length;
         return QJsonArray(d, static_cast<QJsonPrivate::Array *>(base))
                 == QJsonArray(other.d, static_cast<QJsonPrivate::Array *>(other.base));
     case Object:
         if (base == other.base)
             return true;
-        if (!base || !other.base)
-            return false;
+        if (!base)
+            return !other.base->length;
+        if (!other.base)
+            return !base->length;
         return QJsonObject(d, static_cast<QJsonPrivate::Object *>(base))
                 == QJsonObject(other.d, static_cast<QJsonPrivate::Object *>(other.base));
     }
@@ -545,7 +636,7 @@ bool QJsonValue::operator==(const QJsonValue &other) const
 }
 
 /*!
-    Returns true if the value is not equal to \a other.
+    Returns \c true if the value is not equal to \a other.
  */
 bool QJsonValue::operator!=(const QJsonValue &other) const
 {
@@ -613,6 +704,11 @@ QJsonValueRef &QJsonValueRef::operator =(const QJsonValueRef &ref)
     return *this;
 }
 
+QVariant QJsonValueRef::toVariant() const
+{
+    return toValue().toVariant();
+}
+
 QJsonArray QJsonValueRef::toArray() const
 {
     return toValue().toArray();
@@ -630,15 +726,16 @@ QJsonValue QJsonValueRef::toValue() const
     return o->valueAt(index);
 }
 
-#ifndef QT_NO_DEBUG_STREAM
+#if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_JSON_READONLY)
 QDebug operator<<(QDebug dbg, const QJsonValue &o)
 {
+    QDebugStateSaver saver(dbg);
     switch (o.t) {
     case QJsonValue::Undefined:
-        dbg.nospace() << "QJsonValue(undefined)";
+        dbg << "QJsonValue(undefined)";
         break;
     case QJsonValue::Null:
-        dbg.nospace() << "QJsonValue(null)";
+        dbg << "QJsonValue(null)";
         break;
     case QJsonValue::Bool:
         dbg.nospace() << "QJsonValue(bool, " << o.toBool() << ")";
@@ -651,16 +748,16 @@ QDebug operator<<(QDebug dbg, const QJsonValue &o)
         break;
     case QJsonValue::Array:
         dbg.nospace() << "QJsonValue(array, ";
-        dbg.nospace() << o.toArray();
-        dbg.nospace() << ")";
+        dbg << o.toArray();
+        dbg << ")";
         break;
     case QJsonValue::Object:
         dbg.nospace() << "QJsonValue(object, ";
-        dbg.nospace() << o.toObject();
-        dbg.nospace() << ")";
+        dbg << o.toObject();
+        dbg << ")";
         break;
     }
-    return dbg.space();
+    return dbg;
 }
 #endif
 

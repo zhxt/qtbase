@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -233,8 +225,8 @@ private:
 class QFtpCommand
 {
 public:
-    QFtpCommand(QFtp::Command cmd, QStringList raw, const QByteArray &ba);
-    QFtpCommand(QFtp::Command cmd, QStringList raw, QIODevice *dev = 0);
+    QFtpCommand(QFtp::Command cmd, const QStringList &raw, const QByteArray &ba);
+    QFtpCommand(QFtp::Command cmd, const QStringList &raw, QIODevice *dev = 0);
     ~QFtpCommand();
 
     int id;
@@ -254,14 +246,14 @@ public:
 
 QBasicAtomicInt QFtpCommand::idCounter = Q_BASIC_ATOMIC_INITIALIZER(1);
 
-QFtpCommand::QFtpCommand(QFtp::Command cmd, QStringList raw, const QByteArray &ba)
+QFtpCommand::QFtpCommand(QFtp::Command cmd, const QStringList &raw, const QByteArray &ba)
     : command(cmd), rawCmds(raw), is_ba(true)
 {
     id = idCounter.fetchAndAddRelaxed(1);
     data.ba = new QByteArray(ba);
 }
 
-QFtpCommand::QFtpCommand(QFtp::Command cmd, QStringList raw, QIODevice *dev)
+QFtpCommand::QFtpCommand(QFtp::Command cmd, const QStringList &raw, QIODevice *dev)
     : command(cmd), rawCmds(raw), is_ba(false)
 {
     id = idCounter.fetchAndAddRelaxed(1);
@@ -744,7 +736,10 @@ void QFtpDTP::socketConnectionClosed()
         clearData();
     }
 
-    bytesFromSocket = socket->readAll();
+    if (socket->isOpen())
+        bytesFromSocket = socket->readAll();
+    else
+        bytesFromSocket.clear();
 #if defined(QFTPDTP_DEBUG)
     qDebug("QFtpDTP::connectState(CsClosed)");
 #endif
@@ -831,8 +826,8 @@ void QFtpPI::connectToHost(const QString &host, quint16 port)
   are all done the finished() signal is emitted. When an error occurs, the
   error() signal is emitted.
 
-  If there are pending commands in the queue this functions returns false and
-  the \a cmds are not added to the queue; otherwise it returns true.
+  If there are pending commands in the queue this functions returns \c false and
+  the \a cmds are not added to the queue; otherwise it returns \c true.
 */
 bool QFtpPI::sendCommands(const QStringList &cmds)
 {
@@ -987,7 +982,7 @@ void QFtpPI::readyRead()
 
   Process a reply from the FTP server.
 
-  Returns true if the reply was processed or false if the reply has to be
+  Returns \c true if the reply was processed or false if the reply has to be
   processed at a later point.
 */
 bool QFtpPI::processReply()
@@ -1042,18 +1037,10 @@ bool QFtpPI::processReply()
             if (static_cast<signed char>(replyCode[0]) < 0 || replyCode[0] > 5)
                 state = Failure;
             else
-#if defined(Q_OS_IRIX) && defined(Q_CC_GNU)
-            {
-                // work around a crash on 64 bit gcc IRIX
-                State *t = (State *) table;
-                state = t[replyCode[0] - 1];
-            }
-#else
             if (replyCodeInt == 202)
                 state = Failure;
             else
                 state = table[replyCode[0] - 1];
-#endif
             break;
         default:
             // ignore unrequested message
@@ -1167,8 +1154,8 @@ bool QFtpPI::processReply()
 /*
   \internal
 
-  Starts next pending command. Returns false if there are no pending commands,
-  otherwise it returns true.
+  Starts next pending command. Returns \c false if there are no pending commands,
+  otherwise it returns \c true.
 */
 bool QFtpPI::startNextCmd()
 {
@@ -2172,8 +2159,8 @@ QIODevice* QFtp::currentDevice() const
 
 /*!
     \internal
-    Returns true if there are any commands scheduled that have not yet
-    been executed; otherwise returns false.
+    Returns \c true if there are any commands scheduled that have not yet
+    been executed; otherwise returns \c false.
 
     The command that is being executed is \e not considered as a
     scheduled command.

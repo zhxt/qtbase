@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -88,6 +80,14 @@ static void qt_palette_from_color(QPalette &pal, const QColor &button)
                       buttonBrushDark, buttonBrushDark150, buttonBrushDark,
                       whiteBrush, buttonBrush, buttonBrush);
 }
+
+/*!
+    \fn QPalette &QPalette::operator=(QPalette &&other)
+
+    Move-assigns \a other to this QPalette instance.
+
+    \since 5.2
+*/
 
 /*!
    \fn const QColor &QPalette::color(ColorRole role) const
@@ -382,7 +382,7 @@ static void qt_palette_from_color(QPalette &pal, const QColor &button)
 
     \warning Some styles do not use the palette for all drawing, for
     instance, if they make use of native theme engines. This is the
-    case for both the Windows XP, Windows Vista, and the Mac OS X
+    case for both the Windows XP, Windows Vista, and the OS X
     styles.
 
     \sa QApplication::setPalette(), QWidget::setPalette(), QColor
@@ -635,11 +635,22 @@ QPalette::QPalette(const QPalette &p)
 }
 
 /*!
+    \fn QPalette::QPalette(QPalette &&other)
+    \since 5.4
+
+    Move-constructs a QPalette instance, making it point at the same
+    object that \a other was pointing to.
+
+    After being moved from, you can only assign to or destroy \a other.
+    Any other operation will result in undefined behavior.
+*/
+
+/*!
     Destroys the palette.
 */
 QPalette::~QPalette()
 {
-    if(!d->ref.deref())
+    if (d && !d->ref.deref())
         delete d;
 }
 
@@ -660,7 +671,7 @@ QPalette &QPalette::operator=(const QPalette &p)
 {
     p.d->ref.ref();
     data = p.data;
-    if(!d->ref.deref())
+    if (d && !d->ref.deref())
         delete d;
     d = p.d;
     return *this;
@@ -755,8 +766,8 @@ void QPalette::setBrush(ColorGroup cg, ColorRole cr, const QBrush &b)
 /*!
     \since 4.2
 
-    Returns true if the ColorGroup \a cg and ColorRole \a cr has been
-    set previously on this palette; otherwise returns false.
+    Returns \c true if the ColorGroup \a cg and ColorRole \a cr has been
+    set previously on this palette; otherwise returns \c false.
 
     \sa setBrush()
 */
@@ -787,8 +798,8 @@ void QPalette::detach()
 /*!
     \fn bool QPalette::operator!=(const QPalette &p) const
 
-    Returns true (slowly) if this palette is different from \a p;
-    otherwise returns false (usually quickly).
+    Returns \c true (slowly) if this palette is different from \a p;
+    otherwise returns \c false (usually quickly).
 
     \note The current ColorGroup is not taken into account when
     comparing palettes
@@ -797,8 +808,8 @@ void QPalette::detach()
 */
 
 /*!
-    Returns true (usually quickly) if this palette is equal to \a p;
-    otherwise returns false (slowly).
+    Returns \c true (usually quickly) if this palette is equal to \a p;
+    otherwise returns \c false (slowly).
 
     \note The current ColorGroup is not taken into account when
     comparing palettes
@@ -821,8 +832,8 @@ bool QPalette::operator==(const QPalette &p) const
 /*!
     \fn bool QPalette::isEqual(ColorGroup cg1, ColorGroup cg2) const
 
-    Returns true (usually quickly) if color group \a cg1 is equal to
-    \a cg2; otherwise returns false.
+    Returns \c true (usually quickly) if color group \a cg1 is equal to
+    \a cg2; otherwise returns \c false.
 */
 bool QPalette::isEqual(QPalette::ColorGroup group1, QPalette::ColorGroup group2) const
 {
@@ -1002,9 +1013,9 @@ QDataStream &operator>>(QDataStream &s, QPalette &p)
 #endif //QT_NO_DATASTREAM
 
 /*!
-    Returns true if this palette and \a p are copies of each other,
+    Returns \c true if this palette and \a p are copies of each other,
     i.e. one of them was created as a copy of the other and neither
-    was subsequently modified; otherwise returns false. This is much
+    was subsequently modified; otherwise returns \c false. This is much
     stricter than equality.
 
     \sa operator=(), operator==()
@@ -1133,10 +1144,35 @@ Q_GUI_EXPORT QPalette qt_fusionPalette()
 }
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug dbg, const QPalette &)
+QDebug operator<<(QDebug dbg, const QPalette &p)
 {
-    dbg.nospace() << "QPalette()";
-    return dbg.space();
+    const char *colorGroupNames[] = {"Active", "Disabled", "Inactive"};
+    const char *colorRoleNames[] =
+        {"WindowText", "Button", "Light", "Midlight", "Dark", "Mid", "Text",
+         "BrightText", "ButtonText", "Base", "Window", "Shadow", "Highlight",
+         "HighlightedText", "Link", "LinkVisited", "AlternateBase", "NoRole",
+         "ToolTipBase","ToolTipText" };
+    QDebugStateSaver saver(dbg);
+    QDebug nospace = dbg.nospace();
+    const uint mask = p.resolve();
+    nospace << "QPalette(resolve=" << hex << showbase << mask << ',';
+    for (int role = 0; role < (int)QPalette::NColorRoles; ++role) {
+        if (mask & (1<<role)) {
+            if (role)
+                nospace << ',';
+            nospace << colorRoleNames[role] << ":[";
+            for (int group = 0; group < (int)QPalette::NColorGroups; ++group) {
+                if (group)
+                    nospace << ',';
+                const QRgb color = p.color(static_cast<QPalette::ColorGroup>(group),
+                                           static_cast<QPalette::ColorRole>(role)).rgba();
+                nospace << colorGroupNames[group] << ':' << color;
+            }
+            nospace << ']';
+        }
+    }
+    nospace << ')' << noshowbase << dec;
+    return dbg;
 }
 #endif
 

@@ -1,48 +1,35 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-
-// Horrible hack, but this get this out of the way for now
-// Carlos Duclos, 2007-12-11
-#if !defined(Q_OS_MAC)
 
 #include <QtTest/QtTest>
 #include <QtGui/QtGui>
@@ -71,6 +58,8 @@ private slots:
     void bidiCursorMovement();
     void bidiCursorLogicalMovement_data();
     void bidiCursorLogicalMovement();
+    void bidiInvalidCursorNoMovement_data();
+    void bidiInvalidCursorNoMovement();
 };
 
 tst_QComplexText::tst_QComplexText()
@@ -102,12 +91,12 @@ void tst_QComplexText::bidiReorderString_data()
 
     const LV *data = logical_visual;
     while ( data->name ) {
-	//next we fill it with data
-	QTest::newRow( data->name )
-	    << QString::fromUtf8( data->logical )
-	    << QString::fromUtf8( data->visual )
-	    << (int) data->basicDir;
-	data++;
+        //next we fill it with data
+        QTest::newRow( data->name )
+            << QString::fromUtf8( data->logical )
+            << QString::fromUtf8( data->visual )
+            << (int) data->basicDir;
+        data++;
     }
 }
 
@@ -127,34 +116,34 @@ void tst_QComplexText::bidiReorderString()
     int nitems = e.layoutData->items.size();
     int i;
     for (i = 0; i < nitems; ++i) {
-	//qDebug("item %d bidiLevel=%d", i,  e.items[i].analysis.bidiLevel);
-	levels[i] = e.layoutData->items[i].analysis.bidiLevel;
+        //qDebug("item %d bidiLevel=%d", i,  e.items[i].analysis.bidiLevel);
+        levels[i] = e.layoutData->items[i].analysis.bidiLevel;
     }
     e.bidiReorder(nitems, levels, visualOrder);
 
     QString visual;
     for (i = 0; i < nitems; ++i) {
-	QScriptItem &si = e.layoutData->items[visualOrder[i]];
-	QString sub = logical.mid(si.position, e.length(visualOrder[i]));
-	if (si.analysis.bidiLevel % 2) {
-	    // reverse sub
-	    QChar *a = (QChar *)sub.unicode();
-	    QChar *b = a + sub.length() - 1;
-	    while (a < b) {
-		QChar tmp = *a;
-		*a = *b;
-		*b = tmp;
-		++a;
-		--b;
-	    }
-	    a = (QChar *)sub.unicode();
-	    b = a + sub.length();
-	    while (a<b) {
-		*a = a->mirroredChar();
-		++a;
-	    }
-	}
-	visual += sub;
+        QScriptItem &si = e.layoutData->items[visualOrder[i]];
+        QString sub = logical.mid(si.position, e.length(visualOrder[i]));
+        if (si.analysis.bidiLevel % 2) {
+            // reverse sub
+            QChar *a = (QChar *)sub.unicode();
+            QChar *b = a + sub.length() - 1;
+            while (a < b) {
+                QChar tmp = *a;
+                *a = *b;
+                *b = tmp;
+                ++a;
+                --b;
+            }
+            a = (QChar *)sub.unicode();
+            b = a + sub.length();
+            while (a<b) {
+                *a = a->mirroredChar();
+                ++a;
+            }
+        }
+        visual += sub;
     }
     // replace Unicode newline back with  \n to compare.
     visual.replace(QChar(0x2028), QChar('\n'));
@@ -272,6 +261,37 @@ void tst_QComplexText::bidiCursorLogicalMovement()
     } while (moved);
 }
 
+void tst_QComplexText::bidiInvalidCursorNoMovement_data()
+{
+    bidiCursorMovement_data();
+}
+
+void tst_QComplexText::bidiInvalidCursorNoMovement()
+{
+    QFETCH(QString, logical);
+    QFETCH(int,  basicDir);
+
+    QTextLayout layout(logical);
+
+    QTextOption option = layout.textOption();
+    option.setTextDirection(basicDir == QChar::DirL ? Qt::LeftToRight : Qt::RightToLeft);
+    layout.setTextOption(option);
+
+    // visual
+    QCOMPARE(layout.rightCursorPosition(-1000), -1000);
+    QCOMPARE(layout.rightCursorPosition(1000), 1000);
+
+    QCOMPARE(layout.leftCursorPosition(-1000), -1000);
+    QCOMPARE(layout.leftCursorPosition(1000), 1000);
+
+    // logical
+    QCOMPARE(layout.nextCursorPosition(-1000), -1000);
+    QCOMPARE(layout.nextCursorPosition(1000), 1000);
+
+    QCOMPARE(layout.previousCursorPosition(-1000), -1000);
+    QCOMPARE(layout.previousCursorPosition(1000), 1000);
+}
+
 void tst_QComplexText::bidiCursor_PDF()
 {
     QString str = QString::fromUtf8("\342\200\252hello\342\200\254");
@@ -289,6 +309,3 @@ void tst_QComplexText::bidiCursor_PDF()
 
 QTEST_MAIN(tst_QComplexText)
 #include "tst_qcomplextext.moc"
-
-#endif // Q_OS_MAC
-

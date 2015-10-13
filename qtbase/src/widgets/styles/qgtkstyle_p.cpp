@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -65,6 +57,7 @@
 #include <private/qgtk2painter_p.h>
 #include <private/qapplication_p.h>
 #include <private/qiconloader_p.h>
+#include <qpa/qplatformfontdatabase.h>
 
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QStyle>
@@ -179,20 +172,6 @@ Ptr_pango_font_description_get_size QGtkStylePrivate::pango_font_description_get
 Ptr_pango_font_description_get_weight QGtkStylePrivate::pango_font_description_get_weight = 0;
 Ptr_pango_font_description_get_family QGtkStylePrivate::pango_font_description_get_family = 0;
 Ptr_pango_font_description_get_style QGtkStylePrivate::pango_font_description_get_style = 0;
-
-Ptr_gtk_file_filter_new QGtkStylePrivate::gtk_file_filter_new = 0;
-Ptr_gtk_file_filter_set_name QGtkStylePrivate::gtk_file_filter_set_name = 0;
-Ptr_gtk_file_filter_add_pattern QGtkStylePrivate::gtk_file_filter_add_pattern = 0;
-Ptr_gtk_file_chooser_add_filter QGtkStylePrivate::gtk_file_chooser_add_filter = 0;
-Ptr_gtk_file_chooser_set_filter QGtkStylePrivate::gtk_file_chooser_set_filter = 0;
-Ptr_gtk_file_chooser_get_filter QGtkStylePrivate::gtk_file_chooser_get_filter = 0;
-Ptr_gtk_file_chooser_dialog_new QGtkStylePrivate::gtk_file_chooser_dialog_new = 0;
-Ptr_gtk_file_chooser_set_current_folder QGtkStylePrivate::gtk_file_chooser_set_current_folder = 0;
-Ptr_gtk_file_chooser_get_filename QGtkStylePrivate::gtk_file_chooser_get_filename = 0;
-Ptr_gtk_file_chooser_get_filenames QGtkStylePrivate::gtk_file_chooser_get_filenames = 0;
-Ptr_gtk_file_chooser_set_current_name QGtkStylePrivate::gtk_file_chooser_set_current_name = 0;
-Ptr_gtk_dialog_run QGtkStylePrivate::gtk_dialog_run = 0;
-Ptr_gtk_file_chooser_set_filename QGtkStylePrivate::gtk_file_chooser_set_filename = 0;
 
 Ptr_gdk_pixbuf_get_pixels QGtkStylePrivate::gdk_pixbuf_get_pixels = 0;
 Ptr_gdk_pixbuf_get_width QGtkStylePrivate::gdk_pixbuf_get_width = 0;
@@ -355,21 +334,6 @@ void QGtkStylePrivate::resolveGtk() const
     gtk_style_attach = (Ptr_gtk_style_attach)libgtk.resolve("gtk_style_attach");
     gtk_widget_destroy = (Ptr_gtk_widget_destroy)libgtk.resolve("gtk_widget_destroy");
     gtk_widget_realize = (Ptr_gtk_widget_realize)libgtk.resolve("gtk_widget_realize");
-
-    gtk_file_chooser_set_current_folder = (Ptr_gtk_file_chooser_set_current_folder)libgtk.resolve("gtk_file_chooser_set_current_folder");
-    gtk_file_filter_new = (Ptr_gtk_file_filter_new)libgtk.resolve("gtk_file_filter_new");
-    gtk_file_filter_set_name = (Ptr_gtk_file_filter_set_name)libgtk.resolve("gtk_file_filter_set_name");
-    gtk_file_filter_add_pattern = (Ptr_gtk_file_filter_add_pattern)libgtk.resolve("gtk_file_filter_add_pattern");
-    gtk_file_chooser_add_filter = (Ptr_gtk_file_chooser_add_filter)libgtk.resolve("gtk_file_chooser_add_filter");
-    gtk_file_chooser_set_filter = (Ptr_gtk_file_chooser_set_filter)libgtk.resolve("gtk_file_chooser_set_filter");
-    gtk_file_chooser_get_filter = (Ptr_gtk_file_chooser_get_filter)libgtk.resolve("gtk_file_chooser_get_filter");
-    gtk_file_chooser_dialog_new = (Ptr_gtk_file_chooser_dialog_new)libgtk.resolve("gtk_file_chooser_dialog_new");
-    gtk_file_chooser_set_current_folder = (Ptr_gtk_file_chooser_set_current_folder)libgtk.resolve("gtk_file_chooser_set_current_folder");
-    gtk_file_chooser_get_filename = (Ptr_gtk_file_chooser_get_filename)libgtk.resolve("gtk_file_chooser_get_filename");
-    gtk_file_chooser_get_filenames = (Ptr_gtk_file_chooser_get_filenames)libgtk.resolve("gtk_file_chooser_get_filenames");
-    gtk_file_chooser_set_current_name = (Ptr_gtk_file_chooser_set_current_name)libgtk.resolve("gtk_file_chooser_set_current_name");
-    gtk_dialog_run = (Ptr_gtk_dialog_run)libgtk.resolve("gtk_dialog_run");
-    gtk_file_chooser_set_filename = (Ptr_gtk_file_chooser_set_filename)libgtk.resolve("gtk_file_chooser_set_filename");
 
     gdk_pixbuf_get_pixels = (Ptr_gdk_pixbuf_get_pixels)libgtk.resolve("gdk_pixbuf_get_pixels");
     gdk_pixbuf_get_width = (Ptr_gdk_pixbuf_get_width)libgtk.resolve("gdk_pixbuf_get_width");
@@ -738,10 +702,12 @@ GtkWidget* QGtkStylePrivate::getTextColorWidget() const
 void QGtkStylePrivate::setupGtkWidget(GtkWidget* widget)
 {
     if (Q_GTK_IS_WIDGET(widget)) {
-        static GtkWidget* protoLayout = 0;
+        GtkWidget *protoLayout = gtkWidgetMap()->value("GtkContainer");
         if (!protoLayout) {
             protoLayout = QGtkStylePrivate::gtk_fixed_new();
             QGtkStylePrivate::gtk_container_add((GtkContainer*)(gtkWidgetMap()->value("GtkWindow")), protoLayout);
+            QHashableLatin1Literal widgetPath = QHashableLatin1Literal::fromData(strdup("GtkContainer"));
+            gtkWidgetMap()->insert(widgetPath, protoLayout);
         }
         Q_ASSERT(protoLayout);
 
@@ -756,8 +722,9 @@ void QGtkStylePrivate::removeWidgetFromMap(const QHashableLatin1Literal &path)
     WidgetMap *map = gtkWidgetMap();
     WidgetMap::iterator it = map->find(path);
     if (it != map->end()) {
-        free(const_cast<char *>(it.key().data()));
+        char* keyData = const_cast<char *>(it.key().data());
         map->erase(it);
+        free(keyData);
     }
 }
 
@@ -857,17 +824,8 @@ QFont QGtkStylePrivate::getThemeFont()
         if (!family.isEmpty())
             font.setFamily(family);
 
-        int weight = pango_font_description_get_weight(gtk_font);
-        if (weight >= PANGO_WEIGHT_HEAVY)
-            font.setWeight(QFont::Black);
-        else if (weight >= PANGO_WEIGHT_BOLD)
-            font.setWeight(QFont::Bold);
-        else if (weight >= PANGO_WEIGHT_SEMIBOLD)
-            font.setWeight(QFont::DemiBold);
-        else if (weight >= PANGO_WEIGHT_NORMAL)
-            font.setWeight(QFont::Normal);
-        else
-            font.setWeight(QFont::Light);
+        const int weight = pango_font_description_get_weight(gtk_font);
+        font.setWeight(QPlatformFontDatabase::weightFromInteger(weight));
 
         PangoStyle fontstyle = pango_font_description_get_style(gtk_font);
         if (fontstyle == PANGO_STYLE_ITALIC)
@@ -880,237 +838,10 @@ QFont QGtkStylePrivate::getThemeFont()
     return font;
 }
 
-
-// ----------- Native file dialogs -----------
-
-// Extract filter list from expressions of type: foo (*.a *.b *.c)"
-QStringList QGtkStylePrivate::extract_filter(const QString &rawFilter)
-{
-    QString result = rawFilter;
-    QRegExp r(QString::fromLatin1("^([^()]*)\\(([a-zA-Z0-9_.*? +;#\\-\\[\\]@\\{\\}/!<>\\$%&=^~:\\|]*)\\)$"));
-    int index = r.indexIn(result);
-    if (index >= 0)
-        result = r.cap(2);
-    return result.split(QLatin1Char(' '));
-}
-
-extern QStringList qt_make_filter_list(const QString &filter);
-
-#ifndef QT_NO_FILEDIALOG
-void QGtkStylePrivate::setupGtkFileChooser(GtkWidget* gtkFileChooser, QWidget *parent,
-                                const QString &dir, const QString &filter, QString *selectedFilter,
-                                QFileDialog::Options options, bool isSaveDialog,
-                                QHash<GtkFileFilter *, QString> *filterMap)
-{
-    g_object_set(gtkFileChooser, "do-overwrite-confirmation", gboolean(!(options & QFileDialog::DontConfirmOverwrite)), NULL);
-    g_object_set(gtkFileChooser, "local_only", gboolean(true), NULL);
-    if (!filter.isEmpty()) {
-        QStringList filters = qt_make_filter_list(filter);
-        foreach (const QString &rawfilter, filters) {
-            GtkFileFilter *gtkFilter = QGtkStylePrivate::gtk_file_filter_new ();
-            QString name = rawfilter.left(rawfilter.indexOf(QLatin1Char('(')));
-            QStringList extensions = extract_filter(rawfilter);
-            QGtkStylePrivate::gtk_file_filter_set_name(gtkFilter, qPrintable(name.isEmpty() ? extensions.join(QLS(", ")) : name));
-
-            foreach (const QString &fileExtension, extensions) {
-                // Note Gtk file dialogs are by default case sensitive
-                // and only supports basic glob syntax so we
-                // rewrite .xyz to .[xX][yY][zZ]
-                QString caseInsensitive;
-                for (int i = 0 ; i < fileExtension.length() ; ++i) {
-                    QChar ch = fileExtension.at(i);
-                    if (ch.isLetter()) {
-                        caseInsensitive.append(
-                                QLatin1Char('[') +
-                                ch.toLower() +
-                                ch.toUpper() +
-                                QLatin1Char(']'));
-                    } else {
-                        caseInsensitive.append(ch);
-                    }
-                }
-                QGtkStylePrivate::gtk_file_filter_add_pattern (gtkFilter, qPrintable(caseInsensitive));
-
-            }
-            if (filterMap)
-                filterMap->insert(gtkFilter, rawfilter);
-            QGtkStylePrivate::gtk_file_chooser_add_filter((GtkFileChooser*)gtkFileChooser, gtkFilter);
-            if (selectedFilter && (rawfilter == *selectedFilter))
-                QGtkStylePrivate::gtk_file_chooser_set_filter((GtkFileChooser*)gtkFileChooser, gtkFilter);
-        }
-    }
-
-    // Using the currently active window is not entirely correct, however
-    // it gives more sensible behavior for applications that do not provide a
-    // parent
-    QWidget *modalFor = parent ? parent->window() : qApp->activeWindow();
-    if (modalFor) {
-        QGtkStylePrivate::gtk_widget_realize(gtkFileChooser); // Creates X window
-#ifndef Q_OS_MAC
-        XSetTransientForHint(QGtkStylePrivate::gdk_x11_drawable_get_xdisplay(gtkFileChooser->window),
-                             QGtkStylePrivate::gdk_x11_drawable_get_xid(gtkFileChooser->window),
-                             modalFor->winId());
-#ifdef Q_WS_X11
-        QGtkStylePrivate::gdk_x11_window_set_user_time (gtkFileChooser->window, QX11Info::appUserTime());
-#endif
-#endif
-    }
-
-    QFileInfo fileinfo(dir);
-    if (dir.isEmpty())
-        fileinfo.setFile(QDir::currentPath());
-    fileinfo.makeAbsolute();
-    if (fileinfo.isDir()) {
-        QGtkStylePrivate::gtk_file_chooser_set_current_folder((GtkFileChooser*)gtkFileChooser, qPrintable(dir));
-    } else if (isSaveDialog) {
-        QGtkStylePrivate::gtk_file_chooser_set_current_folder((GtkFileChooser*)gtkFileChooser, qPrintable(fileinfo.absolutePath()));
-        QGtkStylePrivate::gtk_file_chooser_set_current_name((GtkFileChooser*)gtkFileChooser, qPrintable(fileinfo.fileName()));
-    } else {
-        QGtkStylePrivate::gtk_file_chooser_set_filename((GtkFileChooser*)gtkFileChooser, qPrintable(dir));
-    }
-}
-
-QString QGtkStylePrivate::openFilename(QWidget *parent, const QString &caption, const QString &dir, const QString &filter,
-                            QString *selectedFilter, QFileDialog::Options options)
-{
-    QHash<GtkFileFilter *, QString> filterMap;
-    GtkWidget *gtkFileChooser = QGtkStylePrivate::gtk_file_chooser_dialog_new (qPrintable(caption),
-                                                             NULL,
-                                                             GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                             GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                                             GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
-                                                             NULL);
-
-    setupGtkFileChooser(gtkFileChooser, parent, dir, filter, selectedFilter, options, false, &filterMap);
-
-    QWidget modal_widget;
-    modal_widget.setAttribute(Qt::WA_NoChildEventsForParent, true);
-    modal_widget.setParent(parent, Qt::Window);
-    modal_widget.createWinId();
-    QGuiApplicationPrivate::showModalWindow(modal_widget.windowHandle());
-
-    QString filename;
-    if (QGtkStylePrivate::gtk_dialog_run ((GtkDialog*)gtkFileChooser) == GTK_RESPONSE_ACCEPT) {
-        char *gtk_filename = QGtkStylePrivate::gtk_file_chooser_get_filename ((GtkFileChooser*)gtkFileChooser);
-        filename = QString::fromUtf8(gtk_filename);
-        g_free (gtk_filename);
-        if (selectedFilter) {
-            GtkFileFilter *gtkFilter = QGtkStylePrivate::gtk_file_chooser_get_filter ((GtkFileChooser*)gtkFileChooser);
-            *selectedFilter = filterMap.value(gtkFilter);
-        }
-    }
-
-    QApplicationPrivate::hideModalWindow(modal_widget.windowHandle());
-    gtk_widget_destroy (gtkFileChooser);
-    return filename;
-}
-
-
-QString QGtkStylePrivate::openDirectory(QWidget *parent, const QString &caption, const QString &dir, QFileDialog::Options options)
-{
-    QHash<GtkFileFilter *, QString> filterMap;
-    GtkWidget *gtkFileChooser = QGtkStylePrivate::gtk_file_chooser_dialog_new (qPrintable(caption),
-                                                             NULL,
-                                                             GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                                                             GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                                             GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
-                                                             NULL);
-
-    setupGtkFileChooser(gtkFileChooser, parent, dir, QString(), 0, options);
-    QWidget modal_widget;
-    modal_widget.setAttribute(Qt::WA_NoChildEventsForParent, true);
-    modal_widget.setParent(parent, Qt::Window);
-    modal_widget.createWinId();
-    QGuiApplicationPrivate::showModalWindow(modal_widget.windowHandle());
-
-    QString filename;
-    if (QGtkStylePrivate::gtk_dialog_run ((GtkDialog*)gtkFileChooser) == GTK_RESPONSE_ACCEPT) {
-        char *gtk_filename = QGtkStylePrivate::gtk_file_chooser_get_filename ((GtkFileChooser*)gtkFileChooser);
-        filename = QString::fromUtf8(gtk_filename);
-        g_free (gtk_filename);
-    }
-
-    QApplicationPrivate::hideModalWindow(modal_widget.windowHandle());
-    gtk_widget_destroy (gtkFileChooser);
-    return filename;
-}
-
-QStringList QGtkStylePrivate::openFilenames(QWidget *parent, const QString &caption, const QString &dir, const QString &filter,
-                                 QString *selectedFilter, QFileDialog::Options options)
-{
-    QStringList filenames;
-    QHash<GtkFileFilter *, QString> filterMap;
-    GtkWidget *gtkFileChooser = QGtkStylePrivate::gtk_file_chooser_dialog_new (qPrintable(caption),
-                                                             NULL,
-                                                             GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                             GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                                             GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT,
-                                                             NULL);
-
-    setupGtkFileChooser(gtkFileChooser, parent, dir, filter, selectedFilter, options, false, &filterMap);
-    g_object_set(gtkFileChooser, "select-multiple", gboolean(true), NULL);
-
-    QWidget modal_widget;
-    modal_widget.setAttribute(Qt::WA_NoChildEventsForParent, true);
-    modal_widget.setParent(parent, Qt::Window);
-    modal_widget.createWinId();
-    QGuiApplicationPrivate::showModalWindow(modal_widget.windowHandle());
-
-    if (gtk_dialog_run ((GtkDialog*)gtkFileChooser) == GTK_RESPONSE_ACCEPT) {
-        GSList *gtk_file_names = QGtkStylePrivate::gtk_file_chooser_get_filenames((GtkFileChooser*)gtkFileChooser);
-        for (GSList *iterator  = gtk_file_names ; iterator; iterator = iterator->next)
-            filenames << QString::fromUtf8((const char*)iterator->data);
-        g_slist_free(gtk_file_names);
-        if (selectedFilter) {
-            GtkFileFilter *gtkFilter = QGtkStylePrivate::gtk_file_chooser_get_filter ((GtkFileChooser*)gtkFileChooser);
-            *selectedFilter = filterMap.value(gtkFilter);
-        }
-    }
-
-    QApplicationPrivate::hideModalWindow(modal_widget.windowHandle());
-    gtk_widget_destroy (gtkFileChooser);
-    return filenames;
-}
-
-QString QGtkStylePrivate::saveFilename(QWidget *parent, const QString &caption, const QString &dir, const QString &filter,
-                           QString *selectedFilter, QFileDialog::Options options)
-{
-    QHash<GtkFileFilter *, QString> filterMap;
-    GtkWidget *gtkFileChooser = QGtkStylePrivate::gtk_file_chooser_dialog_new (qPrintable(caption),
-                                                             NULL,
-                                                             GTK_FILE_CHOOSER_ACTION_SAVE,
-                                                             GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                                             GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT,
-                                                             NULL);
-    setupGtkFileChooser(gtkFileChooser, parent, dir, filter, selectedFilter, options, true, &filterMap);
-
-    QWidget modal_widget;
-    modal_widget.setAttribute(Qt::WA_NoChildEventsForParent, true);
-    modal_widget.setParent(parent, Qt::Window);
-    modal_widget.createWinId();
-    QGuiApplicationPrivate::showModalWindow(modal_widget.windowHandle());
-
-    QString filename;
-    if (QGtkStylePrivate::gtk_dialog_run ((GtkDialog*)gtkFileChooser) == GTK_RESPONSE_ACCEPT) {
-        char *gtk_filename = QGtkStylePrivate::gtk_file_chooser_get_filename ((GtkFileChooser*)gtkFileChooser);
-        filename = QString::fromUtf8(gtk_filename);
-        g_free (gtk_filename);
-        if (selectedFilter) {
-            GtkFileFilter *gtkFilter = QGtkStylePrivate::gtk_file_chooser_get_filter ((GtkFileChooser*)gtkFileChooser);
-            *selectedFilter = filterMap.value(gtkFilter);
-        }
-    }
-
-    QApplicationPrivate::hideModalWindow(modal_widget.windowHandle());
-    gtk_widget_destroy (gtkFileChooser);
-    return filename;
-}
-#endif
-
 QIcon QGtkStylePrivate::getFilesystemIcon(const QFileInfo &info)
 {
     QIcon icon;
-    if (gnome_vfs_init && gnome_icon_lookup_sync) {
+    if (isThemeAvailable() && gnome_vfs_init && gnome_icon_lookup_sync) {
         gnome_vfs_init();
         GtkIconTheme *theme = gtk_icon_theme_get_default();
         QByteArray fileurl = QUrl::fromLocalFile(info.absoluteFilePath()).toEncoded();

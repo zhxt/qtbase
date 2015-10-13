@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB).
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +36,7 @@
 #include "qopenglqueryhelper_p.h"
 #include <QtCore/private/qobject_p.h>
 #include <QtGui/QOpenGLContext>
+#include <QtGui/QOpenGLFunctions>
 
 QT_BEGIN_NAMESPACE
 
@@ -131,6 +124,11 @@ bool QOpenGLTimerQueryPrivate::create()
     context = ctx;
     if (!context) {
         qWarning("A current OpenGL context is required to create timer query objects");
+        return false;
+    }
+
+    if (context->isOpenGLES()) {
+        qWarning("QOpenGLTimerQuery: Not supported on OpenGL ES");
         return false;
     }
 
@@ -277,7 +275,7 @@ GLuint64 QOpenGLTimerQueryPrivate::result() const
     As this function's name implies, it blocks CPU execution until OpenGL notifies
     that the timer query result is available. To avoid blocking, you can check
     if the query result is available by calling isResultAvailable(). Note that
-    modern GPUs are deeply pipelined and query results may not become availble for
+    modern GPUs are deeply pipelined and query results may not become available for
     between 1-5 frames after they were issued.
 
     Note that OpenGL does not permit nesting or interleaving of multiple timer queries
@@ -330,7 +328,7 @@ QOpenGLTimerQuery::~QOpenGLTimerQuery()
     Creates the underlying OpenGL timer query object. There must be a valid OpenGL context
     that supports query objects current for this function to succeed.
 
-    Returns true if the OpenGL timer query object was successfully created.
+    Returns \c true if the OpenGL timer query object was successfully created.
 */
 bool QOpenGLTimerQuery::create()
 {
@@ -349,8 +347,8 @@ void QOpenGLTimerQuery::destroy()
 }
 
 /*!
-    Returns true if the underlying OpenGL query object has been created. If this
-    returns true and the associated OpenGL context is current, then you are able to issue
+    Returns \c true if the underlying OpenGL query object has been created. If this
+    returns \c true and the associated OpenGL context is current, then you are able to issue
     queries with this object.
 */
 bool QOpenGLTimerQuery::isCreated() const
@@ -428,7 +426,7 @@ GLuint64 QOpenGLTimerQuery::waitForTimestamp() const
 }
 
 /*!
-    Returns true if the OpenGL timer query result is available.
+    Returns \c true if the OpenGL timer query result is available.
 
     This function is non-blocking and ideally should be used to check for the
     availability of the query result before calling waitForResult().
@@ -757,7 +755,7 @@ int QOpenGLTimeMonitor::sampleCount() const
     to track the amount of time taken to execute OpenGL commands between
     successive calls to recordSample().
 
-    Returns true if the OpenGL timer query objects could be created.
+    Returns \c true if the OpenGL timer query objects could be created.
 
     \sa destroy(), setSampleCount(), recordSample()
 */
@@ -779,8 +777,8 @@ void QOpenGLTimeMonitor::destroy()
 }
 
 /*!
-    Returns true if the underlying OpenGL query objects have been created. If this
-    returns true and the associated OpenGL context is current, then you are able to record
+    Returns \c true if the underlying OpenGL query objects have been created. If this
+    returns \c true and the associated OpenGL context is current, then you are able to record
     time samples with this object.
 */
 bool QOpenGLTimeMonitor::isCreated() const
@@ -814,7 +812,7 @@ int QOpenGLTimeMonitor::recordSample()
 }
 
 /*!
-    Returns true if the OpenGL timer query results are available.
+    Returns \c true if the OpenGL timer query results are available.
 
     \sa waitForSamples(), waitForIntervals()
 */

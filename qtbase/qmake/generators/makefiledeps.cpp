@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -85,7 +77,7 @@ const QString
 &QMakeLocalFileName::local() const
 {
     if(!is_null && local_name.isNull())
-        local_name = Option::fixPathToLocalOS(real_name, true);
+        local_name = Option::normalizePath(real_name);
     return local_name;
 }
 
@@ -342,6 +334,30 @@ bool QMakeSourceFileInfo::containsSourceFile(const QString &f, SourceFileType ty
 {
     if(SourceFile *file = files->lookupFile(QMakeLocalFileName(f)))
         return (file->type == type || file->type == TYPE_UNKNOWN || type == TYPE_UNKNOWN);
+    return false;
+}
+
+bool QMakeSourceFileInfo::isSystemInclude(const QString &name)
+{
+    if (QDir::isRelativePath(name)) {
+        // if we got a relative path here, it's either an -I flag with a relative path
+        // or an include file we couldn't locate. Either way, conclude it's not
+        // a system include.
+        return false;
+    }
+
+    for (int i = 0; i < systemIncludes.size(); ++i) {
+        // check if name is located inside the system include dir:
+        QDir systemDir(systemIncludes.at(i));
+        QString relativePath = systemDir.relativeFilePath(name);
+
+        // the relative path might be absolute if we're crossing drives on Windows
+        if (QDir::isAbsolutePath(relativePath) || relativePath.startsWith("../"))
+            continue;
+        debug_msg(5, "File/dir %s is in system dir %s, skipping",
+                  qPrintable(name), qPrintable(systemIncludes.at(i)));
+        return true;
+    }
     return false;
 }
 
@@ -655,7 +671,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                 } else {
                     exists = QFile::exists(lfn.real());
                 }
-                if(!lfn.isNull()) {
+                if (!lfn.isNull() && !isSystemInclude(lfn.real())) {
                     dep = files->lookupFile(lfn);
                     if(!dep) {
                         dep = new SourceFile;
@@ -771,20 +787,15 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
         }
         if(Option::debug_level && qmake_endOfLine(*(buffer+x)))
             ++line_count;
-        if(((buffer_len > x+2 &&  *(buffer+x+1) == 'Q' && *(buffer+x+2) == '_')
-                   ||
-            (buffer_len > x+4 &&  *(buffer+x+1) == 'Q' && *(buffer+x+2) == 'O'
-                              &&  *(buffer+x+3) == 'M' && *(buffer+x+4) == '_'))
-                   &&
+        if (buffer_len > x + 2 && buffer[x + 1] == 'Q' && buffer[x + 2] == '_' &&
                   *(buffer + x) != '_' &&
                   (*(buffer + x) < 'a' || *(buffer + x) > 'z') &&
                   (*(buffer + x) < 'A' || *(buffer + x) > 'Z') &&
                   (*(buffer + x) < '0' || *(buffer + x) > '9')) {
             ++x;
             int match = 0;
-            static const char *interesting[] = { "OBJECT", "GADGET",
-                                                 "M_OBJECT" };
-            for(int interest = 0, m1, m2; interest < 3; ++interest) {
+            static const char *interesting[] = { "OBJECT", "GADGET" };
+            for (int interest = 0, m1, m2; interest < 2; ++interest) {
                 if(interest == 0 && ignore_qobject)
                     continue;
                 else if(interest == 1 && ignore_qgadget)

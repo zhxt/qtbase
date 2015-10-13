@@ -1,39 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -164,10 +157,6 @@ public:
 };
 
 
-#if defined(Q_C_CALLBACKS)
-extern "C" {
-#endif
-
 class QPNGImageWriter {
 public:
     explicit QPNGImageWriter(QIODevice*);
@@ -197,6 +186,7 @@ private:
     float gamma;
 };
 
+extern "C" {
 static
 void CALLBACK_CALL_TYPE iod_read_fn(png_structp png_ptr, png_bytep data, png_size_t length)
 {
@@ -241,9 +231,7 @@ void CALLBACK_CALL_TYPE qpiw_flush_fn(png_structp /* png_ptr */)
 {
 }
 
-#if defined(Q_C_CALLBACKS)
 }
-#endif
 
 static
 void setup_qt(QImage& image, png_structp png_ptr, png_infop info_ptr, QSize scaledSize, bool *doScaledRead, float screen_gamma=0.0)
@@ -280,6 +268,15 @@ void setup_qt(QImage& image, png_structp png_ptr, png_infop info_ptr, QSize scal
             image.setColorCount(2);
             image.setColor(1, qRgb(0,0,0));
             image.setColor(0, qRgb(255,255,255));
+            if (png_get_tRNS(png_ptr, info_ptr, &trans_alpha, &num_trans, &trans_color_p) && trans_color_p) {
+                const int g = trans_color_p->gray;
+                // the image has white in the first position of the color table,
+                // black in the second. g is 0 for black, 1 for white.
+                if (g == 0)
+                    image.setColor(1, qRgba(0, 0, 0, 0));
+                else if (g == 1)
+                    image.setColor(0, qRgba(255, 255, 255, 0));
+            }
         } else if (bit_depth == 16 && png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
             png_set_expand(png_ptr);
             png_set_strip_16(png_ptr);
@@ -291,6 +288,15 @@ void setup_qt(QImage& image, png_structp png_ptr, png_infop info_ptr, QSize scal
             }
             if (QSysInfo::ByteOrder == QSysInfo::BigEndian)
                 png_set_swap_alpha(png_ptr);
+
+            png_read_update_info(png_ptr, info_ptr);
+        } else if (bit_depth == 8 && !png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+            png_set_expand(png_ptr);
+            if (image.size() != QSize(width, height) || image.format() != QImage::Format_Grayscale8) {
+                image = QImage(width, height, QImage::Format_Grayscale8);
+                if (image.isNull())
+                    return;
+            }
 
             png_read_update_info(png_ptr, info_ptr);
         } else {
@@ -406,11 +412,16 @@ static void read_image_scaled(QImage *outImage, png_structp png_ptr, png_infop i
                               QPngHandlerPrivate::AllocatedMemoryPointers &amp, QSize scaledSize)
 {
 
-    png_uint_32 width;
-    png_uint_32 height;
-    int bit_depth;
-    int color_type;
+    png_uint_32 width = 0;
+    png_uint_32 height = 0;
+    png_int_32 offset_x = 0;
+    png_int_32 offset_y = 0;
+
+    int bit_depth = 0;
+    int color_type = 0;
+    int unit_type = PNG_OFFSET_PIXEL;
     png_get_IHDR(png_ptr, info_ptr, &width, &height, &bit_depth, &color_type, 0, 0, 0);
+    png_get_oFFs(png_ptr, info_ptr, &offset_x, &offset_y, &unit_type);
     uchar *data = outImage->bits();
     int bpl = outImage->bytesPerLine();
 
@@ -470,19 +481,19 @@ static void read_image_scaled(QImage *outImage, png_structp png_ptr, png_infop i
 
     outImage->setDotsPerMeterX((png_get_x_pixels_per_meter(png_ptr,info_ptr)*oxsz)/ixsz);
     outImage->setDotsPerMeterY((png_get_y_pixels_per_meter(png_ptr,info_ptr)*oysz)/iysz);
+
+    if (unit_type == PNG_OFFSET_PIXEL)
+        outImage->setOffset(QPoint(offset_x*oxsz/ixsz, offset_y*oysz/iysz));
+
 }
 
-#if defined(Q_C_CALLBACKS)
 extern "C" {
-#endif
 static void CALLBACK_CALL_TYPE qt_png_warning(png_structp /*png_ptr*/, png_const_charp message)
 {
     qWarning("libpng warning: %s", message);
 }
 
-#if defined(Q_C_CALLBACKS)
 }
-#endif
 
 
 void Q_INTERNAL_WIN_NO_THROW QPngHandlerPrivate::readPngTexts(png_info *info)
@@ -550,7 +561,6 @@ bool Q_INTERNAL_WIN_NO_THROW QPngHandlerPrivate::readPngHeader()
     return true;
 }
 
-
 bool Q_INTERNAL_WIN_NO_THROW QPngHandlerPrivate::readPngImage(QImage *outImage)
 {
     if (state == Error)
@@ -583,11 +593,16 @@ bool Q_INTERNAL_WIN_NO_THROW QPngHandlerPrivate::readPngImage(QImage *outImage)
     if (doScaledRead) {
         read_image_scaled(outImage, png_ptr, info_ptr, amp, scaledSize);
     } else {
-        png_uint_32 width;
-        png_uint_32 height;
-        int bit_depth;
-        int color_type;
+        png_uint_32 width = 0;
+        png_uint_32 height = 0;
+        png_int_32 offset_x = 0;
+        png_int_32 offset_y = 0;
+
+        int bit_depth = 0;
+        int color_type = 0;
+        int unit_type = PNG_OFFSET_PIXEL;
         png_get_IHDR(png_ptr, info_ptr, &width, &height, &bit_depth, &color_type, 0, 0, 0);
+        png_get_oFFs(png_ptr, info_ptr, &offset_x, &offset_y, &unit_type);
         uchar *data = outImage->bits();
         int bpl = outImage->bytesPerLine();
         amp.row_pointers = new png_bytep[height];
@@ -600,6 +615,9 @@ bool Q_INTERNAL_WIN_NO_THROW QPngHandlerPrivate::readPngImage(QImage *outImage)
 
         outImage->setDotsPerMeterX(png_get_x_pixels_per_meter(png_ptr,info_ptr));
         outImage->setDotsPerMeterY(png_get_y_pixels_per_meter(png_ptr,info_ptr));
+
+        if (unit_type == PNG_OFFSET_PIXEL)
+            outImage->setOffset(QPoint(offset_x, offset_y));
 
         // sanity check palette entries
         if (color_type == PNG_COLOR_TYPE_PALETTE && outImage->format() == QImage::Format_Indexed8) {
@@ -648,6 +666,8 @@ QImage::Format QPngHandlerPrivate::readImageFormat()
                 format = QImage::Format_Mono;
             } else if (bit_depth == 16 && png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
                 format = QImage::Format_ARGB32;
+            } else if (bit_depth == 8 && !png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+                format = QImage::Format_Grayscale8;
             } else {
                 format = QImage::Format_Indexed8;
             }
@@ -656,16 +676,9 @@ QImage::Format QPngHandlerPrivate::readImageFormat()
                    && num_palette <= 256)
         {
             // 1-bit and 8-bit color
-            if (bit_depth != 1)
-                png_set_packing(png_ptr);
-            png_read_update_info(png_ptr, info_ptr);
-            png_get_IHDR(png_ptr, info_ptr, &width, &height, &bit_depth, &color_type, 0, 0, 0);
             format = bit_depth == 1 ? QImage::Format_Mono : QImage::Format_Indexed8;
         } else {
             // 32-bit
-            if (bit_depth == 16)
-                png_set_strip_16(png_ptr);
-
             format = QImage::Format_ARGB32;
             // Only add filler if no alpha, or we can get 5 channel data.
             if (!(color_type & PNG_COLOR_MASK_ALPHA)
@@ -839,6 +852,8 @@ bool Q_INTERNAL_WIN_NO_THROW QPNGImageWriter::writeImage(const QImage& image, vo
         else
             color_type = PNG_COLOR_TYPE_PALETTE;
     }
+    else if (image.format() == QImage::Format_Grayscale8)
+        color_type = PNG_COLOR_TYPE_GRAY;
     else if (image.hasAlphaChannel())
         color_type = PNG_COLOR_TYPE_RGB_ALPHA;
     else
@@ -920,7 +935,7 @@ bool Q_INTERNAL_WIN_NO_THROW QPNGImageWriter::writeImage(const QImage& image, vo
         //                0123456789aBC
         data[0xB] = looping%0x100;
         data[0xC] = looping/0x100;
-        png_write_chunk(png_ptr, (png_byte*)"gIFx", data, 13);
+        png_write_chunk(png_ptr, const_cast<png_bytep>((const png_byte *)"gIFx"), data, 13);
     }
     if (ms_delay >= 0 || disposal!=Unspecified) {
         uchar data[4];
@@ -928,7 +943,7 @@ bool Q_INTERNAL_WIN_NO_THROW QPNGImageWriter::writeImage(const QImage& image, vo
         data[1] = 0;
         data[2] = (ms_delay/10)/0x100; // hundredths
         data[3] = (ms_delay/10)%0x100;
-        png_write_chunk(png_ptr, (png_byte*)"gIFg", data, 4);
+        png_write_chunk(png_ptr, const_cast<png_bytep>((const png_byte *)"gIFg"), data, 4);
     }
 
     int height = image.height();
@@ -937,13 +952,14 @@ bool Q_INTERNAL_WIN_NO_THROW QPNGImageWriter::writeImage(const QImage& image, vo
     case QImage::Format_Mono:
     case QImage::Format_MonoLSB:
     case QImage::Format_Indexed8:
+    case QImage::Format_Grayscale8:
     case QImage::Format_RGB32:
     case QImage::Format_ARGB32:
     case QImage::Format_RGB888:
         {
             png_bytep* row_pointers = new png_bytep[height];
             for (int y=0; y<height; y++)
-                row_pointers[y] = (png_bytep)image.constScanLine(y);
+                row_pointers[y] = const_cast<png_bytep>(image.constScanLine(y));
             png_write_image(png_ptr, row_pointers);
             delete [] row_pointers;
         }
@@ -955,7 +971,7 @@ bool Q_INTERNAL_WIN_NO_THROW QPNGImageWriter::writeImage(const QImage& image, vo
             png_bytep row_pointers[1];
             for (int y=0; y<height; y++) {
                 row = image.copy(0, y, width, 1).convertToFormat(fmt);
-                row_pointers[0] = png_bytep(row.constScanLine(0));
+                row_pointers[0] = const_cast<png_bytep>(row.constScanLine(0));
                 png_write_rows(png_ptr, row_pointers, 1);
             }
         }

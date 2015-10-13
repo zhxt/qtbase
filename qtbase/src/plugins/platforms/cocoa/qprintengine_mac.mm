@@ -1,49 +1,42 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qprintengine_mac_p.h"
-#include <qdebug.h>
-#include <qthread.h>
+#include "qcocoaprintersupport.h"
+#include <quuid.h>
+#include <QtGui/qpagelayout.h>
 #include <QtCore/qcoreapplication.h>
-#include <qpa/qplatformprintersupport.h>
+#include <QtCore/qdebug.h>
 
 #include "qcocoaautoreleasepool.h"
 
@@ -51,10 +44,14 @@
 
 QT_BEGIN_NAMESPACE
 
+extern QMarginsF qt_convertMargins(const QMarginsF &margins, QPageLayout::Unit fromUnits, QPageLayout::Unit toUnits);
+
 QMacPrintEngine::QMacPrintEngine(QPrinter::PrinterMode mode) : QPaintEngine(*(new QMacPrintEnginePrivate))
 {
     Q_D(QMacPrintEngine);
     d->mode = mode;
+    d->m_printDevice.reset(new QCocoaPrintDevice(QCocoaPrinterSupport().defaultPrintDeviceId()));
+    d->m_pageLayout.setPageSize(d->m_printDevice->defaultPageSize());
     d->initialize();
 }
 
@@ -138,103 +135,6 @@ QMacPrintEnginePrivate::~QMacPrintEnginePrivate()
     delete paintEngine;
 }
 
-void QMacPrintEnginePrivate::setPaperSize(QPrinter::PaperSize ps)
-{
-    Q_Q(QMacPrintEngine);
-    QSizeF newSize = QPlatformPrinterSupport::convertPaperSizeToQSizeF(ps);
-    QCFType<CFArrayRef> formats;
-    PMPrinter printer;
-
-    if (PMSessionGetCurrentPrinter(session(), &printer) == noErr
-        && PMSessionCreatePageFormatList(session(), printer, &formats) == noErr) {
-        CFIndex total = CFArrayGetCount(formats);
-        PMPageFormat tmp;
-        PMRect paper;
-        for (CFIndex idx = 0; idx < total; ++idx) {
-            tmp = static_cast<PMPageFormat>(
-                                        const_cast<void *>(CFArrayGetValueAtIndex(formats, idx)));
-            PMGetUnadjustedPaperRect(tmp, &paper);
-            int wMM = int((paper.right - paper.left) / 72 * 25.4 + 0.5);
-            int hMM = int((paper.bottom - paper.top) / 72 * 25.4 + 0.5);
-            if (newSize.width() == wMM && newSize.height() == hMM) {
-                PMCopyPageFormat(tmp, format());
-                // reset the orientation and resolution as they are lost in the copy.
-                q->setProperty(QPrintEngine::PPK_Orientation, orient);
-                if (PMSessionValidatePageFormat(session(), format(), kPMDontWantBoolean) != noErr) {
-                    // Don't know, warn for the moment.
-                    qWarning("QMacPrintEngine, problem setting format and resolution for this page size");
-                }
-                break;
-            }
-        }
-    }
-}
-
-QPrinter::PaperSize QMacPrintEnginePrivate::paperSize() const
-{
-    if (hasCustomPaperSize)
-        return QPrinter::Custom;
-    PMRect paper;
-    PMGetUnadjustedPaperRect(format(), &paper);
-    QSizeF sizef((paper.right - paper.left) / 72.0 * 25.4, (paper.bottom - paper.top) / 72.0 * 25.4);
-    return QPlatformPrinterSupport::convertQSizeFToPaperSize(sizef);
-}
-
-void QMacPrintEnginePrivate::setPaperName(const QString &name)
-{
-    Q_Q(QMacPrintEngine);
-    PMPrinter printer;
-
-    if (PMSessionGetCurrentPrinter(session(), &printer) == noErr) {
-        CFArrayRef array;
-        if (PMPrinterGetPaperList(printer, &array) != noErr) {
-            PMRelease(printer);
-            return;
-        }
-        int count = CFArrayGetCount(array);
-        for (int i = 0; i < count; ++i) {
-            PMPaper paper = static_cast<PMPaper>(const_cast<void *>(CFArrayGetValueAtIndex(array, i)));
-            QCFString paperName;
-            if (PMPaperCreateLocalizedName(paper, printer, &paperName) == noErr) {
-                if (QString(paperName) == name) {
-                    PMPageFormat tmp;
-                    PMCreatePageFormatWithPMPaper(&tmp, paper);
-                    PMCopyPageFormat(tmp, format());
-                    q->setProperty(QPrintEngine::PPK_Orientation, orient);
-                    if (PMSessionValidatePageFormat(session(), format(), kPMDontWantBoolean) != noErr) {
-                        // Don't know, warn for the moment.
-                        qWarning("QMacPrintEngine, problem setting paper name");
-                    }
-                }
-            }
-        }
-        PMRelease(printer);
-    }
-}
-
-QList<QVariant> QMacPrintEnginePrivate::supportedResolutions() const
-{
-    Q_ASSERT_X(printInfo, "QMacPrinterEngine::supportedResolutions",
-               "must have a valid printer session");
-    UInt32 resCount;
-    QList<QVariant> resolutions;
-    PMPrinter printer;
-    if (PMSessionGetCurrentPrinter(session(), &printer) == noErr) {
-        PMResolution res;
-        OSStatus status = PMPrinterGetPrinterResolutionCount(printer, &resCount);
-        if (status == noErr) {
-            // According to the docs, index start at 1.
-            for (UInt32 i = 1; i <= resCount; ++i) {
-                if (PMPrinterGetIndexedPrinterResolution(printer, i, &res) == noErr)
-                    resolutions.append(QVariant(int(res.hRes)));
-            }
-        } else {
-            qWarning("QMacPrintEngine::supportedResolutions: Unexpected error: %ld", long(status));
-        }
-    }
-    return resolutions;
-}
-
 QPrinter::PrinterState QMacPrintEngine::printerState() const
 {
     return d_func()->state;
@@ -269,77 +169,22 @@ bool QMacPrintEngine::abort()
     return ret;
 }
 
-static inline int qt_get_PDMWidth(PMPageFormat pformat, bool fullPage,
-                                  const PMResolution &resolution)
-{
-    int val = 0;
-    PMRect r;
-    qreal hRatio = resolution.hRes / 72;
-    if (fullPage) {
-        if (PMGetAdjustedPaperRect(pformat, &r) == noErr)
-            val = qRound((r.right - r.left) * hRatio);
-    } else {
-        if (PMGetAdjustedPageRect(pformat, &r) == noErr)
-            val = qRound((r.right - r.left) * hRatio);
-    }
-    return val;
-}
-
-static inline int qt_get_PDMHeight(PMPageFormat pformat, bool fullPage,
-                                   const PMResolution &resolution)
-{
-    int val = 0;
-    PMRect r;
-    qreal vRatio = resolution.vRes / 72;
-    if (fullPage) {
-        if (PMGetAdjustedPaperRect(pformat, &r) == noErr)
-            val = qRound((r.bottom - r.top) * vRatio);
-    } else {
-        if (PMGetAdjustedPageRect(pformat, &r) == noErr)
-            val = qRound((r.bottom - r.top) * vRatio);
-    }
-    return val;
-}
-
-
 int QMacPrintEngine::metric(QPaintDevice::PaintDeviceMetric m) const
 {
     Q_D(const QMacPrintEngine);
     int val = 1;
     switch (m) {
     case QPaintDevice::PdmWidth:
-        if (d->hasCustomPaperSize) {
-            val = qRound(d->customSize.width());
-            if (d->hasCustomPageMargins) {
-                val -= qRound(d->leftMargin + d->rightMargin);
-            } else {
-                QList<QVariant> margins = property(QPrintEngine::PPK_PageMargins).toList();
-                val -= qRound(margins.at(0).toDouble() + margins.at(2).toDouble());
-            }
-        } else {
-            val = qt_get_PDMWidth(d->format(), property(PPK_FullPage).toBool(), d->resolution);
-        }
+        val = d->m_pageLayout.paintRectPixels(d->resolution.hRes).width();
         break;
     case QPaintDevice::PdmHeight:
-        if (d->hasCustomPaperSize) {
-            val = qRound(d->customSize.height());
-            if (d->hasCustomPageMargins) {
-                val -= qRound(d->topMargin + d->bottomMargin);
-            } else {
-                QList<QVariant> margins = property(QPrintEngine::PPK_PageMargins).toList();
-                val -= qRound(margins.at(1).toDouble() + margins.at(3).toDouble());
-            }
-        } else {
-            val = qt_get_PDMHeight(d->format(), property(PPK_FullPage).toBool(), d->resolution);
-        }
+        val = d->m_pageLayout.paintRectPixels(d->resolution.hRes).height();
         break;
     case QPaintDevice::PdmWidthMM:
-        val = metric(QPaintDevice::PdmWidth);
-        val = int((val * 254 + 5 * d->resolution.hRes) / (10 * d->resolution.hRes));
+        val = qRound(d->m_pageLayout.paintRect(QPageLayout::Millimeter).width());
         break;
     case QPaintDevice::PdmHeightMM:
-        val = metric(QPaintDevice::PdmHeight);
-        val = int((val * 254 + 5 * d->resolution.vRes) / (10 * d->resolution.vRes));
+        val = qRound(d->m_pageLayout.paintRect(QPageLayout::Millimeter).height());
         break;
     case QPaintDevice::PdmPhysicalDpiX:
     case QPaintDevice::PdmPhysicalDpiY: {
@@ -385,32 +230,23 @@ void QMacPrintEnginePrivate::initialize()
 
     q->gccaps = paintEngine->gccaps;
 
-    fullPage = false;
-
     QCocoaAutoReleasePool pool;
     printInfo = [[NSPrintInfo alloc] initWithDictionary:[NSDictionary dictionary]];
 
-    PMPrinter printer;
-    if (printInfo && PMSessionGetCurrentPrinter(session(), &printer) == noErr) {
-        QList<QVariant> resolutions = supportedResolutions();
-        if (!resolutions.isEmpty() && mode != QPrinter::ScreenResolution) {
-            if (resolutions.count() > 1 && mode == QPrinter::HighResolution) {
-                int max = 0;
-                for (int i = 0; i < resolutions.count(); ++i) {
-                    int value = resolutions.at(i).toInt();
-                    if (value > max)
-                        max = value;
-                }
-                resolution.hRes = resolution.vRes = max;
-            } else {
-                resolution.hRes = resolution.vRes = resolutions.at(0).toInt();
-            }
-            if (resolution.hRes == 0)
-                resolution.hRes = resolution.vRes = 600;
-        } else {
-            resolution.hRes = resolution.vRes = qt_defaultDpi();
-        }
+    QList<int> resolutions = m_printDevice->supportedResolutions();
+    if (!resolutions.isEmpty() && mode != QPrinter::ScreenResolution) {
+        qSort(resolutions);
+        if (resolutions.count() > 1 && mode == QPrinter::HighResolution)
+            resolution.hRes = resolution.vRes = resolutions.last();
+        else
+            resolution.hRes = resolution.vRes = resolutions.first();
+        if (resolution.hRes == 0)
+            resolution.hRes = resolution.vRes = 600;
+    } else {
+        resolution.hRes = resolution.vRes = qt_defaultDpi();
     }
+
+    setPageSize(m_pageLayout.pageSize());
 
     QHash<QMacPrintEngine::PrintEnginePropertyKey, QVariant>::const_iterator propC;
     for (propC = valueCache.constBegin(); propC != valueCache.constEnd(); propC++) {
@@ -449,8 +285,8 @@ bool QMacPrintEnginePrivate::newPage_helper()
         return false;
     }
 
-    QRect page = q->property(QPrintEngine::PPK_PageRect).toRect();
-    QRect paper = q->property(QPrintEngine::PPK_PaperRect).toRect();
+    QRect page = m_pageLayout.paintRectPixels(resolution.hRes);
+    QRect paper = m_pageLayout.fullRectPixels(resolution.hRes);
 
     CGContextRef cgContext;
     OSStatus err = noErr;
@@ -467,7 +303,7 @@ bool QMacPrintEnginePrivate::newPage_helper()
 
     CGContextScaleCTM(cgContext, 1, -1);
     CGContextTranslateCTM(cgContext, 0, -paper.height());
-    if (!fullPage)
+    if (m_pageLayout.mode() != QPageLayout::FullPageMode)
         CGContextTranslateCTM(cgContext, page.x() - paper.x(), page.y() - paper.y());
     cgEngine->d_func()->orig_xform = CGContextGetCTM(cgContext);
     cgEngine->d_func()->setClip(0);
@@ -481,6 +317,34 @@ bool QMacPrintEnginePrivate::newPage_helper()
     return true;
 }
 
+void QMacPrintEnginePrivate::setPageSize(const QPageSize &pageSize)
+{
+    if (!pageSize.isValid())
+        return;
+
+    // Get the matching printer paper
+    QPageSize printerPageSize = m_printDevice->supportedPageSize(pageSize);
+    QPageSize usePageSize = printerPageSize.isValid() ? printerPageSize : pageSize;
+
+    // Get the PMPaper and check it is valid
+    PMPaper macPaper = m_printDevice->macPaper(usePageSize);
+    if (macPaper == 0) {
+        qWarning() << "QMacPrintEngine: Invalid PMPaper returned for " << pageSize;
+        return;
+    }
+
+    QMarginsF printable = m_printDevice->printableMargins(usePageSize, m_pageLayout.orientation(), resolution.hRes);
+    m_pageLayout.setPageSize(usePageSize, qt_convertMargins(printable, QPageLayout::Point, m_pageLayout.units()));
+
+    // You cannot set the page size on a PMPageFormat, you must create a new PMPageFormat
+    PMPageFormat pageFormat;
+    PMCreatePageFormatWithPMPaper(&pageFormat, macPaper);
+    PMSetOrientation(pageFormat, m_pageLayout.orientation() == QPageLayout::Landscape ? kPMLandscape : kPMPortrait, kPMUnlocked);
+    PMCopyPageFormat(pageFormat, format());
+    if (PMSessionValidatePageFormat(session(), format(), kPMDontWantBoolean) != noErr)
+        qWarning("QMacPrintEngine: Invalid page format");
+    PMRelease(pageFormat);
+}
 
 void QMacPrintEngine::updateState(const QPaintEngineState &state)
 {
@@ -540,7 +404,10 @@ void QMacPrintEngine::drawTextItem(const QPointF &p, const QTextItem &ti)
 {
     Q_D(QMacPrintEngine);
     Q_ASSERT(d->state == QPrinter::Active);
-    d->paintEngine->drawTextItem(p, ti);
+    if (!d->embedFonts)
+        QPaintEngine::drawTextItem(p, ti);
+    else
+        d->paintEngine->drawTextItem(p, ti);
 }
 
 void QMacPrintEngine::drawTiledPixmap(const QRectF &dr, const QPixmap &pixmap, const QPointF &sr)
@@ -567,127 +434,169 @@ void QMacPrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &va
         return;
 
     switch (key) {
-    case PPK_CollateCopies:
+
+    // The following keys are properties or derived values and so cannot be set
+    case PPK_PageRect:
         break;
+    case PPK_PaperRect:
+        break;
+    case PPK_PaperSources:
+        break;
+    case PPK_SupportsMultipleCopies:
+        break;
+    case PPK_SupportedResolutions:
+        break;
+
+    // The following keys are settings that are unsupported by the Mac PrintEngine
     case PPK_ColorMode:
         break;
-    case PPK_Creator:
-        break;
-    case PPK_DocumentName:
+    case PPK_CustomBase:
         break;
     case PPK_PageOrder:
+        // TODO Check if can be supported via Cups Options
         break;
     case PPK_PaperSource:
+        // TODO Check if can be supported via Cups Options
+        break;
+    case PPK_PrinterProgram:
         break;
     case PPK_SelectionOption:
         break;
+
+    // The following keys are properties and settings that are supported by the Mac PrintEngine
+    case PPK_FontEmbedding:
+        d->embedFonts = value.toBool();
+        break;
     case PPK_Resolution:  {
-        PMPrinter printer;
-        UInt32 count;
-        if (PMSessionGetCurrentPrinter(d->session(), &printer) != noErr)
-            break;
-        if (PMPrinterGetPrinterResolutionCount(printer, &count) != noErr)
-            break;
-        PMResolution resolution = { 0.0, 0.0 };
-        PMResolution bestResolution = { 0.0, 0.0 };
+        // TODO It appears the old code didn't actually set the resolution???  Can we delete all this???
+        int bestResolution = 0;
         int dpi = value.toInt();
         int bestDistance = INT_MAX;
-        for (UInt32 i = 1; i <= count; ++i) {  // Yes, it starts at 1
-            if (PMPrinterGetIndexedPrinterResolution(printer, i, &resolution) == noErr) {
-                if (dpi == int(resolution.hRes)) {
+        foreach (int resolution, d->m_printDevice->supportedResolutions()) {
+            if (dpi == resolution) {
+                bestResolution = resolution;
+                break;
+            } else {
+                int distance = qAbs(dpi - resolution);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
                     bestResolution = resolution;
-                    break;
-                } else {
-                    int distance = qAbs(dpi - int(resolution.hRes));
-                    if (distance < bestDistance) {
-                        bestDistance = distance;
-                        bestResolution = resolution;
-                    }
                 }
             }
         }
         PMSessionValidatePageFormat(d->session(), d->format(), kPMDontWantBoolean);
         break;
     }
-
+    case PPK_CollateCopies:
+        PMSetCollate(d->settings(), value.toBool());
+        break;
+    case PPK_Creator:
+        d->m_creator = value.toString();
+        break;
+    case PPK_DocumentName:
+        PMPrintSettingsSetJobName(d->settings(), QCFString(value.toString()));
+        break;
+    case PPK_Duplex: {
+        QPrint::DuplexMode mode = QPrint::DuplexMode(value.toInt());
+        if (mode == property(PPK_Duplex).toInt() || !d->m_printDevice->supportedDuplexModes().contains(mode))
+            break;
+        switch (mode) {
+        case QPrinter::DuplexNone:
+            PMSetDuplex(d->settings(), kPMDuplexNone);
+            break;
+        case QPrinter::DuplexAuto:
+            PMSetDuplex(d->settings(), d->m_pageLayout.orientation() == QPageLayout::Landscape ? kPMDuplexTumble : kPMDuplexNoTumble);
+            break;
+        case QPrinter::DuplexLongSide:
+            PMSetDuplex(d->settings(), kPMDuplexNoTumble);
+            break;
+        case QPrinter::DuplexShortSide:
+            PMSetDuplex(d->settings(), kPMDuplexTumble);
+            break;
+        default:
+            // Don't change
+            break;
+        }
+        break;
+    }
     case PPK_FullPage:
-        d->fullPage = value.toBool();
+        if (value.toBool())
+            d->m_pageLayout.setMode(QPageLayout::FullPageMode);
+        else
+            d->m_pageLayout.setMode(QPageLayout::StandardMode);
         break;
     case PPK_CopyCount: // fallthrough
     case PPK_NumberOfCopies:
         PMSetCopies(d->settings(), value.toInt(), false);
         break;
     case PPK_Orientation: {
-        if (d->state == QPrinter::Active) {
-            qWarning("QMacPrintEngine::setOrientation: Orientation cannot be changed during a print job, ignoring change");
-        } else {
-            QPrinter::Orientation newOrientation = QPrinter::Orientation(value.toInt());
-            if (d->hasCustomPaperSize && (d->orient != newOrientation))
-                d->customSize = QSizeF(d->customSize.height(), d->customSize.width());
-            d->orient = newOrientation;
-            PMOrientation o = d->orient == QPrinter::Portrait ? kPMPortrait : kPMLandscape;
-            PMSetOrientation(d->format(), o, false);
-            PMSessionValidatePageFormat(d->session(), d->format(), kPMDontWantBoolean);
-        }
-        break; }
+        // First try set the Mac format orientation, then set our orientation to match result
+        QPageLayout::Orientation newOrientation = QPageLayout::Orientation(value.toInt());
+        PMOrientation macOrientation = (newOrientation == QPageLayout::Landscape) ? kPMLandscape : kPMPortrait;
+        PMSetOrientation(d->format(), macOrientation, kPMUnlocked);
+        PMSessionValidatePageFormat(d->session(), d->format(), kPMDontWantBoolean);
+        PMGetOrientation(d->format(), &macOrientation);
+        d->m_pageLayout.setOrientation(macOrientation == kPMLandscape ? QPageLayout::Landscape : QPageLayout::Portrait);
+        break;
+    }
     case PPK_OutputFileName:
         d->outputFilename = value.toString();
         break;
-    case PPK_PaperSize:
-        d->setPaperSize(QPrinter::PaperSize(value.toInt()));
+    case PPK_PageSize:
+        d->setPageSize(QPageSize(QPageSize::PageSizeId(value.toInt())));
         break;
     case PPK_PaperName:
-        d->setPaperName(value.toString());
+        // Get the named page size from the printer if supported
+        d->setPageSize(d->m_printDevice->supportedPageSize(value.toString()));
+        break;
+    case PPK_WindowsPageSize:
+        d->setPageSize(QPageSize(QPageSize::id(value.toInt())));
         break;
     case PPK_PrinterName: {
-        bool printerNameSet = false;
-        OSStatus status = noErr;
-        QCFType<CFArrayRef> printerList;
-        status = PMServerCreatePrinterList(kPMServerLocal, &printerList);
-        if (status == noErr) {
-            CFIndex count = CFArrayGetCount(printerList);
-            for (CFIndex i=0; i<count; ++i) {
-                PMPrinter printer = static_cast<PMPrinter>(const_cast<void *>(CFArrayGetValueAtIndex(printerList, i)));
-                QString name = QCFString::toQString(PMPrinterGetID(printer));
-                if (name == value.toString()) {
-                    status = PMSessionSetCurrentPMPrinter(d->session(), printer);
-                    printerNameSet = true;
-                    break;
-                }
-            }
-        }
-        if (status != noErr)
-            qWarning("QMacPrintEngine::setPrinterName: Error setting printer: %ld", long(status));
-        if (!printerNameSet) {
-            qWarning("QMacPrintEngine::setPrinterName: Failed to set printer named '%s'.", qPrintable(value.toString()));
-            d->releaseSession();
-            d->state = QPrinter::Idle;
-        }
-        break; }
-    case PPK_CustomPaperSize:
-    {
-        PMOrientation orientation;
-        PMGetOrientation(d->format(), &orientation);
-        d->hasCustomPaperSize = true;
-        d->customSize = value.toSizeF();
-        if (orientation != kPMPortrait)
-            d->customSize = QSizeF(d->customSize.height(), d->customSize.width());
+        QString id = value.toString();
+        if (id.isEmpty())
+            id = QCocoaPrinterSupport().defaultPrintDeviceId();
+        else if (!QCocoaPrinterSupport().availablePrintDeviceIds().contains(id))
+            break;
+        d->m_printDevice.reset(new QCocoaPrintDevice(id));
+        PMPrinter printer = d->m_printDevice->macPrinter();
+        PMRetain(printer);
+        PMSessionSetCurrentPMPrinter(d->session(), printer);
+        // TODO Do we need to check if the page size, etc, are valid on new printer?
         break;
     }
+    case PPK_CustomPaperSize:
+        d->setPageSize(QPageSize(value.toSizeF(), QPageSize::Point));
+        break;
     case PPK_PageMargins:
     {
         QList<QVariant> margins(value.toList());
         Q_ASSERT(margins.size() == 4);
-        d->leftMargin = margins.at(0).toDouble();
-        d->topMargin = margins.at(1).toDouble();
-        d->rightMargin = margins.at(2).toDouble();
-        d->bottomMargin = margins.at(3).toDouble();
-        d->hasCustomPageMargins = true;
+        d->m_pageLayout.setMargins(QMarginsF(margins.at(0).toReal(), margins.at(1).toReal(),
+                                             margins.at(2).toReal(), margins.at(3).toReal()));
         break;
     }
-
-    default:
+    case PPK_QPageSize:
+        d->setPageSize(value.value<QPageSize>());
         break;
+    case PPK_QPageMargins: {
+        QPair<QMarginsF, QPageLayout::Unit> pair = value.value<QPair<QMarginsF, QPageLayout::Unit> >();
+        d->m_pageLayout.setUnits(pair.second);
+        d->m_pageLayout.setMargins(pair.first);
+        break;
+    }
+    case PPK_QPageLayout: {
+        QPageLayout pageLayout = value.value<QPageLayout>();
+        if (pageLayout.isValid() && d->m_printDevice->isValidPageLayout(pageLayout, d->resolution.hRes)) {
+            setProperty(PPK_QPageSize, QVariant::fromValue(pageLayout.pageSize()));
+            setProperty(PPK_FullPage, pageLayout.mode() == QPageLayout::FullPageMode);
+            setProperty(PPK_Orientation, QVariant::fromValue(pageLayout.orientation()));
+            d->m_pageLayout.setUnits(pageLayout.units());
+            d->m_pageLayout.setMargins(pageLayout.margins());
+        }
+        break;
+    }
+    // No default so that compiler will complain if new keys added and not handled in this engine
     }
 }
 
@@ -700,18 +609,75 @@ QVariant QMacPrintEngine::property(PrintEnginePropertyKey key) const
         return *d->valueCache.find(key);
 
     switch (key) {
-    case PPK_CollateCopies:
-        ret = false;
-        break;
+
+    // The following keys are settings that are unsupported by the Mac PrintEngine
+    // Return sensible default values to ensure consistent behavior across platforms
     case PPK_ColorMode:
         ret = QPrinter::Color;
         break;
+    case PPK_CustomBase:
+        // Special case, leave null
+        break;
+    case PPK_PageOrder:
+        // TODO Check if can be supported via Cups Options
+        ret = QPrinter::FirstPageFirst;
+        break;
+    case PPK_PaperSource:
+        // TODO Check if can be supported via Cups Options
+        ret = QPrinter::Auto;
+        break;
+    case PPK_PaperSources: {
+        // TODO Check if can be supported via Cups Options
+        QList<QVariant> out;
+        out << int(QPrinter::Auto);
+        ret = out;
+        break;
+        }
+    case PPK_PrinterProgram:
+        ret = QString();
+        break;
+    case PPK_SelectionOption:
+        ret = QString();
+        break;
+
+    // The following keys are properties and settings that are supported by the Mac PrintEngine
+    case PPK_FontEmbedding:
+        ret = d->embedFonts;
+        break;
+    case PPK_CollateCopies: {
+        Boolean status;
+        PMGetCollate(d->settings(), &status);
+        ret = bool(status);
+        break;
+    }
     case PPK_Creator:
+        ret = d->m_creator;
         break;
-    case PPK_DocumentName:
+    case PPK_DocumentName: {
+        CFStringRef name;
+        PMPrintSettingsGetJobName(d->settings(), &name);
+        ret = QCFString::toQString(name);
         break;
+    }
+    case PPK_Duplex: {
+        PMDuplexMode mode = kPMDuplexNone;
+        PMGetDuplex(d->settings(), &mode);
+        switch (mode) {
+        case kPMDuplexNoTumble:
+            ret = QPrinter::DuplexLongSide;
+            break;
+        case kPMDuplexTumble:
+            ret = QPrinter::DuplexShortSide;
+            break;
+        case kPMDuplexNone:
+        default:
+            ret = QPrinter::DuplexNone;
+            break;
+        }
+        break;
+    }
     case PPK_FullPage:
-        ret = d->fullPage;
+        ret = d->m_pageLayout.mode() == QPageLayout::FullPageMode;
         break;
     case PPK_NumberOfCopies:
         ret = 1;
@@ -726,113 +692,63 @@ QVariant QMacPrintEngine::property(PrintEnginePropertyKey key) const
         ret = true;
         break;
     case PPK_Orientation:
-        PMOrientation orientation;
-        PMGetOrientation(d->format(), &orientation);
-        ret = orientation == kPMPortrait ? QPrinter::Portrait : QPrinter::Landscape;
+        ret = d->m_pageLayout.orientation();
         break;
     case PPK_OutputFileName:
         ret = d->outputFilename;
         break;
-    case PPK_PageOrder:
-        break;
-    case PPK_PaperSource:
-        break;
-    case PPK_PageRect: {
+    case PPK_PageRect:
         // PageRect is returned in device pixels
-        QRect r;
-        PMRect macrect, macpaper;
-        qreal hRatio = d->resolution.hRes / 72;
-        qreal vRatio = d->resolution.vRes / 72;
-        if (d->hasCustomPaperSize) {
-            r = QRect(0, 0, qRound(d->customSize.width() * hRatio), qRound(d->customSize.height() * vRatio));
-            if (d->hasCustomPageMargins) {
-                r.adjust(qRound(d->leftMargin * hRatio), qRound(d->topMargin * vRatio),
-                         -qRound(d->rightMargin * hRatio), -qRound(d->bottomMargin * vRatio));
-            } else {
-                QList<QVariant> margins = property(QPrintEngine::PPK_PageMargins).toList();
-                r.adjust(qRound(margins.at(0).toDouble() * hRatio),
-                         qRound(margins.at(1).toDouble() * vRatio),
-                         -qRound(margins.at(2).toDouble() * hRatio),
-                         -qRound(margins.at(3).toDouble()) * vRatio);
-            }
-        } else if (PMGetAdjustedPageRect(d->format(), &macrect) == noErr
-                   && PMGetAdjustedPaperRect(d->format(), &macpaper) == noErr)
-        {
-            if (d->fullPage || d->hasCustomPageMargins) {
-                r.setCoords(int(macpaper.left * hRatio), int(macpaper.top * vRatio),
-                            int(macpaper.right * hRatio), int(macpaper.bottom * vRatio));
-                r.translate(-r.x(), -r.y());
-                if (d->hasCustomPageMargins) {
-                    r.adjust(qRound(d->leftMargin * hRatio), qRound(d->topMargin * vRatio),
-                             -qRound(d->rightMargin * hRatio), -qRound(d->bottomMargin * vRatio));
-                }
-            } else {
-                r.setCoords(int(macrect.left * hRatio), int(macrect.top * vRatio),
-                            int(macrect.right * hRatio), int(macrect.bottom * vRatio));
-                r.translate(int(-macpaper.left * hRatio), int(-macpaper.top * vRatio));
-            }
-        }
-        ret = r;
-        break; }
-    case PPK_PaperSize:
-        ret = d->paperSize();
+        ret = d->m_pageLayout.paintRectPixels(d->resolution.hRes);
+        break;
+    case PPK_PageSize:
+        ret = d->m_pageLayout.pageSize().id();
         break;
     case PPK_PaperName:
-        ret = QCFString::toQString([d->printInfo localizedPaperName]);
+        ret = d->m_pageLayout.pageSize().name();
         break;
-    case PPK_PaperRect: {
-        QRect r;
-        PMRect macrect;
-        qreal hRatio = d->resolution.hRes / 72;
-        qreal vRatio = d->resolution.vRes / 72;
-        if (d->hasCustomPaperSize) {
-            r = QRect(0, 0, qRound(d->customSize.width() * hRatio), qRound(d->customSize.height() * vRatio));
-        } else if (PMGetAdjustedPaperRect(d->format(), &macrect) == noErr) {
-            r.setCoords(int(macrect.left * hRatio), int(macrect.top * vRatio),
-                        int(macrect.right * hRatio), int(macrect.bottom * vRatio));
-            r.translate(-r.x(), -r.y());
-        }
-        ret = r;
-        break; }
-    case PPK_PrinterName: {
-        PMPrinter printer;
-        OSStatus status = PMSessionGetCurrentPrinter(d->session(), &printer);
-        if (status != noErr)
-            qWarning("QMacPrintEngine::printerName: Failed getting current PMPrinter: %ld", long(status));
-        if (printer)
-            ret = QCFString::toQString(PMPrinterGetID(printer));
-        break; }
+    case PPK_WindowsPageSize:
+        ret = d->m_pageLayout.pageSize().windowsId();
+        break;
+    case PPK_PaperRect:
+        // PaperRect is returned in device pixels
+        ret = d->m_pageLayout.fullRectPixels(d->resolution.hRes);
+        break;
+    case PPK_PrinterName:
+        return d->m_printDevice->id();
+        break;
     case PPK_Resolution: {
         ret = d->resolution.hRes;
         break;
     }
-    case PPK_SupportedResolutions:
-        ret = d->supportedResolutions();
-        break;
-    case PPK_CustomPaperSize:
-        ret = d->customSize;
-        break;
-    case PPK_PageMargins:
-    {
-        QList<QVariant> margins;
-        if (d->hasCustomPageMargins) {
-            margins << d->leftMargin << d->topMargin
-                    << d->rightMargin << d->bottomMargin;
-        } else if (!d->hasCustomPaperSize) {
-            PMPaperMargins paperMargins;
-            PMPaper paper;
-            PMGetPageFormatPaper(d->format(), &paper);
-            PMPaperGetMargins(paper, &paperMargins);
-            margins << paperMargins.left << paperMargins.top
-                    << paperMargins.right << paperMargins.bottom;
-        } else {
-            margins << 0 << 0 << 0 << 0;
-        }
-        ret = margins;
+    case PPK_SupportedResolutions: {
+        QList<QVariant> list;
+        foreach (int resolution, d->m_printDevice->supportedResolutions())
+            list << resolution;
+        ret = list;
         break;
     }
-    default:
+    case PPK_CustomPaperSize:
+        ret = d->m_pageLayout.fullRectPoints().size();
         break;
+    case PPK_PageMargins: {
+        QList<QVariant> list;
+        QMarginsF margins = d->m_pageLayout.margins(QPageLayout::Point);
+        list << margins.left() << margins.top() << margins.right() << margins.bottom();
+        ret = list;
+        break;
+    }
+    case PPK_QPageSize:
+        ret.setValue(d->m_pageLayout.pageSize());
+        break;
+    case PPK_QPageMargins: {
+        QPair<QMarginsF, QPageLayout::Unit> pair = qMakePair(d->m_pageLayout.margins(), d->m_pageLayout.units());
+        ret.setValue(pair);
+        break;
+    }
+    case PPK_QPageLayout:
+        ret.setValue(d->m_pageLayout);
+    // No default so that compiler will complain if new keys added and not handled in this engine
     }
     return ret;
 }

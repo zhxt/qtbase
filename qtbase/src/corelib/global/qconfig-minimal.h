@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -75,9 +67,6 @@
 #ifndef QT_NO_PROGRESSDIALOG
 #  define QT_NO_PROGRESSDIALOG
 #endif
-#ifndef QT_NO_TABDIALOG
-#  define QT_NO_TABDIALOG
-#endif
 #ifndef QT_NO_WIZARD
 #  define QT_NO_WIZARD
 #endif
@@ -108,9 +97,6 @@
 /* Fonts */
 #ifndef QT_NO_FREETYPE
 #  define QT_NO_FREETYPE
-#endif
-#ifndef QT_NO_QWS_QPF2
-#  define QT_NO_QWS_QPF2
 #endif
 
 /* Images */
@@ -146,9 +132,6 @@
 #ifndef QT_NO_BIG_CODECS
 #  define QT_NO_BIG_CODECS
 #endif
-#ifndef QT_NO_QWS_INPUTMETHODS
-#  define QT_NO_QWS_INPUTMETHODS
-#endif
 #ifndef QT_NO_TEXTCODEC
 #  define QT_NO_TEXTCODEC
 #endif
@@ -157,9 +140,6 @@
 #endif
 #ifndef QT_NO_TRANSLATION
 #  define QT_NO_TRANSLATION
-#endif
-#ifndef QT_NO_TRANSLATION_UTF8
-#  define QT_NO_TRANSLATION_UTF8
 #endif
 
 /* ItemViews */
@@ -228,9 +208,6 @@
 #ifndef QT_NO_SHORTCUT
 #  define QT_NO_SHORTCUT
 #endif
-#ifndef QT_NO_SOUND
-#  define QT_NO_SOUND
-#endif
 #ifndef QT_NO_SYSTEMSEMAPHORE
 #  define QT_NO_SYSTEMSEMAPHORE
 #endif
@@ -257,12 +234,6 @@
 #endif
 
 /* Networking */
-#ifndef QT_NO_COP
-#  define QT_NO_COP
-#endif
-#ifndef QT_NO_HOSTINFO
-#  define QT_NO_HOSTINFO
-#endif
 #ifndef QT_NO_HTTP
 #  define QT_NO_HTTP
 #endif
@@ -275,9 +246,6 @@
 #ifndef QT_NO_UDPSOCKET
 #  define QT_NO_UDPSOCKET
 #endif
-#ifndef QT_NO_URLINFO
-#  define QT_NO_URLINFO
-#endif
 #ifndef QT_NO_FTP
 #  define QT_NO_FTP
 #endif
@@ -285,12 +253,6 @@
 /* Painting */
 #ifndef QT_NO_COLORNAMES
 #  define QT_NO_COLORNAMES
-#endif
-#ifndef QT_NO_DIRECTPAINTER
-#  define QT_NO_DIRECTPAINTER
-#endif
-#ifndef QT_NO_PAINTONSCREEN
-#  define QT_NO_PAINTONSCREEN
 #endif
 #ifndef QT_NO_PAINT_DEBUG
 #  define QT_NO_PAINT_DEBUG
@@ -303,73 +265,6 @@
 #endif
 #ifndef QT_NO_CUPS
 #  define QT_NO_CUPS
-#endif
-
-/* Qt for Embedded Linux */
-#ifndef QT_NO_QWSEMBEDWIDGET
-#  define QT_NO_QWSEMBEDWIDGET
-#endif
-#ifndef QT_NO_QWS_ALPHA_CURSOR
-#  define QT_NO_QWS_ALPHA_CURSOR
-#endif
-#ifndef QT_NO_QWS_CURSOR
-#  define QT_NO_QWS_CURSOR
-#endif
-#ifndef QT_NO_QWS_DECORATION_DEFAULT
-#  define QT_NO_QWS_DECORATION_DEFAULT
-#endif
-#ifndef QT_NO_QWS_DECORATION_STYLED
-#  define QT_NO_QWS_DECORATION_STYLED
-#endif
-#ifndef QT_NO_QWS_DECORATION_WINDOWS
-#  define QT_NO_QWS_DECORATION_WINDOWS
-#endif
-#ifndef QT_NO_QWS_MANAGER
-#  define QT_NO_QWS_MANAGER
-#endif
-#ifndef QT_NO_QWS_KEYBOARD
-#  define QT_NO_QWS_KEYBOARD
-#endif
-#ifndef QT_NO_QWS_MOUSE
-#  define QT_NO_QWS_MOUSE
-#endif
-#ifndef QT_NO_QWS_MOUSE_AUTO
-#  define QT_NO_QWS_MOUSE_AUTO
-#endif
-#ifndef QT_NO_QWS_MOUSE_MANUAL
-#  define QT_NO_QWS_MOUSE_MANUAL
-#endif
-#ifndef QT_NO_QWS_MULTIPROCESS
-#  define QT_NO_QWS_MULTIPROCESS
-#endif
-#ifndef QT_NO_QWS_SOUNDSERVER
-#  define QT_NO_QWS_SOUNDSERVER
-#endif
-#ifndef QT_NO_QWS_PROPERTIES
-#  define QT_NO_QWS_PROPERTIES
-#endif
-#ifndef QT_NO_QWS_PROXYSCREEN
-#  define QT_NO_QWS_PROXYSCREEN
-#endif
-#ifndef QT_NO_QWS_DYNAMICSCREENTRANSFORMATION
-#  define QT_NO_QWS_DYNAMICSCREENTRANSFORMATION
-#endif
-
-/* SVG */
-#ifndef QT_NO_SVG
-#  define QT_NO_SVG
-#endif
-#ifndef QT_NO_GRAPHICSSVGITEM
-#  define QT_NO_GRAPHICSSVGITEM
-#endif
-#ifndef QT_NO_SVGGENERATOR
-#  define QT_NO_SVGGENERATOR
-#endif
-#ifndef QT_NO_SVGRENDERER
-#  define QT_NO_SVGRENDERER
-#endif
-#ifndef QT_NO_SVGWIDGET
-#  define QT_NO_SVGWIDGET
 #endif
 
 /* Styles */
@@ -402,8 +297,8 @@
 #ifndef QT_NO_DESKTOPSERVICES
 #  define QT_NO_DESKTOPSERVICES
 #endif
-#ifndef QT_NO_SCRIPT
-#  define QT_NO_SCRIPT
+#ifndef QT_NO_MIMETYPE
+#  define QT_NO_MIMETYPE
 #endif
 #ifndef QT_NO_SYSTEMTRAYICON
 #  define QT_NO_SYSTEMTRAYICON
@@ -485,9 +380,6 @@
 #ifndef QT_NO_SPLITTER
 #  define QT_NO_SPLITTER
 #endif
-#ifndef QT_NO_SIGNALMAPPER
-#  define QT_NO_SIGNALMAPPER
-#endif
 #ifndef QT_NO_SIZEGRIP
 #  define QT_NO_SIZEGRIP
 #endif
@@ -562,9 +454,4 @@
 #endif
 #ifndef QT_NO_VALIDATOR
 #  define QT_NO_VALIDATOR
-#endif
-
-/* Windows */
-#ifndef QT_NO_WIN_ACTIVEQT
-#  define QT_NO_WIN_ACTIVEQT
 #endif

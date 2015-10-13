@@ -1,8 +1,8 @@
 CONFIG -= app_bundle debug_and_release
 CONFIG += console
 DESTDIR = ./
-QT -= gui
-wince*: {
+QT = core
+wince {
    LIBS += coredll.lib
 }
 

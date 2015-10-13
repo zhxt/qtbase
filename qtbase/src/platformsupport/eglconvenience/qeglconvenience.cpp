@@ -1,47 +1,50 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include <QByteArray>
+#include <QOpenGLContext>
+
+#ifdef Q_OS_LINUX
+#include <sys/ioctl.h>
+#include <linux/fb.h>
+#endif
+#include <private/qmath_p.h>
 
 #include "qeglconvenience_p.h"
+
+#ifndef EGL_OPENGL_ES3_BIT_KHR
+#define EGL_OPENGL_ES3_BIT_KHR 0x0040
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -55,34 +58,29 @@ QVector<EGLint> q_createConfigAttributesFromFormat(const QSurfaceFormat &format)
     int stencilSize = format.stencilBufferSize();
     int sampleCount = format.samples();
 
-    // We want to make sure 16-bit configs are chosen over 32-bit configs as they will provide
-    // the best performance. The EGL config selection algorithm is a bit stange in this regard:
-    // The selection criteria for EGL_BUFFER_SIZE is "AtLeast", so we can't use it to discard
-    // 32-bit configs completely from the selection. So it then comes to the sorting algorithm.
-    // The red/green/blue sizes have a sort priority of 3, so they are sorted by first. The sort
-    // order is special and described as "by larger _total_ number of color bits.". So EGL will
-    // put 32-bit configs in the list before the 16-bit configs. However, the spec also goes on
-    // to say "If the requested number of bits in attrib_list for a particular component is 0,
-    // then the number of bits for that component is not considered". This part of the spec also
-    // seems to imply that setting the red/green/blue bits to zero means none of the components
-    // are considered and EGL disregards the entire sorting rule. It then looks to the next
-    // highest priority rule, which is EGL_BUFFER_SIZE. Despite the selection criteria being
-    // "AtLeast" for EGL_BUFFER_SIZE, it's sort order is "smaller" meaning 16-bit configs are
-    // put in the list before 32-bit configs. So, to make sure 16-bit is preffered over 32-bit,
-    // we must set the red/green/blue sizes to zero. This has an unfortunate consequence that
-    // if the application sets the red/green/blue size to 5/6/5 on the QSurfaceFormat,
-    // they will probably get a 32-bit config, even when there's an RGB565 config available.
-
-//    // Now normalize the values so -1 becomes 0
-//    redSize   = redSize   > 0 ? redSize   : 0;
-//    greenSize = greenSize > 0 ? greenSize : 0;
-//    blueSize  = blueSize  > 0 ? blueSize  : 0;
-//    alphaSize = alphaSize > 0 ? alphaSize : 0;
-//    depthSize = depthSize > 0 ? depthSize : 0;
-//    stencilSize = stencilSize > 0 ? stencilSize : 0;
-//    sampleCount = sampleCount > 0 ? sampleCount : 0;
-
     QVector<EGLint> configAttributes;
+
+    // Map default, unspecified values (-1) to 0. This is important due to sorting rule #3
+    // in section 3.4.1 of the spec and allows picking a potentially faster 16-bit config
+    // over 32-bit ones when there is no explicit request for the color channel sizes:
+    //
+    // The red/green/blue sizes have a sort priority of 3, so they are sorted by
+    // first. (unless a caveat like SLOW or NON_CONFORMANT is present) The sort order is
+    // Special and described as "by larger _total_ number of color bits.". So EGL will put
+    // 32-bit configs in the list before the 16-bit configs. However, the spec also goes
+    // on to say "If the requested number of bits in attrib_list for a particular
+    // component is 0, then the number of bits for that component is not considered". This
+    // part of the spec also seems to imply that setting the red/green/blue bits to zero
+    // means none of the components are considered and EGL disregards the entire sorting
+    // rule. It then looks to the next highest priority rule, which is
+    // EGL_BUFFER_SIZE. Despite the selection criteria being "AtLeast" for
+    // EGL_BUFFER_SIZE, it's sort order is "smaller" meaning 16-bit configs are put in the
+    // list before 32-bit configs.
+    //
+    // This also means that explicitly specifying a size like 565 will still result in
+    // having larger (888) configs first in the returned list. We need to handle this
+    // ourselves later by manually filtering the list, instead of just blindly taking the
+    // first config from it.
 
     configAttributes.append(EGL_RED_SIZE);
     configAttributes.append(redSize > 0 ? redSize : 0);
@@ -232,17 +230,40 @@ EGLConfig QEglConfigChooser::chooseConfig()
     configureAttributes.append(surfaceType());
 
     configureAttributes.append(EGL_RENDERABLE_TYPE);
-    if (m_format.renderableType() == QSurfaceFormat::OpenVG)
+    bool needsES2Plus = false;
+    switch (m_format.renderableType()) {
+    case QSurfaceFormat::OpenVG:
         configureAttributes.append(EGL_OPENVG_BIT);
+        break;
 #ifdef EGL_VERSION_1_4
-    else if (m_format.renderableType() == QSurfaceFormat::OpenGL)
-        configureAttributes.append(EGL_OPENGL_BIT);
+    case QSurfaceFormat::DefaultRenderableType:
+#ifndef QT_NO_OPENGL
+        if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL)
+            configureAttributes.append(EGL_OPENGL_BIT);
+        else
+#endif // QT_NO_OPENGL
+            needsES2Plus = true;
+        break;
+    case QSurfaceFormat::OpenGL:
+         configureAttributes.append(EGL_OPENGL_BIT);
+         break;
 #endif
-    else if (m_format.majorVersion() == 1)
-        configureAttributes.append(EGL_OPENGL_ES_BIT);
-    else
-        configureAttributes.append(EGL_OPENGL_ES2_BIT);
-
+    case QSurfaceFormat::OpenGLES:
+        if (m_format.majorVersion() == 1) {
+            configureAttributes.append(EGL_OPENGL_ES_BIT);
+            break;
+        }
+        // fall through
+    default:
+        needsES2Plus = true;
+        break;
+    }
+    if (needsES2Plus) {
+        if (m_format.majorVersion() >= 3 && q_hasEglExtension(display(), "EGL_KHR_create_context"))
+            configureAttributes.append(EGL_OPENGL_ES3_BIT_KHR);
+        else
+            configureAttributes.append(EGL_OPENGL_ES2_BIT);
+    }
     configureAttributes.append(EGL_NONE);
 
     EGLConfig cfg = 0;
@@ -268,6 +289,13 @@ EGLConfig QEglConfigChooser::chooseConfig()
         if (!cfg && matching > 0)
             cfg = configs.first();
 
+        // Filter the list. Due to the EGL sorting rules configs with higher depth are
+        // placed first when the minimum color channel sizes have been specified (i.e. the
+        // QSurfaceFormat contains color sizes > 0). To prevent returning a 888 config
+        // when the QSurfaceFormat explicitly asked for 565, go through the returned
+        // configs and look for one that exactly matches the requested sizes. When no
+        // sizes have been given, take the first, which will be a config with the smaller
+        // (e.g. 16-bit) depth.
         for (int i = 0; i < configs.size(); ++i) {
             if (filterConfig(configs[i]))
                 return configs.at(i);
@@ -275,12 +303,14 @@ EGLConfig QEglConfigChooser::chooseConfig()
     } while (q_reduceConfigAttributes(&configureAttributes));
 
     if (!cfg)
-        qWarning("Cant find EGLConfig, returning null config");
+        qWarning("Cannot find EGLConfig, returning null config");
     return cfg;
 }
 
 bool QEglConfigChooser::filterConfig(EGLConfig config) const
 {
+    // If we are fine with the highest depth (e.g. RGB888 configs) even when something
+    // smaller (565) was explicitly requested, do nothing.
     if (m_ignore)
         return true;
 
@@ -289,6 +319,7 @@ bool QEglConfigChooser::filterConfig(EGLConfig config) const
     EGLint blue = 0;
     EGLint alpha = 0;
 
+    // Compare only if a size was given. Otherwise just accept.
     if (m_confAttrRed)
         eglGetConfigAttrib(display(), config, EGL_RED_SIZE, &red);
     if (m_confAttrGreen)
@@ -336,7 +367,14 @@ QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config, 
     if (referenceFormat.renderableType() == QSurfaceFormat::OpenVG && (renderableType & EGL_OPENVG_BIT))
         format.setRenderableType(QSurfaceFormat::OpenVG);
 #ifdef EGL_VERSION_1_4
-    else if (referenceFormat.renderableType() == QSurfaceFormat::OpenGL && (renderableType & EGL_OPENGL_BIT))
+    else if (referenceFormat.renderableType() == QSurfaceFormat::OpenGL
+             && (renderableType & EGL_OPENGL_BIT))
+        format.setRenderableType(QSurfaceFormat::OpenGL);
+    else if (referenceFormat.renderableType() == QSurfaceFormat::DefaultRenderableType
+#ifndef QT_NO_OPENGL
+             && QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL
+#endif
+             && (renderableType & EGL_OPENGL_BIT))
         format.setRenderableType(QSurfaceFormat::OpenGL);
 #endif
     else
@@ -350,6 +388,7 @@ QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config, 
     format.setStencilBufferSize(stencilSize);
     format.setSamples(sampleCount);
     format.setStereo(false);         // EGL doesn't support stereo buffers
+    format.setSwapInterval(referenceFormat.swapInterval());
 
     // Clear the EGL error state because some of the above may
     // have errored out because the attribute is not applicable
@@ -404,11 +443,166 @@ void q_printEglConfig(EGLDisplay display, EGLConfig config)
     for (index = 0; attrs[index].attr != -1; ++index) {
         EGLint value;
         if (eglGetConfigAttrib(display, config, attrs[index].attr, &value)) {
-            qWarning("\t%s: %d\n", attrs[index].name, (int)value);
+            qDebug("\t%s: %d", attrs[index].name, (int)value);
         }
     }
-
-    qWarning("\n");
 }
+
+#ifdef Q_OS_UNIX
+
+QSizeF q_physicalScreenSizeFromFb(int framebufferDevice, const QSize &screenSize)
+{
+#ifndef Q_OS_LINUX
+    Q_UNUSED(framebufferDevice)
+#endif
+    const int defaultPhysicalDpi = 100;
+    static QSizeF size;
+
+    if (size.isEmpty()) {
+        // Note: in millimeters
+        int width = qEnvironmentVariableIntValue("QT_QPA_EGLFS_PHYSICAL_WIDTH");
+        int height = qEnvironmentVariableIntValue("QT_QPA_EGLFS_PHYSICAL_HEIGHT");
+
+        if (width && height) {
+            size.setWidth(width);
+            size.setHeight(height);
+            return size;
+        }
+
+        int w = -1;
+        int h = -1;
+        QSize screenResolution;
+#ifdef Q_OS_LINUX
+        struct fb_var_screeninfo vinfo;
+
+        if (framebufferDevice != -1) {
+            if (ioctl(framebufferDevice, FBIOGET_VSCREENINFO, &vinfo) == -1) {
+                qWarning("eglconvenience: Could not query screen info");
+            } else {
+                w = vinfo.width;
+                h = vinfo.height;
+                screenResolution = QSize(vinfo.xres, vinfo.yres);
+            }
+        } else
+#endif
+        {
+            // Use the provided screen size, when available, since some platforms may have their own
+            // specific way to query it. Otherwise try querying it from the framebuffer.
+            screenResolution = screenSize.isEmpty() ? q_screenSizeFromFb(framebufferDevice) : screenSize;
+        }
+
+        size.setWidth(w <= 0 ? screenResolution.width() * Q_MM_PER_INCH / defaultPhysicalDpi : qreal(w));
+        size.setHeight(h <= 0 ? screenResolution.height() * Q_MM_PER_INCH / defaultPhysicalDpi : qreal(h));
+
+        if (w <= 0 || h <= 0)
+            qWarning("Unable to query physical screen size, defaulting to %d dpi.\n"
+                     "To override, set QT_QPA_EGLFS_PHYSICAL_WIDTH "
+                     "and QT_QPA_EGLFS_PHYSICAL_HEIGHT (in millimeters).", defaultPhysicalDpi);
+    }
+
+    return size;
+}
+
+QSize q_screenSizeFromFb(int framebufferDevice)
+{
+#ifndef Q_OS_LINUX
+    Q_UNUSED(framebufferDevice)
+#endif
+    const int defaultWidth = 800;
+    const int defaultHeight = 600;
+    static QSize size;
+
+    if (size.isEmpty()) {
+        int width = qEnvironmentVariableIntValue("QT_QPA_EGLFS_WIDTH");
+        int height = qEnvironmentVariableIntValue("QT_QPA_EGLFS_HEIGHT");
+
+        if (width && height) {
+            size.setWidth(width);
+            size.setHeight(height);
+            return size;
+        }
+
+#ifdef Q_OS_LINUX
+        struct fb_var_screeninfo vinfo;
+        int xres = -1;
+        int yres = -1;
+
+        if (framebufferDevice != -1) {
+            if (ioctl(framebufferDevice, FBIOGET_VSCREENINFO, &vinfo) == -1) {
+                qWarning("eglconvenience: Could not read screen info");
+            } else {
+                xres = vinfo.xres;
+                yres = vinfo.yres;
+            }
+        }
+
+        size.setWidth(xres <= 0 ? defaultWidth : xres);
+        size.setHeight(yres <= 0 ? defaultHeight : yres);
+#else
+        size.setWidth(defaultWidth);
+        size.setHeight(defaultHeight);
+#endif
+    }
+
+    return size;
+}
+
+int q_screenDepthFromFb(int framebufferDevice)
+{
+#ifndef Q_OS_LINUX
+    Q_UNUSED(framebufferDevice)
+#endif
+    const int defaultDepth = 32;
+    static int depth = qEnvironmentVariableIntValue("QT_QPA_EGLFS_DEPTH");
+
+    if (depth == 0) {
+#ifdef Q_OS_LINUX
+        struct fb_var_screeninfo vinfo;
+
+        if (framebufferDevice != -1) {
+            if (ioctl(framebufferDevice, FBIOGET_VSCREENINFO, &vinfo) == -1)
+                qWarning("eglconvenience: Could not query screen info");
+            else
+                depth = vinfo.bits_per_pixel;
+        }
+
+        if (depth <= 0)
+            depth = defaultDepth;
+#else
+        depth = defaultDepth;
+#endif
+    }
+
+    return depth;
+}
+
+qreal q_refreshRateFromFb(int framebufferDevice)
+{
+    static qreal rate = 0;
+
+#ifdef Q_OS_LINUX
+    if (rate == 0) {
+        if (framebufferDevice != -1) {
+            struct fb_var_screeninfo vinfo;
+            if (ioctl(framebufferDevice, FBIOGET_VSCREENINFO, &vinfo) != -1) {
+                const quint64 quot = quint64(vinfo.left_margin + vinfo.right_margin + vinfo.xres + vinfo.hsync_len)
+                    * quint64(vinfo.upper_margin + vinfo.lower_margin + vinfo.yres + vinfo.vsync_len)
+                    * vinfo.pixclock;
+                if (quot)
+                    rate = 1000000000000LLU / quot;
+            } else {
+                qWarning("eglconvenience: Could not query screen info");
+            }
+        }
+    }
+#endif
+
+    if (rate == 0)
+        rate = 60;
+
+    return rate;
+}
+
+#endif // Q_OS_UNIX
 
 QT_END_NAMESPACE

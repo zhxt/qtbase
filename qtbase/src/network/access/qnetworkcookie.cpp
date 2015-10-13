@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -51,6 +43,7 @@
 #include "QtCore/qstring.h"
 #include "QtCore/qstringlist.h"
 #include "QtCore/qurl.h"
+#include "QtNetwork/qhostaddress.h"
 #include "private/qobject_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -155,15 +148,15 @@ QNetworkCookie &QNetworkCookie::operator=(const QNetworkCookie &other)
 /*!
     \fn bool QNetworkCookie::operator!=(const QNetworkCookie &other) const
 
-    Returns true if this cookie is not equal to \a other.
+    Returns \c true if this cookie is not equal to \a other.
 
     \sa operator==()
 */
 
 /*!
     \since 5.0
-    Returns true if this cookie is equal to \a other. This function
-    only returns true if all fields of the cookie are the same.
+    Returns \c true if this cookie is equal to \a other. This function
+    only returns \c true if all fields of the cookie are the same.
 
     However, in some contexts, two cookies of the same name could be
     considered equal.
@@ -184,7 +177,7 @@ bool QNetworkCookie::operator==(const QNetworkCookie &other) const
 }
 
 /*!
-    Returns true if this cookie has the same identifier tuple as \a other.
+    Returns \c true if this cookie has the same identifier tuple as \a other.
     The identifier tuple is composed of the name, domain and path.
 
     \sa operator==()
@@ -195,7 +188,7 @@ bool QNetworkCookie::hasSameIdentifier(const QNetworkCookie &other) const
 }
 
 /*!
-    Returns true if the "secure" option was specified in the cookie
+    Returns \c true if the "secure" option was specified in the cookie
     string, false otherwise.
 
     Secure cookies may contain private information and should not be
@@ -224,7 +217,7 @@ void QNetworkCookie::setSecure(bool enable)
 /*!
     \since 4.5
 
-    Returns true if the "HttpOnly" flag is enabled for this cookie.
+    Returns \c true if the "HttpOnly" flag is enabled for this cookie.
 
     A cookie that is "HttpOnly" is only set and retrieved by the
     network requests and replies; i.e., the HTTP protocol. It is not
@@ -248,7 +241,7 @@ void QNetworkCookie::setHttpOnly(bool enable)
 }
 
 /*!
-    Returns true if this cookie is a session cookie. A session cookie
+    Returns \c true if this cookie is a session cookie. A session cookie
     is a cookie which has no expiration date, which means it should be
     discarded when the application's concept of session is over
     (usually, when the application exits).
@@ -466,12 +459,19 @@ QByteArray QNetworkCookie::toRawForm(RawForm form) const
         }
         if (!d->domain.isEmpty()) {
             result += "; domain=";
-            QString domainNoDot = d->domain;
-            if (domainNoDot.startsWith(QLatin1Char('.'))) {
+            if (d->domain.startsWith(QLatin1Char('.'))) {
                 result += '.';
-                domainNoDot = domainNoDot.mid(1);
+                result += QUrl::toAce(d->domain.mid(1));
+            } else {
+                QHostAddress hostAddr(d->domain);
+                if (hostAddr.protocol() == QAbstractSocket::IPv6Protocol) {
+                    result += '[';
+                    result += d->domain.toUtf8();
+                    result += ']';
+                } else {
+                    result += QUrl::toAce(d->domain);
+                }
             }
-            result += QUrl::toAce(domainNoDot);
         }
         if (!d->path.isEmpty()) {
             result += "; path=";
@@ -499,7 +499,7 @@ static const char zones[] =
     "eet\0" // 2
     "jst\0" // 9
     "\0";
-static int zoneOffsets[] = {-8, -8, -7, -7, -6, -6, -5, -5, -4, -3, 0, 0, 0, 1, 2, 9 };
+static const int zoneOffsets[] = {-8, -8, -7, -7, -6, -6, -5, -5, -4, -3, 0, 0, 0, 1, 2, 9 };
 
 static const char months[] =
     "jan\0"
@@ -1006,7 +1006,7 @@ QList<QNetworkCookie> QNetworkCookiePrivate::parseSetCookieHeaderLine(const QByt
 */
 void QNetworkCookie::normalize(const QUrl &url)
 {
-    // don't do path checking. See http://bugreports.qt-project.org/browse/QTBUG-5815
+    // don't do path checking. See QTBUG-5815
     if (d->path.isEmpty()) {
         QString pathAndFileName = url.path();
         QString defaultPath = pathAndFileName.left(pathAndFileName.lastIndexOf(QLatin1Char('/'))+1);
@@ -1015,21 +1015,29 @@ void QNetworkCookie::normalize(const QUrl &url)
         d->path = defaultPath;
     }
 
-    if (d->domain.isEmpty())
+    if (d->domain.isEmpty()) {
         d->domain = url.host();
-    else if (!d->domain.startsWith(QLatin1Char('.')))
-        // Ensure the domain starts with a dot if its field was not empty
-        // in the HTTP header. There are some servers that forget the
-        // leading dot and this is actually forbidden according to RFC 2109,
-        // but all browsers accept it anyway so we do that as well.
-        d->domain.prepend(QLatin1Char('.'));
+    } else {
+        QHostAddress hostAddress(d->domain);
+        if (hostAddress.protocol() != QAbstractSocket::IPv4Protocol
+                && hostAddress.protocol() != QAbstractSocket::IPv6Protocol
+                && !d->domain.startsWith(QLatin1Char('.'))) {
+            // Ensure the domain starts with a dot if its field was not empty
+            // in the HTTP header. There are some servers that forget the
+            // leading dot and this is actually forbidden according to RFC 2109,
+            // but all browsers accept it anyway so we do that as well.
+            d->domain.prepend(QLatin1Char('.'));
+        }
+    }
 }
 
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug s, const QNetworkCookie &cookie)
 {
-    s.nospace() << "QNetworkCookie(" << cookie.toRawForm(QNetworkCookie::Full) << ')';
-    return s.space();
+    QDebugStateSaver saver(s);
+    s.resetFormat().nospace();
+    s << "QNetworkCookie(" << cookie.toRawForm(QNetworkCookie::Full) << ')';
+    return s;
 }
 #endif
 

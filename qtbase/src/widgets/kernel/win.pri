@@ -2,6 +2,6 @@
 # --------------------------------------------------------------------
 
 INCLUDEPATH += ../3rdparty/wintab
-!wince* {
-    LIBS *= -lshell32
+!wince:!winrt {
+    LIBS_PRIVATE *= -lshell32
 }

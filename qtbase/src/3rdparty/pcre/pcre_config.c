@@ -41,7 +41,7 @@ POSSIBILITY OF SUCH DAMAGE.
 /* This module contains the external function pcre_config(). */
 
 
-#ifdef PCRE_HAVE_CONFIG_H
+#ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
@@ -159,6 +159,10 @@ switch (what)
 
   case PCRE_CONFIG_POSIX_MALLOC_THRESHOLD:
   *((int *)where) = POSIX_MALLOC_THRESHOLD;
+  break;
+
+  case PCRE_CONFIG_PARENS_LIMIT:
+  *((unsigned long int *)where) = PARENS_NEST_LIMIT;
   break;
 
   case PCRE_CONFIG_MATCH_LIMIT:

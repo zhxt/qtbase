@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -143,7 +135,7 @@ QAbstractFileEngine *QFilePrivate::engine() const
     The size of the file is returned by size(). You can get the
     current file position using pos(), or move to a new file position
     using seek(). If you've reached the end of the file, atEnd()
-    returns true.
+    returns \c true.
 
     \section1 Reading Files Directly
 
@@ -167,7 +159,7 @@ QAbstractFileEngine *QFilePrivate::engine() const
     disk into a 16-bit Unicode QString. By default, it assumes that
     the user system's local 8-bit encoding is used (e.g., UTF-8
     on most unix based operating systems; see QTextCodec::codecForLocale() for
-    details). This can be changed using setCodec().
+    details). This can be changed using \l QTextStream::setCodec().
 
     To write text, we can use operator<<(), which is overloaded to
     take a QTextStream on the left and various data types (including
@@ -207,12 +199,19 @@ QAbstractFileEngine *QFilePrivate::engine() const
 
     \section1 Platform Specific Issues
 
-    File permissions are handled differently on Linux/Mac OS X and
+    File permissions are handled differently on Unix-like systems and
     Windows.  In a non \l{QIODevice::isWritable()}{writable}
-    directory on Linux, files cannot be created. This is not always
+    directory on Unix-like systems, files cannot be created. This is not always
     the case on Windows, where, for instance, the 'My Documents'
     directory usually is not writable, but it is still possible to
     create files in it.
+
+    Qt's understanding of file permissions is limited, which affects especially
+    the \l QFile::setPermissions() function. On Windows, Qt will set only the
+    legacy read-only flag, and that only when none of the Write* flags are
+    passed. Qt does not manipulate access control lists (ACLs), which makes this
+    function mostly useless for NTFS volumes. It may still be of use for USB
+    sticks that use VFAT file systems. POSIX ACLs are not manipulated, either.
 
     \sa QTextStream, QDataStream, QFileInfo, QDir, {The Qt Resource System}
 */
@@ -403,8 +402,8 @@ QFile::setFileName(const QString &name)
 /*!
     \overload
 
-    Returns true if the file specified by fileName() exists; otherwise
-    returns false.
+    Returns \c true if the file specified by fileName() exists; otherwise
+    returns \c false.
 
     \sa fileName(), setFileName()
 */
@@ -419,14 +418,17 @@ QFile::exists() const
 }
 
 /*!
-    Returns true if the file specified by \a fileName exists; otherwise
-    returns false.
+    Returns \c true if the file specified by \a fileName exists; otherwise
+    returns \c false.
+
+    \note If \a fileName is a symlink that points to a non-existing
+    file, false is returned.
 */
 
 bool
 QFile::exists(const QString &fileName)
 {
-    return QFileInfo(fileName).exists();
+    return QFileInfo::exists(fileName);
 }
 
 /*!
@@ -439,7 +441,7 @@ QFile::exists(const QString &fileName)
     link.
 
     This name may not represent an existing file; it is only a string.
-    QFile::exists() returns true if the symlink points to an existing file.
+    QFile::exists() returns \c true if the symlink points to an existing file.
 
     \sa fileName(), setFileName()
 */
@@ -465,7 +467,7 @@ QFile::readLink() const
     empty string if the \a fileName does not correspond to a symbolic link.
 
     This name may not represent an existing file; it is only a string.
-    QFile::exists() returns true if the symlink points to an existing file.
+    QFile::exists() returns \c true if the symlink points to an existing file.
 */
 
 /*!
@@ -480,8 +482,8 @@ QFile::readLink(const QString &fileName)
 }
 
 /*!
-    Removes the file specified by fileName(). Returns true if successful;
-    otherwise returns false.
+    Removes the file specified by fileName(). Returns \c true if successful;
+    otherwise returns \c false.
 
     The file is closed before it is removed.
 
@@ -513,7 +515,7 @@ QFile::remove()
 
     Removes the file specified by the \a fileName given.
 
-    Returns true if successful; otherwise returns false.
+    Returns \c true if successful; otherwise returns \c false.
 
     \sa remove()
 */
@@ -526,9 +528,9 @@ QFile::remove(const QString &fileName)
 
 /*!
     Renames the file currently specified by fileName() to \a newName.
-    Returns true if successful; otherwise returns false.
+    Returns \c true if successful; otherwise returns \c false.
 
-    If a file with the name \a newName already exists, rename() returns false
+    If a file with the name \a newName already exists, rename() returns \c false
     (i.e., QFile will not overwrite it).
 
     The file is closed before it is renamed.
@@ -568,6 +570,8 @@ QFile::rename(const QString &newName)
             d->setError(QFile::RenameError, tr("Destination file exists"));
             return false;
         }
+#ifndef QT_NO_TEMPORARYFILE
+        // This #ifndef disables the workaround it encloses. Therefore, this configuration is not recommended.
 #ifdef Q_OS_LINUX
         // rename() on Linux simply does nothing when renaming "foo" to "Foo" on a case-insensitive
         // FS, such as FAT32. Move the file away and rename in 2 steps to work around.
@@ -595,7 +599,8 @@ QFile::rename(const QString &newName)
                         arg(QDir::toNativeSeparators(tempFile.fileName()), tempFile.errorString()));
         }
         return false;
-#endif
+#endif // Q_OS_LINUX
+#endif // QT_NO_TEMPORARYFILE
     }
     unsetError();
     close();
@@ -657,10 +662,10 @@ QFile::rename(const QString &newName)
 /*!
     \overload
 
-    Renames the file \a oldName to \a newName. Returns true if
-    successful; otherwise returns false.
+    Renames the file \a oldName to \a newName. Returns \c true if
+    successful; otherwise returns \c false.
 
-    If a file with the name \a newName already exists, rename() returns false
+    If a file with the name \a newName already exists, rename() returns \c false
     (i.e., QFile will not overwrite it).
 
     \sa rename()
@@ -676,8 +681,8 @@ QFile::rename(const QString &oldName, const QString &newName)
 
     Creates a link named \a linkName that points to the file currently specified by
     fileName().  What a link is depends on the underlying filesystem (be it a
-    shortcut on Windows or a symbolic link on Unix). Returns true if successful;
-    otherwise returns false.
+    shortcut on Windows or a symbolic link on Unix). Returns \c true if successful;
+    otherwise returns \c false.
 
     This function will not overwrite an already existing entity in the file system;
     in this case, \c link() will return false and set \l{QFile::}{error()} to
@@ -710,8 +715,8 @@ QFile::link(const QString &linkName)
 
     Creates a link named \a linkName that points to the file \a fileName. What a link is
     depends on the underlying filesystem (be it a shortcut on Windows
-    or a symbolic link on Unix). Returns true if successful; otherwise
-    returns false.
+    or a symbolic link on Unix). Returns \c true if successful; otherwise
+    returns \c false.
 
     \sa link()
 */
@@ -724,10 +729,10 @@ QFile::link(const QString &fileName, const QString &linkName)
 
 /*!
     Copies the file currently specified by fileName() to a file called
-    \a newName.  Returns true if successful; otherwise returns false.
+    \a newName.  Returns \c true if successful; otherwise returns \c false.
 
     Note that if a file with the name \a newName already exists,
-    copy() returns false (i.e. QFile will not overwrite it).
+    copy() returns \c false (i.e. QFile will not overwrite it).
 
     The source file is closed before it is copied.
 
@@ -827,10 +832,10 @@ QFile::copy(const QString &newName)
 /*!
     \overload
 
-    Copies the file \a fileName to \a newName. Returns true if successful;
-    otherwise returns false.
+    Copies the file \a fileName to \a newName. Returns \c true if successful;
+    otherwise returns \c false.
 
-    If a file with the name \a newName already exists, copy() returns false
+    If a file with the name \a newName already exists, copy() returns \c false
     (i.e., QFile will not overwrite it).
 
     \sa rename()
@@ -891,7 +896,7 @@ bool QFile::open(OpenMode mode)
 
     Opens the existing file handle \a fh in the given \a mode.
     \a handleFlags may be used to specify additional options.
-    Returns true if successful; otherwise returns false.
+    Returns \c true if successful; otherwise returns \c false.
 
     Example:
     \snippet code/src_corelib_io_qfile.cpp 3
@@ -963,7 +968,7 @@ bool QFile::open(FILE *fh, OpenMode mode, FileHandleFlags handleFlags)
 
     Opens the existing file descriptor \a fd in the given \a mode.
     \a handleFlags may be used to specify additional options.
-    Returns true if successful; otherwise returns false.
+    Returns \c true if successful; otherwise returns \c false.
 
     When a QFile is opened using this function, behaviour of close() is
     controlled by the AutoCloseHandle flag.
@@ -981,8 +986,8 @@ bool QFile::open(FILE *fh, OpenMode mode, FileHandleFlags handleFlags)
     those cases, size() returns \c 0.  See QIODevice::isSequential()
     for more information.
 
-    \warning For Windows CE you may not be able to call seek(), setSize(),
-    fileTime(). size() returns \c 0.
+    \warning For Windows CE you may not be able to call seek(), and size()
+             returns \c 0.
 
     \warning Since this function opens the file without specifying the file name,
              you cannot use this QFile with a QFileInfo.
@@ -1028,7 +1033,7 @@ bool QFile::resize(qint64 sz)
 /*!
     \overload
 
-    Sets \a fileName to size (in bytes) \a sz. Returns true if the file if
+    Sets \a fileName to size (in bytes) \a sz. Returns \c true if the file if
     the resize succeeds; false otherwise. If \a sz is larger than \a
     fileName currently is the new bytes will be set to 0, if \a sz is
     smaller the file is simply truncated.
@@ -1065,8 +1070,11 @@ QFile::permissions(const QString &fileName)
 
 /*!
     Sets the permissions for the file to the \a permissions specified.
-    Returns true if successful, or false if the permissions cannot be
+    Returns \c true if successful, or \c false if the permissions cannot be
     modified.
+
+    \warning This function does not manipulate ACLs, which may limit its
+    effectiveness.
 
     \sa permissions(), setFileName()
 */

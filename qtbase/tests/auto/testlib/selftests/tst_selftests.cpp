@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -63,11 +55,12 @@ private slots:
     void cleanup();
 
 private:
-    void doRunSubTest(QString const& subdir, QStringList const& loggers, QStringList const& arguments);
+    void doRunSubTest(QString const& subdir, QStringList const& loggers, QStringList const& arguments, bool crashes);
     QString logName(const QString &logger) const;
     QList<LoggerSet> allLoggerSets() const;
 
     QTemporaryDir tempDir;
+    QRegularExpression durationRegExp;
 };
 
 struct BenchmarkResult
@@ -99,13 +92,13 @@ inline bool qCompare
     // Now check the value.  Some variance is allowed, and how much depends on
     // the measured unit.
     qreal variance = 0.;
-    if (r1.unit == "msec") {
+    if (r1.unit == "msecs" || r1.unit == "WalltimeMilliseconds") {
         variance = 0.1;
     }
     else if (r1.unit == "instruction reads") {
         variance = 0.001;
     }
-    else if (r1.unit == "ticks") {
+    else if (r1.unit == "CPU ticks" || r1.unit == "CPUTicks") {
         variance = 0.001;
     }
     if (variance == 0.) {
@@ -168,12 +161,17 @@ QString tst_Selftests::logName(const QString &logger) const
     return (logger.startsWith("stdout") ? "" : QString(tempDir.path() + "/test_output." + logger));
 }
 
+static QString expectedFileNameFromTest(const QString &subdir, const QString &logger)
+{
+    return QStringLiteral("expected_") + subdir + QLatin1Char('.') + logFormat(logger);
+}
+
 // Load the expected test output for the nominated test (subdir) and logger
 // as an array of lines.  If there is no expected output file, return an
 // empty array.
-static QList<QByteArray> expectedResult(const QString &subdir, const QString &logger)
+static QList<QByteArray> expectedResult(const QString &fileName)
 {
-    QFile file(":/expected_" + subdir + "." + logFormat(logger));
+    QFile file(QStringLiteral(":/") + fileName);
     if (!file.open(QIODevice::ReadOnly))
         return QList<QByteArray>();
     return splitLines(file.readAll());
@@ -233,6 +231,12 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
                      QStringList() << "lightxml",
                      QStringList() << "-lightxml" << "-o" << logName("lightxml")
                     )
+        << LoggerSet("old stdout csv", // benchmarks only
+                     QStringList() << "stdout csv",
+                     QStringList() << "-csv")
+        << LoggerSet("old csv", // benchmarks only
+                     QStringList() << "csv",
+                     QStringList() << "-csv" << "-o" << logName("csv"))
         // Test with new-style options for a single logger
         << LoggerSet("new stdout txt",
                      QStringList() << "stdout txt",
@@ -266,6 +270,12 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
                      QStringList() << "lightxml",
                      QStringList() << "-o" << logName("lightxml")+",lightxml"
                     )
+        << LoggerSet("new stdout csv", // benchmarks only
+                     QStringList() << "stdout csv",
+                     QStringList() << "-o" << "-,csv")
+        << LoggerSet("new csv", // benchmarks only
+                     QStringList() << "csv",
+                     QStringList() << "-o" << logName("csv")+",csv")
         // Test with two loggers (don't test all 32 combinations, just a sample)
         << LoggerSet("stdout txt + txt",
                      QStringList() << "stdout txt" << "txt",
@@ -287,7 +297,7 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
                      QStringList() << "-o" << logName("lightxml")+",lightxml"
                                    << "-o" << "-,xunitxml"
                     )
-        // All loggers at the same time
+        // All loggers at the same time (except csv)
         << LoggerSet("all loggers",
                      QStringList() << "txt" << "xml" << "lightxml" << "stdout txt" << "xunitxml",
                      QStringList() << "-o" << logName("txt")+",txt"
@@ -301,6 +311,7 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
 
 tst_Selftests::tst_Selftests()
     : tempDir(QDir::tempPath() + "/tst_selftests.XXXXXX")
+    , durationRegExp("<Duration msecs=\"[\\d\\.]+\"/>")
 {}
 
 void tst_Selftests::initTestCase()
@@ -324,6 +335,7 @@ void tst_Selftests::runSubTest_data()
     QTest::addColumn<QString>("subdir");
     QTest::addColumn<QStringList>("loggers");
     QTest::addColumn<QStringList>("arguments");
+    QTest::addColumn<bool>("crashes");
 
     QStringList tests = QStringList()
 //        << "alive"    // timer dependent
@@ -340,6 +352,7 @@ void tst_Selftests::runSubTest_data()
         << "benchlibcounting"
         << "benchlibeventcounter"
         << "benchliboptions"
+        << "blacklisted"
         << "cmptest"
         << "commandlinedata"
         << "counting"
@@ -380,6 +393,10 @@ void tst_Selftests::runSubTest_data()
         << "subtest"
         << "verbose1"
         << "verbose2"
+#ifndef QT_NO_EXCEPTIONS
+        // this test will test nothing if the exceptions are disabled
+        << "verifyexceptionthrown"
+#endif //!QT_NO_EXCEPTIONS
         << "warnings"
         << "xunit"
     ;
@@ -454,6 +471,9 @@ void tst_Selftests::runSubTest_data()
                 if (subtest == "benchliboptions") {
                     continue;
                 }
+                if (subtest == "blacklisted") {
+                    continue;
+                }
                 if (subtest == "printdatatags") {
                     continue;
                 }
@@ -479,40 +499,65 @@ void tst_Selftests::runSubTest_data()
                     continue;
                 }
             }
+            if (subtest == "badxml" && (loggerSet.name == "all loggers" || loggerSet.name.contains("txt")))
+                continue; // XML only, do not mix txt and XML for encoding test.
 
+            if (loggerSet.name.contains("csv") && !subtest.startsWith("benchlib"))
+                continue;
+
+            const bool crashes = subtest == QLatin1String("assert") || subtest == QLatin1String("exceptionthrow")
+                || subtest == QLatin1String("fetchbogus") || subtest == QLatin1String("crashedterminate")
+                || subtest == QLatin1String("crashes") || subtest == QLatin1String("silent")
+                || subtest == QLatin1String("blacklisted");
             QTest::newRow(qPrintable(QString("%1 %2").arg(subtest).arg(loggerSet.name)))
                 << subtest
                 << loggers
                 << arguments
+                << crashes
             ;
         }
     }
 }
 
-static void insertEnvironmentVariable(QString const& name, QProcessEnvironment &result)
-{
-    const QProcessEnvironment systemEnvironment = QProcessEnvironment::systemEnvironment();
-    const QString value = systemEnvironment.value(name);
-    if (!value.isEmpty())
-        result.insert(name, value);
-}
+#ifndef QT_NO_PROCESS
 
-static inline QProcessEnvironment processEnvironment()
+static QProcessEnvironment processEnvironment()
 {
-    QProcessEnvironment result;
-    insertEnvironmentVariable(QStringLiteral("PATH"), result);
-    // Preserve DISPLAY for X11 as some tests use Qt GUI.
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-    insertEnvironmentVariable(QStringLiteral("DISPLAY"), result);
-#endif
-    insertEnvironmentVariable(QStringLiteral("QT_QPA_PLATFORM"), result);
+    static QProcessEnvironment result;
+    if (result.isEmpty()) {
+        const QProcessEnvironment systemEnvironment = QProcessEnvironment::systemEnvironment();
+        foreach (const QString &key, systemEnvironment.keys()) {
+            const bool useVariable = key == QLatin1String("PATH") || key == QLatin1String("QT_QPA_PLATFORM")
+#if defined(Q_OS_QNX)
+                || key == QLatin1String("GRAPHICS_ROOT") || key == QLatin1String("TZ")
+#elif defined(Q_OS_UNIX)
+                || key == QLatin1String("HOME") || key == QLatin1String("USER") // Required for X11 on openSUSE
+#  if !defined(Q_OS_MAC)
+                || key == QLatin1String("DISPLAY") || key == QLatin1String("XAUTHLOCALHOSTNAME")
+                || key.startsWith(QLatin1String("XDG_"))
+#  endif // !Q_OS_MAC
+#endif // Q_OS_UNIX
 #ifdef __COVERAGESCANNER__
-    insertEnvironmentVariable(QStringLiteral("QT_TESTCOCOON_ACTIVE"), result);
+                || key == QLatin1String("QT_TESTCOCOON_ACTIVE")
 #endif
+                ;
+            if (useVariable)
+                result.insert(key, systemEnvironment.value(key));
+        }
+    }
     return result;
 }
 
-void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& loggers, QStringList const& arguments)
+static inline QByteArray msgProcessError(const QString &binary, const QStringList &args,
+                                         const QProcessEnvironment &e, const QString &what)
+{
+    QString result;
+    QTextStream(&result) <<"Error running " << binary << ' ' << args.join(' ')
+        << " with environment " << e.toStringList().join(' ') << ": " << what;
+    return result.toLocal8Bit();
+}
+
+void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& loggers, QStringList const& arguments, bool crashes)
 {
 #if defined(__GNUC__) && defined(__i386) && defined(Q_OS_LINUX)
     if (arguments.contains("-callgrind")) {
@@ -530,8 +575,14 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     proc.setProcessEnvironment(environment);
     const QString path = subdir + QLatin1Char('/') + subdir;
     proc.start(path, arguments);
-    QVERIFY2(proc.waitForStarted(), qPrintable(QString::fromLatin1("Cannot start '%1': %2").arg(path, proc.errorString())));
-    QVERIFY2(proc.waitForFinished(), qPrintable(proc.errorString()));
+    QVERIFY2(proc.waitForStarted(), msgProcessError(path, arguments, environment, QStringLiteral("Cannot start: ") + proc.errorString()));
+    QVERIFY2(proc.waitForFinished(), msgProcessError(path, arguments, environment, QStringLiteral("Timed out: ") + proc.errorString()));
+    if (!crashes) {
+        QVERIFY2(proc.exitStatus() == QProcess::NormalExit,
+                 msgProcessError(path, arguments, environment,
+                                 QStringLiteral("Crashed: ") + proc.errorString()
+                                 + QStringLiteral(": ") + QString::fromLocal8Bit(proc.readAllStandardError())));
+    }
 
     QList<QByteArray> actualOutputs;
     for (int i = 0; i < loggers.count(); ++i) {
@@ -564,6 +615,7 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
         && subdir != QLatin1String("fetchbogus")
         && subdir != QLatin1String("xunit")
 #ifdef Q_CC_MINGW
+        && subdir != QLatin1String("blacklisted") // calls qFatal()
         && subdir != QLatin1String("silent") // calls qFatal()
 #endif
         && subdir != QLatin1String("benchlibcallgrind"))
@@ -572,7 +624,8 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     for (int n = 0; n < loggers.count(); ++n) {
         QString logger = loggers[n];
         QList<QByteArray> res = splitLines(actualOutputs[n]);
-        QList<QByteArray> exp = expectedResult(subdir, logger);
+        const QString expectedFileName = expectedFileNameFromTest(subdir, logger);
+        QList<QByteArray> exp = expectedResult(expectedFileName);
 #if defined (Q_CC_MSVC) || defined(Q_CC_MINGW)
         // MSVC, MinGW format double numbers differently
         if (n == 0 && subdir == QStringLiteral("float")) {
@@ -591,7 +644,7 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
             QList<QByteArray> tmp;
             int i = 1;
             do {
-                tmp = expectedResult(subdir + QString("_%1").arg(i++), logger);
+                tmp = expectedResult(expectedFileNameFromTest(subdir + QLatin1Char('_') + QString::number(i++), logger));
                 if (tmp.count())
                     expArr += tmp;
             } while (tmp.count());
@@ -610,9 +663,19 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
                                     .arg(loggers.at(n))));
             }
         } else {
-            QVERIFY2(res.count() == exp.count(),
-                     qPrintable(QString::fromLatin1("Mismatch in line count: %1 != %2 (%3).")
-                                .arg(res.count()).arg(exp.count()).arg(loggers.at(n))));
+            if (res.count() != exp.count()) {
+                qDebug() << "<<<<<<";
+                foreach (const QByteArray &line, res)
+                    qDebug() << line;
+                qDebug() << "======";
+                foreach (const QByteArray &line, exp)
+                    qDebug() << line;
+                qDebug() << ">>>>>>";
+
+                QVERIFY2(res.count() == exp.count(),
+                     qPrintable(QString::fromLatin1("Mismatch in line count: %1 != %2 (%3, %4).")
+                                .arg(res.count()).arg(exp.count()).arg(loggers.at(n), expectedFileName)));
+            }
         }
 
         // By this point, we should have loaded a non-empty expected data file.
@@ -654,6 +717,12 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
             if (line.endsWith(" : failure location"))
                 continue;
 
+            if (line.startsWith("Config: Using QtTest library") // Text build string
+                || line.startsWith("    <QtBuild") // XML, Light XML build string
+                || (line.startsWith("    <property value=") &&  line.endsWith("name=\"QtBuild\"/>"))) { // XUNIT-XML build string
+                    continue;
+            }
+
             const QString output(QString::fromLatin1(line));
             const QString expected(QString::fromLatin1(exp.at(i)).replace("@INSERT_QT_VERSION_HERE@", QT_VERSION_STR));
 
@@ -665,7 +734,7 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
             else if (expected.startsWith(QLatin1String("FAIL!  : tst_Exception::throwException() Caught unhandled exce")) && expected != output)
                 // On some platforms we compile without RTTI, and as a result we never throw an exception.
                 QCOMPARE(output.simplified(), QString::fromLatin1("tst_Exception::throwException()").simplified());
-            else if (benchmark || line.startsWith("<BenchmarkResult")) {
+            else if (benchmark || line.startsWith("<BenchmarkResult") || (logFormat(logger) == "csv" && line.startsWith('"'))) {
                 // Don't do a literal comparison for benchmark results, since
                 // results have some natural variance.
                 QString error;
@@ -677,10 +746,14 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
                 QVERIFY2(error.isEmpty(), qPrintable(QString("Expected line didn't parse as benchmark result: %1\nLine: %2").arg(error).arg(expected)));
 
                 QCOMPARE(actualResult, expectedResult);
+            } else if (line.startsWith("    <Duration msecs=") || line.startsWith("<Duration msecs=")) {
+                QRegularExpressionMatch match = durationRegExp.match(line);
+                QVERIFY2(match.hasMatch(), qPrintable(QString::fromLatin1("Invalid Duration tag at line %1 (%2): '%3'")
+                                                      .arg(i).arg(loggers.at(n), output)));
             } else {
                 QVERIFY2(output == expected,
-                         qPrintable(QString::fromLatin1("Mismatch at line %1 (%2): '%3' != '%4'")
-                                    .arg(i).arg(loggers.at(n), output, expected)));
+                         qPrintable(QString::fromLatin1("Mismatch at line %1 (%2, %3):\n'%4'\n !=\n'%5'")
+                                    .arg(i + 1).arg(loggers.at(n), expectedFileName, output, expected)));
             }
 
             benchmark = line.startsWith("RESULT : ");
@@ -688,13 +761,20 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     }
 }
 
+#endif // !QT_NO_PROCESS
+
 void tst_Selftests::runSubTest()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("This test requires QProcess support");
+#else
     QFETCH(QString, subdir);
     QFETCH(QStringList, loggers);
     QFETCH(QStringList, arguments);
+    QFETCH(bool, crashes);
 
-    doRunSubTest(subdir, loggers, arguments);
+    doRunSubTest(subdir, loggers, arguments, crashes);
+#endif // !QT_NO_PROCESS
 }
 
 // attribute must contain ="
@@ -761,6 +841,35 @@ BenchmarkResult BenchmarkResult::parse(QString const& line, QString* error)
         out.iterations = iterations;
         return out;
     }
+
+    if (line.startsWith('"')) {
+        // CSV result
+        // format:
+        //  "function","[globaltag:]tag","metric",value_per_iteration,total,iterations
+        QStringList split = line.split(',');
+        if (split.count() != 6) {
+            if (error) *error = QString("Wrong number of columns (%1)").arg(split.count());
+            return out;
+        }
+
+        bool ok;
+        double total = split.at(4).toDouble(&ok);
+        if (!ok) {
+            if (error) *error = split.at(4) + " is not a valid number";
+            return out;
+        }
+        double iterations = split.at(5).toDouble(&ok);
+        if (!ok) {
+            if (error) *error = split.at(5) + " is not a valid number";
+            return out;
+        }
+
+        out.unit = split.at(2);
+        out.total = total;
+        out.iterations = iterations;
+        return out;
+    }
+
     // Text result
     // This code avoids using a QRegExp because QRegExp might be broken.
     // Sample format: 4,000 msec per iteration (total: 4,000, iterations: 1)

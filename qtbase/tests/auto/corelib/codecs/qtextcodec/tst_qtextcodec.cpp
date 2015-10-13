@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,7 +36,6 @@
 
 #include <qtextcodec.h>
 #include <qfile.h>
-#include <qtextdocument.h>
 #include <time.h>
 #include <qprocess.h>
 #include <QThreadPool>
@@ -67,19 +58,23 @@ private slots:
     void codecForLocale();
 
     void asciiToIscii() const;
-    void flagCodepointFFFF() const;
+    void nonFlaggedCodepointFFFF() const;
     void flagF7808080() const;
-    void flagEFBFBF() const;
+    void nonFlaggedEFBFBF() const;
     void decode0D() const;
     void aliasForUTF16() const;
     void mibForTSCII() const;
     void codecForTSCII() const;
+    void iso8859_16() const;
 
     void utf8Codec_data();
     void utf8Codec();
 
     void utf8bom_data();
     void utf8bom();
+
+    void utf8stateful_data();
+    void utf8stateful();
 
     void utfHeaders_data();
     void utfHeaders();
@@ -90,7 +85,7 @@ private slots:
     void codecForUtfText_data();
     void codecForUtfText();
 
-#if defined(Q_OS_UNIX) && !defined(QT_NO_PROCESS)
+#if defined(Q_OS_UNIX)
     void toLocal8Bit();
 #endif
 
@@ -102,6 +97,7 @@ private slots:
     void moreToFromUnicode();
 
     void shiftJis();
+    void userCodec();
 };
 
 void tst_QTextCodec::toUnicode_data()
@@ -201,10 +197,9 @@ void tst_QTextCodec::fromUnicode_data()
     QTest::newRow("windows-1257") << "windows-1257" << true;
     QTest::newRow("windows-1258") << "windows-1258" << true;
 
-    QTest::newRow("macintosh") << "macintosh" << true;
+    QTest::newRow("Apple Roman") << "Apple Roman" << true;
     //QTest::newRow("WINSAMI2") << "WINSAMI2" << true;
     QTest::newRow("TIS-620") << "TIS-620" << true;
-//    QTest::newRow("hp-roman8") << "hp-roman8" << true;
     QTest::newRow("SJIS") << "SJIS" << false;
 
     // all codecs from documentation
@@ -214,20 +209,17 @@ void tst_QTextCodec::fromUnicode_data()
     QTest::newRow("windows-949") << "windows-949" << false;
     QTest::newRow("EUC-JP") << "EUC-JP" << false;
     QTest::newRow("EUC-KR") << "EUC-KR" << false;
-    //QTest::newRow("GB18030-0") << "GB18030-0" << false; // only GB18030 works
     QTest::newRow("GB18030") << "GB18030" << false;
+    QTest::newRow("HP-ROMAN8") << "HP-ROMAN8" << false;
     QTest::newRow("IBM 850") << "IBM 850" << false;
     QTest::newRow("IBM 866") << "IBM 866" << false;
     QTest::newRow("IBM 874") << "IBM 874" << false;
     QTest::newRow("ISO 2022-JP") << "ISO 2022-JP" << false;
     //ISO 8859-1 to 10 and  ISO 8859-13 to 16 tested previously
     // Iscii-Bng, Dev, Gjr, Knd, Mlm, Ori, Pnj, Tlg, and Tml  tested in Iscii test
-    //QTest::newRow("JIS X 0201") << "JIS X 0201" << false; // actually not there
-    //QTest::newRow("JIS X 0208") << "JIS X 0208" << false; // actually not there
     QTest::newRow("KOI8-R") << "KOI8-R" << false;
     QTest::newRow("KOI8-U") << "KOI8-U" << false;
-    //QTest::newRow("MuleLao-1") << "MuleLao-1" << false; //only on x11
-    QTest::newRow("ROMAN8") << "ROMAN8" << false;
+    QTest::newRow("Macintosh") << "Macintosh" << true;
     QTest::newRow("Shift-JIS") << "Shift-JIS" << false;
     QTest::newRow("TIS-620") << "TIS-620" << false;
     QTest::newRow("TSCII") << "TSCII" << false;
@@ -287,7 +279,7 @@ void tst_QTextCodec::toUnicode_codecForHtml()
     QVERIFY(file.open(QFile::ReadOnly));
 
     QByteArray data = file.readAll();
-    QTextCodec *codec = Qt::codecForHtml(data);
+    QTextCodec *codec = QTextCodec::codecForHtml(data);
     codec->toUnicode(data); // this line crashes
 }
 
@@ -409,9 +401,9 @@ void tst_QTextCodec::asciiToIscii() const
     }
 }
 
-void tst_QTextCodec::flagCodepointFFFF() const
+void tst_QTextCodec::nonFlaggedCodepointFFFF() const
 {
-    // This is an invalid Unicode codepoint.
+    //Check that the code point 0xFFFF (=non-character code 0xEFBFBF) is not flagged
     const QChar ch(0xFFFF);
     QString input(ch);
 
@@ -419,12 +411,11 @@ void tst_QTextCodec::flagCodepointFFFF() const
     QVERIFY(codec);
 
     const QByteArray asDecoded(codec->fromUnicode(input));
-    QCOMPARE(asDecoded, QByteArray("?"));
+    QCOMPARE(asDecoded, QByteArray("\357\277\277"));
 
     QByteArray ffff("\357\277\277");
     QTextCodec::ConverterState state(QTextCodec::ConvertInvalidToNull);
-    QVERIFY(codec->toUnicode(ffff.constData(), ffff.length(), &state) == QChar(0));
-    QVERIFY(codec->toUnicode(ffff) == QChar(0xfffd));
+    QVERIFY(codec->toUnicode(ffff.constData(), ffff.length(), &state) == QByteArray::fromHex("EFBFBF"));
 }
 
 void tst_QTextCodec::flagF7808080() const
@@ -457,16 +448,19 @@ void tst_QTextCodec::flagF7808080() const
     //QVERIFY(!codec->canEncode(QChar(0x1C0000)));
 
     QTextCodec::ConverterState state(QTextCodec::ConvertInvalidToNull);
-    QVERIFY(codec->toUnicode(input.constData(), input.length(), &state) == QChar(0));
+    QCOMPARE(codec->toUnicode(input.constData(), input.length(), &state), QString(input.size(), QChar(0)));
 }
 
-void tst_QTextCodec::flagEFBFBF() const
+void tst_QTextCodec::nonFlaggedEFBFBF() const
 {
-    QByteArray invalidInput;
-    invalidInput.resize(3);
-    invalidInput[0] = char(0xEF);
-    invalidInput[1] = char(0xBF);
-    invalidInput[2] = char(0xBF);
+    /* Check that the codec does NOT flag EFBFBF.
+     * This is a regression test; see QTBUG-33229
+     */
+    QByteArray validInput;
+    validInput.resize(3);
+    validInput[0] = char(0xEF);
+    validInput[1] = char(0xBF);
+    validInput[2] = char(0xBF);
 
     const QTextCodec *const codec = QTextCodec::codecForMib(106); // UTF-8
     QVERIFY(codec);
@@ -474,21 +468,20 @@ void tst_QTextCodec::flagEFBFBF() const
     {
         //QVERIFY(!codec->canEncode(QChar(0xFFFF)));
         QTextCodec::ConverterState state(QTextCodec::ConvertInvalidToNull);
-        QVERIFY(codec->toUnicode(invalidInput.constData(), invalidInput.length(), &state) == QChar(0));
+        QVERIFY(codec->toUnicode(validInput.constData(), validInput.length(), &state) == QByteArray::fromHex("EFBFBF"));
 
         QByteArray start("<?pi ");
-        start.append(invalidInput);
+        start.append(validInput);
         start.append("?>");
     }
 
-    /* When 0xEFBFBF is preceded by what seems to be an arbitrary character,
-     * QTextCodec fails to flag it. */
+    // Check that 0xEFBFBF is correctly decoded when preceded by an arbitrary character
     {
         QByteArray start("B");
-        start.append(invalidInput);
+        start.append(validInput);
 
         QTextCodec::ConverterState state(QTextCodec::ConvertInvalidToNull);
-        QVERIFY(codec->toUnicode(start.constData(), start.length(), &state) == QString::fromLatin1("B\0", 2));
+        QVERIFY(codec->toUnicode(start.constData(), start.length(), &state) == QByteArray("B").append(QByteArray::fromHex("EFBFBF")));
     }
 }
 
@@ -520,6 +513,13 @@ void tst_QTextCodec::codecForTSCII() const
     QTextCodec *codec = QTextCodec::codecForMib(2107);
     QVERIFY(codec);
     QCOMPARE(codec->mibEnum(), 2107);
+}
+
+void tst_QTextCodec::iso8859_16() const
+{
+    QTextCodec *codec = QTextCodec::codecForName("ISO8859-16");
+    QVERIFY(codec);
+    QCOMPARE(codec->name(), QByteArray("ISO-8859-16"));
 }
 
 static QString fromInvalidUtf8Sequence(const QByteArray &ba)
@@ -674,13 +674,12 @@ void tst_QTextCodec::utf8Codec_data()
     str = QChar(0x7ff);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 2.2.2") << utf8 << str << -1;
 
-    // 2.2.3 U+000FFFF
+    // 2.2.3 U+000FFFF - non-character code
     utf8.clear();
     utf8 += char(0xef);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str.clear();
-    str += QChar::ReplacementCharacter;
+    str = QString::fromUtf8(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 2.2.3") << utf8 << str << -1;
 
     // 2.2.4 U+001FFFFF
@@ -689,8 +688,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xbf);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 2.2.4") << utf8 << str << -1;
 
     // 2.2.5 U+03FFFFFF (not a valid Unicode character)
@@ -755,8 +753,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0x90);
     utf8 += char(0x80);
     utf8 += char(0x80);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 2.3.5") << utf8 << str << -1;
 
     // 3.1.1
@@ -1244,7 +1241,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8.clear();
     utf8 += char(0xc0);
     utf8 += char(0xaf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.1.1") << utf8 << str << -1;
 
     // 4.1.2
@@ -1252,7 +1249,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xe0);
     utf8 += char(0x80);
     utf8 += char(0xaf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.1.2") << utf8 << str << -1;
 
     // 4.1.3
@@ -1261,7 +1258,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0x80);
     utf8 += char(0x80);
     utf8 += char(0xaf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.1.3") << utf8 << str << -1;
 
     // 4.1.4
@@ -1289,7 +1286,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8.clear();
     utf8 += char(0xc1);
     utf8 += char(0xbf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.2.1") << utf8 << str << -1;
 
     // 4.2.2
@@ -1297,7 +1294,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xe0);
     utf8 += char(0x9f);
     utf8 += char(0xbf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.2.2") << utf8 << str << -1;
 
     // 4.2.3
@@ -1306,7 +1303,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0x8f);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.2.3") << utf8 << str << -1;
 
     // 4.2.4
@@ -1334,7 +1331,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8.clear();
     utf8 += char(0xc0);
     utf8 += char(0x80);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.3.1") << utf8 << str << -1;
 
     // 4.3.2
@@ -1342,7 +1339,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xe0);
     utf8 += char(0x80);
     utf8 += char(0x80);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.3.2") << utf8 << str << -1;
 
     // 4.3.3
@@ -1351,7 +1348,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0x80);
     utf8 += char(0x80);
     utf8 += char(0x80);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 4.3.3") << utf8 << str << -1;
 
     // 4.3.4
@@ -1380,7 +1377,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xa0);
     utf8 += char(0x80);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.1.1") << utf8 << str << -1;
 
     // 5.1.2
@@ -1388,7 +1385,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xad);
     utf8 += char(0xbf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.1.2") << utf8 << str << -1;
 
     // 5.1.3
@@ -1396,7 +1393,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xae);
     utf8 += char(0x80);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.1.3") << utf8 << str << -1;
 
     // 5.1.4
@@ -1404,7 +1401,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xaf);
     utf8 += char(0xbf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.1.4") << utf8 << str << -1;
 
     // 5.1.5
@@ -1412,7 +1409,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xb0);
     utf8 += char(0x80);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.1.5") << utf8 << str << -1;
 
     // 5.1.6
@@ -1420,7 +1417,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xbe);
     utf8 += char(0x80);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.1.6") << utf8 << str << -1;
 
     // 5.1.7
@@ -1428,7 +1425,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str = QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.1.7") << utf8 << str << -1;
 
     // 5.2.1
@@ -1439,9 +1436,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xb0);
     utf8 += char(0x80);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.1") << utf8 << str << -1;
 
     // 5.2.2
@@ -1452,9 +1447,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.2") << utf8 << str << -1;
 
     // 5.2.3
@@ -1465,9 +1458,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xb0);
     utf8 += char(0x80);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.3") << utf8 << str << -1;
 
     // 5.2.4
@@ -1478,9 +1469,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.4") << utf8 << str << -1;
 
     // 5.2.5
@@ -1491,9 +1480,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xb0);
     utf8 += char(0x80);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.5") << utf8 << str << -1;
 
     // 5.2.6
@@ -1504,9 +1491,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.6") << utf8 << str << -1;
 
     // 5.2.7
@@ -1517,9 +1502,7 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xb0);
     utf8 += char(0x80);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.7") << utf8 << str << -1;
 
     // 5.2.8
@@ -1530,25 +1513,25 @@ void tst_QTextCodec::utf8Codec_data()
     utf8 += char(0xed);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str.clear();
-    str += QChar(QChar::ReplacementCharacter);
-    str += QChar(QChar::ReplacementCharacter);
+    str = fromInvalidUtf8Sequence(utf8);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.2.8") << utf8 << str << -1;
 
-    // 5.3.1
+    // 5.3.1 - non-character code
     utf8.clear();
     utf8 += char(0xef);
     utf8 += char(0xbf);
     utf8 += char(0xbe);
-    str = QChar(QChar::ReplacementCharacter);
+    //str = QChar(QChar::ReplacementCharacter);
+    str = QChar(0xfffe);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.3.1") << utf8 << str << -1;
 
-    // 5.3.2
+    // 5.3.2 - non-character code
     utf8.clear();
     utf8 += char(0xef);
     utf8 += char(0xbf);
     utf8 += char(0xbf);
-    str = QChar(QChar::ReplacementCharacter);
+    //str = QChar(QChar::ReplacementCharacter);
+    str = QChar(0xffff);
     QTest::newRow("http://www.w3.org/2001/06/utf-8-wrong/UTF-8-test.html 5.3.2") << utf8 << str << -1;
 }
 
@@ -1625,6 +1608,99 @@ void tst_QTextCodec::utf8bom()
 
     QTextCodec::ConverterState state;
     QCOMPARE(codec->toUnicode(data.constData(), data.length(), &state), result);
+}
+
+void tst_QTextCodec::utf8stateful_data()
+{
+    QTest::addColumn<QByteArray>("buffer1");
+    QTest::addColumn<QByteArray>("buffer2");
+    QTest::addColumn<QString>("result");    // null QString indicates decoder error
+
+    // valid buffer continuations
+    QTest::newRow("1of2+valid") << QByteArray("\xc2") << QByteArray("\xa0") << "\xc2\xa0";
+    QTest::newRow("1of3+valid") << QByteArray("\xe0") << QByteArray("\xa0\x80") << "\xe0\xa0\x80";
+    QTest::newRow("2of3+valid") << QByteArray("\xe0\xa0") << QByteArray("\x80") << "\xe0\xa0\x80";
+    QTest::newRow("1of4+valid") << QByteArray("\360") << QByteArray("\220\210\203") << "\360\220\210\203";
+    QTest::newRow("2of4+valid") << QByteArray("\360\220") << QByteArray("\210\203") << "\360\220\210\203";
+    QTest::newRow("3of4+valid") << QByteArray("\360\220\210") << QByteArray("\203") << "\360\220\210\203";
+    QTest::newRow("1ofBom+valid") << QByteArray("\xef") << QByteArray("\xbb\xbf") << "";
+    QTest::newRow("2ofBom+valid") << QByteArray("\xef\xbb") << QByteArray("\xbf") << "";
+
+    // invalid continuation
+    QTest::newRow("1of2+invalid") << QByteArray("\xc2") << QByteArray("a") << QString();
+    QTest::newRow("1of3+invalid") << QByteArray("\xe0") << QByteArray("a") << QString();
+    QTest::newRow("2of3+invalid") << QByteArray("\xe0\xa0") << QByteArray("a") << QString();
+    QTest::newRow("1of4+invalid") << QByteArray("\360") << QByteArray("a") << QString();
+    QTest::newRow("2of4+invalid") << QByteArray("\360\220") << QByteArray("a") << QString();
+    QTest::newRow("3of4+invalid") << QByteArray("\360\220\210") << QByteArray("a") << QString();
+
+    // invalid: sequence too short (the empty second buffer causes a state reset)
+    QTest::newRow("1of2+empty") << QByteArray("\xc2") << QByteArray() << QString();
+    QTest::newRow("1of3+empty") << QByteArray("\xe0") << QByteArray() << QString();
+    QTest::newRow("2of3+empty") << QByteArray("\xe0\xa0") << QByteArray() << QString();
+    QTest::newRow("1of4+empty") << QByteArray("\360") << QByteArray() << QString();
+    QTest::newRow("2of4+empty") << QByteArray("\360\220") << QByteArray() << QString();
+    QTest::newRow("3of4+empty") << QByteArray("\360\220\210") << QByteArray() << QString();
+
+    // overlong sequence:
+    QTest::newRow("overlong-1of2") << QByteArray("\xc1") << QByteArray("\x81") << QString();
+    QTest::newRow("overlong-1of3") << QByteArray("\xe0") << QByteArray("\x81\x81") << QString();
+    QTest::newRow("overlong-2of3") << QByteArray("\xe0\x81") << QByteArray("\x81") << QString();
+    QTest::newRow("overlong-1of4") << QByteArray("\xf0") << QByteArray("\x80\x81\x81") << QString();
+    QTest::newRow("overlong-2of4") << QByteArray("\xf0\x80") << QByteArray("\x81\x81") << QString();
+    QTest::newRow("overlong-3of4") << QByteArray("\xf0\x80\x81") << QByteArray("\x81") << QString();
+
+    // out of range:
+    // leading byte 0xF4 can produce codepoints above U+10FFFF, which aren't valid
+    QTest::newRow("outofrange1-1of4") << QByteArray("\xf4") << QByteArray("\x90\x80\x80") << QString();
+    QTest::newRow("outofrange1-2of4") << QByteArray("\xf4\x90") << QByteArray("\x80\x80") << QString();
+    QTest::newRow("outofrange1-3of4") << QByteArray("\xf4\x90\x80") << QByteArray("\x80") << QString();
+    QTest::newRow("outofrange2-1of4") << QByteArray("\xf5") << QByteArray("\x90\x80\x80") << QString();
+    QTest::newRow("outofrange2-2of4") << QByteArray("\xf5\x90") << QByteArray("\x80\x80") << QString();
+    QTest::newRow("outofrange2-3of4") << QByteArray("\xf5\x90\x80") << QByteArray("\x80") << QString();
+    QTest::newRow("outofrange-1of5") << QByteArray("\xf8") << QByteArray("\x88\x80\x80\x80") << QString();
+    QTest::newRow("outofrange-2of5") << QByteArray("\xf8\x88") << QByteArray("\x80\x80\x80") << QString();
+    QTest::newRow("outofrange-3of5") << QByteArray("\xf8\x88\x80") << QByteArray("\x80\x80") << QString();
+    QTest::newRow("outofrange-4of5") << QByteArray("\xf8\x88\x80\x80") << QByteArray("\x80") << QString();
+    QTest::newRow("outofrange-1of6") << QByteArray("\xfc") << QByteArray("\x84\x80\x80\x80\x80") << QString();
+    QTest::newRow("outofrange-2of6") << QByteArray("\xfc\x84") << QByteArray("\x80\x80\x80\x80") << QString();
+    QTest::newRow("outofrange-3of6") << QByteArray("\xfc\x84\x80") << QByteArray("\x80\x80\x80") << QString();
+    QTest::newRow("outofrange-4of6") << QByteArray("\xfc\x84\x80\x80") << QByteArray("\x80\x80") << QString();
+    QTest::newRow("outofrange-5of6") << QByteArray("\xfc\x84\x80\x80\x80") << QByteArray("\x80") << QString();
+}
+
+void tst_QTextCodec::utf8stateful()
+{
+    QFETCH(QByteArray, buffer1);
+    QFETCH(QByteArray, buffer2);
+    QFETCH(QString, result);
+
+    QTextCodec *utf8codec = QTextCodec::codecForName("utf-8");
+    QVERIFY(utf8codec);
+
+    QTextCodec::ConverterState state;
+    memset(&state, 0, sizeof state);
+
+    QString decoded1 = utf8codec->toUnicode(buffer1, buffer1.size(), &state);
+    if (result.isNull()) {
+        // the decoder may have found an early error (invalidChars > 0):
+        // if it has, remainingChars == 0;
+        // if it hasn't, then it must have a state
+        QVERIFY2((state.remainingChars == 0) != (state.invalidChars == 0),
+                 "remainingChars = " + QByteArray::number(state.remainingChars) +
+                 "; invalidChars = " + QByteArray::number(state.invalidChars));
+    } else {
+        QVERIFY(state.remainingChars > 0);
+        QCOMPARE(state.invalidChars, 0);
+    }
+
+    QString decoded2 = utf8codec->toUnicode(buffer2, buffer2.size(), &state);
+    QCOMPARE(state.remainingChars, 0);
+    if (result.isNull()) {
+        QVERIFY(state.invalidChars > 0);
+    } else {
+        QCOMPARE(decoded1 + decoded2, result);
+    }
 }
 
 void tst_QTextCodec::utfHeaders_data()
@@ -1928,6 +2004,10 @@ void tst_QTextCodec::codecForHtml_data()
         "auto; word-spacing: 0px; -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; display: inline !important; float: "
         "none;\">&#x37b</span>\000";
     QTest::newRow("greek text UTF-8") << html << 106 << 106;
+
+    html = "<!DOCTYPE html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=unicode\">"
+            "<head/><body><p>bla</p></body></html>"; // QTBUG-41998, ICU will return UTF-16.
+    QTest::newRow("legacy unicode UTF-8") << html << 106 << 106;
 }
 
 void tst_QTextCodec::codecForHtml()
@@ -1998,9 +2078,12 @@ void tst_QTextCodec::codecForUtfText()
         QVERIFY(codec == 0);
 }
 
-#if defined(Q_OS_UNIX) && !defined(QT_NO_PROCESS)
+#if defined(Q_OS_UNIX)
 void tst_QTextCodec::toLocal8Bit()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QProcess process;
     process.start("echo/echo");
     QString string(QChar(0x410));
@@ -2010,6 +2093,7 @@ void tst_QTextCodec::toLocal8Bit()
     process.waitForFinished();
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QCOMPARE(process.exitCode(), 0);
+#endif
 }
 #endif
 
@@ -2310,6 +2394,53 @@ void tst_QTextCodec::shiftJis()
 
     QByteArray encoded = codec->fromUnicode(string);
     QCOMPARE(encoded, backslashTilde);
+}
+
+struct UserCodec : public QTextCodec
+{
+    // implement pure virtuals
+    QByteArray name() const Q_DECL_OVERRIDE
+    { return "UserCodec"; }
+    QList<QByteArray> aliases() const Q_DECL_OVERRIDE
+    { return QList<QByteArray>() << "usercodec" << "user-codec"; }
+    int mibEnum() const Q_DECL_OVERRIDE
+    { return 5000; }
+
+    virtual QString convertToUnicode(const char *, int, ConverterState *) const Q_DECL_OVERRIDE
+    { return QString(); }
+    virtual QByteArray convertFromUnicode(const QChar *, int, ConverterState *) const Q_DECL_OVERRIDE
+    { return QByteArray(); }
+};
+
+void tst_QTextCodec::userCodec()
+{
+    // check that it isn't there
+    static bool executedOnce = false;
+    if (executedOnce)
+        QSKIP("Test already executed once");
+
+    QVERIFY(!QTextCodec::availableCodecs().contains("UserCodec"));
+    QVERIFY(!QTextCodec::codecForName("UserCodec"));
+
+    QTextCodec *codec = new UserCodec;
+    executedOnce = true;
+
+    QList<QByteArray> availableCodecs = QTextCodec::availableCodecs();
+    QVERIFY(availableCodecs.contains("UserCodec"));
+    QVERIFY(availableCodecs.contains("usercodec"));
+    QVERIFY(availableCodecs.contains("user-codec"));
+
+    QTextCodec *pcodec = QTextCodec::codecForName("UserCodec");
+    QCOMPARE(pcodec, codec);
+
+    pcodec = QTextCodec::codecForName("user-codec");
+    QCOMPARE(pcodec, codec);
+
+    pcodec = QTextCodec::codecForName("User-Codec");
+    QCOMPARE(pcodec, codec);
+
+    pcodec = QTextCodec::codecForMib(5000);
+    QCOMPARE(pcodec, codec);
 }
 
 struct DontCrashAtExit {

@@ -1,45 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qbitarray.h"
+#include <qalgorithms.h>
 #include <qdatastream.h>
 #include <qdebug.h>
 #include <string.h>
@@ -109,6 +102,15 @@ QT_BEGIN_NAMESPACE
     \sa QByteArray, QVector
 */
 
+/*!
+    \fn QBitArray::QBitArray(QBitArray &&other)
+
+    Move-constructs a QBitArray instance, making it point at the same
+    object that \a other was pointing to.
+
+    \since 5.2
+*/
+
 /*! \fn QBitArray::QBitArray()
 
     Constructs an empty bit array.
@@ -116,19 +118,33 @@ QT_BEGIN_NAMESPACE
     \sa isEmpty()
 */
 
+/*
+ * QBitArray construction note:
+ *
+ * We overallocate the byte array by 1 byte. The first user bit is at
+ * d.data()[1]. On the extra first byte, we store the difference between the
+ * number of bits in the byte array (including this byte) and the number of
+ * bits in the bit array. Therefore, it's always a number between 8 and 15.
+ *
+ * This allows for fast calculation of the bit array size:
+ *    inline int size() const { return (d.size() << 3) - *d.constData(); }
+ *
+ * Note: for an array of zero size, *d.constData() is the QByteArray implicit NUL.
+ */
+
 /*!
     Constructs a bit array containing \a size bits. The bits are
     initialized with \a value, which defaults to false (0).
 */
 QBitArray::QBitArray(int size, bool value)
+    : d(size <= 0 ? 0 : 1 + (size + 7)/8, Qt::Uninitialized)
 {
-    if (!size) {
-        d.resize(0);
+    Q_ASSERT_X(size >= 0, "QBitArray::QBitArray", "Size must be greater than or equal to 0.");
+    if (size <= 0)
         return;
-    }
-    d.resize(1 + (size+7)/8);
+
     uchar* c = reinterpret_cast<uchar*>(d.data());
-    memset(c, value ? 0xff : 0, d.size());
+    memset(c + 1, value ? 0xff : 0, d.size() - 1);
     *c = d.size()*8 - size;
     if (value && size && size % 8)
         *(c+1+size/8) &= (1 << (size%8)) - 1;
@@ -146,6 +162,25 @@ QBitArray::QBitArray(int size, bool value)
     Same as size().
 */
 
+template <typename T> T qUnalignedLoad(const uchar *ptr)
+{
+    /*
+     * Testing with different compilers shows that they all optimize the memcpy
+     * call away and replace with direct loads whenever possible. On x86 and PPC,
+     * GCC does direct unaligned loads; on MIPS, it generates a pair of load-left
+     * and load-right instructions. ICC and Clang do the same on x86. This is both
+     * 32- and 64-bit.
+     *
+     * On ARM cores without unaligned loads, the compiler leaves a call to
+     * memcpy.
+     */
+
+    T u;
+    memcpy(&u, ptr, sizeof(u));
+    return u;
+}
+
+
 /*!
     If \a on is true, this function returns the number of
     1-bits stored in the bit array; otherwise the number
@@ -154,36 +189,30 @@ QBitArray::QBitArray(int size, bool value)
 int QBitArray::count(bool on) const
 {
     int numBits = 0;
-    int len = size();
-#if 0
-    for (int i = 0; i < len; ++i)
-        numBits += testBit(i);
-#else
-    // See http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
     const quint8 *bits = reinterpret_cast<const quint8 *>(d.data()) + 1;
-    while (len >= 32) {
-        quint32 v = quint32(bits[0]) | (quint32(bits[1]) << 8) | (quint32(bits[2]) << 16) | (quint32(bits[3]) << 24);
-        quint32 c = ((v & 0xfff) * Q_UINT64_C(0x1001001001001) & Q_UINT64_C(0x84210842108421)) % 0x1f;
-        c += (((v & 0xfff000) >> 12) * Q_UINT64_C(0x1001001001001) & Q_UINT64_C(0x84210842108421)) % 0x1f;
-        c += ((v >> 24) * Q_UINT64_C(0x1001001001001) & Q_UINT64_C(0x84210842108421)) % 0x1f;
-        len -= 32;
+
+    // the loops below will try to read from *end
+    // it's the QByteArray implicit NUL, so it will not change the bit count
+    const quint8 *const end = reinterpret_cast<const quint8 *>(d.end());
+
+    while (bits + 7 <= end) {
+        quint64 v = qUnalignedLoad<quint64>(bits);
+        bits += 8;
+        numBits += int(qPopulationCount(v));
+    }
+    if (bits + 3 <= end) {
+        quint32 v = qUnalignedLoad<quint32>(bits);
         bits += 4;
-        numBits += int(c);
+        numBits += int(qPopulationCount(v));
     }
-    while (len >= 24) {
-        quint32 v = quint32(bits[0]) | (quint32(bits[1]) << 8) | (quint32(bits[2]) << 16);
-        quint32 c =  ((v & 0xfff) * Q_UINT64_C(0x1001001001001) & Q_UINT64_C(0x84210842108421)) % 0x1f;
-        c += (((v & 0xfff000) >> 12) * Q_UINT64_C(0x1001001001001) & Q_UINT64_C(0x84210842108421)) % 0x1f;
-        len -= 24;
-        bits += 3;
-        numBits += int(c);
+    if (bits + 1 < end) {
+        quint16 v = qUnalignedLoad<quint16>(bits);
+        bits += 2;
+        numBits += int(qPopulationCount(v));
     }
-    while (len >= 0) {
-        if (bits[len / 8] & (1 << ((len - 1) & 7)))
-            ++numBits;
-        --len;
-    }
-#endif
+    if (bits < end)
+        numBits += int(qPopulationCount(bits[0]));
+
     return on ? numBits : size() - numBits;
 }
 
@@ -217,7 +246,7 @@ void QBitArray::resize(int size)
 
 /*! \fn bool QBitArray::isEmpty() const
 
-    Returns true if this bit array has size 0; otherwise returns
+    Returns \c true if this bit array has size 0; otherwise returns
     false.
 
     \sa size()
@@ -225,7 +254,7 @@ void QBitArray::resize(int size)
 
 /*! \fn bool QBitArray::isNull() const
 
-    Returns true if this bit array is null; otherwise returns false.
+    Returns \c true if this bit array is null; otherwise returns \c false.
 
     Example:
     \snippet code/src_corelib_tools_qbitarray.cpp 5
@@ -241,7 +270,7 @@ void QBitArray::resize(int size)
 /*! \fn bool QBitArray::fill(bool value, int size = -1)
 
     Sets every bit in the bit array to \a value, returning true if successful;
-    otherwise returns false. If \a size is different from -1 (the default),
+    otherwise returns \c false. If \a size is different from -1 (the default),
     the bit array is resized to \a size beforehand.
 
     Example:
@@ -253,11 +282,18 @@ void QBitArray::resize(int size)
 /*!
     \overload
 
-    Sets bits at index positions \a begin up to and excluding \a end
+    Sets bits at index positions \a begin up to (but not including) \a end
     to \a value.
 
-    \a begin and \a end must be a valid index position in the bit
-    array (i.e., 0 <= \a begin <= size() and 0 <= \a end <= size()).
+    \a begin must be a valid index position in the bit array
+    (0 <= \a begin < size()).
+
+    \a end must be either a valid index position or equal to size(), in
+    which case the fill operation runs until the end of the array
+    (0 <= \a end <= size()).
+
+    Example:
+    \snippet code/src_corelib_tools_qbitarray.cpp 15
 */
 
 void QBitArray::fill(bool value, int begin, int end)
@@ -318,8 +354,8 @@ void QBitArray::fill(bool value, int begin, int end)
 
 /*! \fn bool QBitArray::testBit(int i) const
 
-    Returns true if the bit at index position \a i is 1; otherwise
-    returns false.
+    Returns \c true if the bit at index position \a i is 1; otherwise
+    returns \c false.
 
     \a i must be a valid index position in the bit array (i.e., 0 <=
     \a i < size()).
@@ -419,6 +455,7 @@ void QBitArray::fill(bool value, int begin, int end)
 */
 
 /*! \fn QBitArray &QBitArray::operator=(QBitArray &&other)
+    \since 5.2
 
     Moves \a other to this bit array and returns a reference to
     this bit array.
@@ -433,16 +470,16 @@ void QBitArray::fill(bool value, int begin, int end)
 
 /*! \fn bool QBitArray::operator==(const QBitArray &other) const
 
-    Returns true if \a other is equal to this bit array; otherwise
-    returns false.
+    Returns \c true if \a other is equal to this bit array; otherwise
+    returns \c false.
 
     \sa operator!=()
 */
 
 /*! \fn bool QBitArray::operator!=(const QBitArray &other) const
 
-    Returns true if \a other is not equal to this bit array;
-    otherwise returns false.
+    Returns \c true if \a other is not equal to this bit array;
+    otherwise returns \c false.
 
     \sa operator==()
 */
@@ -701,8 +738,8 @@ QDataStream &operator>>(QDataStream &in, QBitArray &ba)
     quint32 len;
     in >> len;
     if (len == 0) {
-	ba.clear();
-	return in;
+        ba.clear();
+        return in;
     }
 
     const quint32 Step = 8 * 1024 * 1024;
@@ -735,18 +772,19 @@ QDataStream &operator>>(QDataStream &in, QBitArray &ba)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QBitArray &array)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QBitArray(";
     for (int i = 0; i < array.size();) {
         if (array.testBit(i))
-            dbg.nospace() << '1';
+            dbg << '1';
         else
-            dbg.nospace() << '0';
+            dbg << '0';
         i += 1;
         if (!(i % 4) && (i < array.size()))
-            dbg.nospace() << ' ';
+            dbg << ' ';
     }
-    dbg.nospace() << ')';
-    return dbg.space();
+    dbg << ')';
+    return dbg;
 }
 #endif
 

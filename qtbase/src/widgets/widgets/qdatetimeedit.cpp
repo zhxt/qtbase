@@ -1,45 +1,36 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
-#include <math.h>
 #include <private/qdatetimeedit_p.h>
 #include <qabstractspinbox.h>
 #include <qapplication.h>
@@ -993,7 +984,7 @@ QSize QDateTimeEdit::sizeHint() const
 
         QSize hint(w, h);
 
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
         if (d->calendarPopupEnabled()) {
             QStyleOptionComboBox opt;
             d->cachedSizeHint = style()->sizeFromContents(QStyle::CT_ComboBox, &opt, hint, this);
@@ -1133,7 +1124,7 @@ void QDateTimeEdit::keyPressEvent(QKeyEvent *event)
                 select = false;
                 break;
             }
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
             else
 #ifdef QT_KEYPAD_NAVIGATION
                 if (!QApplication::keypadNavigationEnabled())
@@ -1718,7 +1709,7 @@ void QDateTimeEditPrivate::updateEdit()
     if (newText == displayText())
         return;
     int selsize = edit->selectedText().size();
-    const bool sb = edit->blockSignals(true);
+    const QSignalBlocker blocker(edit);
 
     edit->setText(newText);
 
@@ -1740,7 +1731,6 @@ void QDateTimeEditPrivate::updateEdit()
 
         }
     }
-    edit->blockSignals(sb);
 }
 
 
@@ -1871,7 +1861,7 @@ void QDateTimeEditPrivate::clearSection(int index)
 {
     const QLatin1Char space(' ');
     int cursorPos = edit->cursorPosition();
-    bool blocked = edit->blockSignals(true);
+    const QSignalBlocker blocker(edit);
     QString t = edit->text();
     const int pos = sectionPos(index);
     if (pos == -1) {
@@ -1883,8 +1873,6 @@ void QDateTimeEditPrivate::clearSection(int index)
     edit->setText(t);
     edit->setCursorPosition(cursorPos);
     QDTEDEBUG << cursorPos;
-
-    edit->blockSignals(blocked);
 }
 
 
@@ -2313,7 +2301,7 @@ void QDateTimeEdit::paintEvent(QPaintEvent *event)
 
     optCombo.init(this);
     optCombo.editable = true;
-	optCombo.frame = opt.frame;
+    optCombo.frame = opt.frame;
     optCombo.subControls = opt.subControls;
     optCombo.activeSubControls = opt.activeSubControls;
     optCombo.state = opt.state;
@@ -2328,9 +2316,9 @@ void QDateTimeEdit::paintEvent(QPaintEvent *event)
 QString QDateTimeEditPrivate::getAmPmText(AmPm ap, Case cs) const
 {
     if (ap == AmText) {
-        return (cs == UpperCase ? QDateTimeEdit::tr("AM") : QDateTimeEdit::tr("am"));
+        return (cs == UpperCase ? QDateTimeParser::tr("AM") : QDateTimeParser::tr("am"));
     } else {
-        return (cs == UpperCase ? QDateTimeEdit::tr("PM") : QDateTimeEdit::tr("pm"));
+        return (cs == UpperCase ? QDateTimeParser::tr("PM") : QDateTimeParser::tr("pm"));
     }
 }
 
@@ -2574,10 +2562,9 @@ void QDateTimeEditPrivate::syncCalendarWidget()
 {
     Q_Q(QDateTimeEdit);
     if (monthCalendar) {
-        const bool sb = monthCalendar->blockSignals(true);
+        const QSignalBlocker blocker(monthCalendar);
         monthCalendar->setDateRange(q->minimumDate(), q->maximumDate());
         monthCalendar->setDate(q->date());
-        monthCalendar->blockSignals(sb);
     }
 }
 

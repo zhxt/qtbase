@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,17 +33,23 @@
 
 #include "qplatformfontdatabase.h"
 #include <QtGui/private/qfontengine_p.h>
-#include <QtGui/private/qfontengine_qpa_p.h>
+#include <QtGui/private/qfontengine_qpf2_p.h>
+#include <QtGui/QGuiApplication>
+#include <QtGui/QScreen>
+#include <qpa/qplatformscreen.h>
 #include <QtCore/QLibraryInfo>
 #include <QtCore/QDir>
 
 QT_BEGIN_NAMESPACE
 
-extern void qt_registerFont(const QString &familyname, const QString &stylename,
-                            const QString &foundryname, int weight,
-                            QFont::Style style, int stretch, bool antialiased,
-                            bool scalable, int pixelSize, bool fixedPitch,
-                            const QSupportedWritingSystems &writingSystems, void *hanlde);
+void qt_registerFont(const QString &familyname, const QString &stylename,
+                     const QString &foundryname, int weight,
+                     QFont::Style style, int stretch, bool antialiased,
+                     bool scalable, int pixelSize, bool fixedPitch,
+                     const QSupportedWritingSystems &writingSystems, void *hanlde);
+
+void qt_registerFontFamily(const QString &familyName);
+void qt_registerAliasToFontFamily(const QString &familyName, const QString &alias);
 
 /*!
     \fn void QPlatformFontDatabase::registerQPF2Font(const QByteArray &dataArray, void *handle)
@@ -66,12 +64,12 @@ void QPlatformFontDatabase::registerQPF2Font(const QByteArray &dataArray, void *
         return;
 
     const uchar *data = reinterpret_cast<const uchar *>(dataArray.constData());
-    if (QFontEngineQPA::verifyHeader(data, dataArray.size())) {
-        QString fontName = QFontEngineQPA::extractHeaderField(data, QFontEngineQPA::Tag_FontName).toString();
-        int pixelSize = QFontEngineQPA::extractHeaderField(data, QFontEngineQPA::Tag_PixelSize).toInt();
-        QVariant weight = QFontEngineQPA::extractHeaderField(data, QFontEngineQPA::Tag_Weight);
-        QVariant style = QFontEngineQPA::extractHeaderField(data, QFontEngineQPA::Tag_Style);
-        QByteArray writingSystemBits = QFontEngineQPA::extractHeaderField(data, QFontEngineQPA::Tag_WritingSystems).toByteArray();
+    if (QFontEngineQPF2::verifyHeader(data, dataArray.size())) {
+        QString fontName = QFontEngineQPF2::extractHeaderField(data, QFontEngineQPF2::Tag_FontName).toString();
+        int pixelSize = QFontEngineQPF2::extractHeaderField(data, QFontEngineQPF2::Tag_PixelSize).toInt();
+        QVariant weight = QFontEngineQPF2::extractHeaderField(data, QFontEngineQPF2::Tag_Weight);
+        QVariant style = QFontEngineQPF2::extractHeaderField(data, QFontEngineQPF2::Tag_Style);
+        QByteArray writingSystemBits = QFontEngineQPF2::extractHeaderField(data, QFontEngineQPF2::Tag_WritingSystems).toByteArray();
 
         if (!fontName.isEmpty() && pixelSize) {
             QFont::Weight fontWeight = QFont::Normal;
@@ -116,7 +114,7 @@ void QPlatformFontDatabase::registerQPF2Font(const QByteArray &dataArray, void *
     The writing systems supported by the font are specified by the
     \a writingSystems argument.
 
-    \sa registerQPF2Font()
+    \sa registerQPF2Font(), registerFontFamily()
 */
 void QPlatformFontDatabase::registerFont(const QString &familyname, const QString &stylename,
                                          const QString &foundryname, QFont::Weight weight,
@@ -130,6 +128,18 @@ void QPlatformFontDatabase::registerFont(const QString &familyname, const QStrin
     qt_registerFont(familyname, stylename, foundryname, weight, style,
                     stretch, antialiased, scalable, pixelSize,
                     fixedPitch, writingSystems, usrPtr);
+}
+
+/*!
+    Registers a font family with the font database. The font will be
+    lazily populated by a callback to populateFamily() when the font
+    database determines that the family needs population.
+
+    \sa populateFamily(), registerFont()
+*/
+void QPlatformFontDatabase::registerFontFamily(const QString &familyName)
+{
+    qt_registerFontFamily(familyName);
 }
 
 class QWritingSystemsPrivate
@@ -215,8 +225,8 @@ void QSupportedWritingSystems::setSupported(QFontDatabase::WritingSystem writing
 }
 
 /*!
-    Returns true if the writing system specified by \a writingSystem is
-    supported; otherwise returns false.
+    Returns \c true if the writing system specified by \a writingSystem is
+    supported; otherwise returns \c false.
 */
 bool QSupportedWritingSystems::supported(QFontDatabase::WritingSystem writingSystem) const
 {
@@ -247,6 +257,11 @@ QPlatformFontDatabase::~QPlatformFontDatabase()
   Reimplement this function in a subclass for a convenient place to initialize
   the internal font database.
 
+  You may lazily populate the database by calling registerFontFamily() instead
+  of registerFont(), in which case you'll get a callback to populateFamily()
+  when the required family needs population. You then call registerFont() to
+  finish population of the family.
+
   The default implementation looks in the fontDir() location and registers all
   QPF2 fonts.
 */
@@ -274,26 +289,46 @@ void QPlatformFontDatabase::populateFontDatabase()
 }
 
 /*!
+    This function is called whenever a lazily populated family, populated
+    through registerFontFamily(), needs full population.
+
+    You are expected to fully populate the family by calling registerFont()
+    for each font that matches the family name.
+*/
+void QPlatformFontDatabase::populateFamily(const QString &familyName)
+{
+    Q_UNUSED(familyName);
+}
+
+/*!
+    This function is called whenever the font database is invalidated.
+
+    Reimplement this function to clear any internal data structures that
+    will need to be rebuilt at the next call to populateFontDatabase().
+*/
+void QPlatformFontDatabase::invalidate()
+{
+}
+
+/*!
     Returns a multi font engine in the specified \a script to encapsulate \a fontEngine with the
     option to fall back to the fonts given by \a fallbacks if \a fontEngine does not support
     a certain character.
 */
 QFontEngineMulti *QPlatformFontDatabase::fontEngineMulti(QFontEngine *fontEngine, QChar::Script script)
 {
-    return new QFontEngineMultiQPA(fontEngine, script);
+    return new QFontEngineMulti(fontEngine, script);
 }
 
 /*!
     Returns the font engine that can be used to render the font described by
     the font definition, \a fontDef, in the specified \a script.
 */
-QFontEngine *QPlatformFontDatabase::fontEngine(const QFontDef &fontDef, QChar::Script script, void *handle)
+QFontEngine *QPlatformFontDatabase::fontEngine(const QFontDef &fontDef, void *handle)
 {
-    Q_UNUSED(script);
-    Q_UNUSED(handle);
     QByteArray *fileDataPtr = static_cast<QByteArray *>(handle);
-    QFontEngineQPA *engine = new QFontEngineQPA(fontDef,*fileDataPtr);
-    //qDebug() << fontDef.pixelSize << fontDef.weight << fontDef.style << fontDef.stretch << fontDef.styleHint << fontDef.styleStrategy << fontDef.family << script;
+    QFontEngineQPF2 *engine = new QFontEngineQPF2(fontDef,*fileDataPtr);
+    //qDebug() << fontDef.pixelSize << fontDef.weight << fontDef.style << fontDef.stretch << fontDef.styleHint << fontDef.styleStrategy << fontDef.family;
     return engine;
 }
 
@@ -308,17 +343,15 @@ QFontEngine *QPlatformFontDatabase::fontEngine(const QByteArray &fontData, qreal
 }
 
 /*!
+    \fn QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const
+
     Returns a list of alternative fonts for the specified \a family and
     \a style and \a script using the \a styleHint given.
+
+    Default implementation returns a list of fonts for which \a style and \a script support
+    has been reported during the font database population.
 */
-QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const
-{
-    Q_UNUSED(family);
-    Q_UNUSED(style);
-    Q_UNUSED(styleHint);
-    Q_UNUSED(script);
-    return QStringList();
-}
+// implemented in qfontdatabase.cpp
 
 /*!
     Adds an application font described by the font contained supplied \a fontData
@@ -362,6 +395,16 @@ QString QPlatformFontDatabase::fontDir() const
 }
 
 /*!
+    Returns true if the font family is private. For any given family name,
+    the result is platform dependent.
+*/
+bool QPlatformFontDatabase::isPrivateFontFamily(const QString &family) const
+{
+    Q_UNUSED(family);
+    return false;
+}
+
+/*!
     Returns the default system font.
 
     \sa QGuiApplication::font()
@@ -379,9 +422,11 @@ QFont QPlatformFontDatabase::defaultFont() const
     \since 5.0
  */
 
+QString qt_resolveFontFamilyAlias(const QString &alias);
+
 QString QPlatformFontDatabase::resolveFontFamilyAlias(const QString &family) const
 {
-    return family;
+    return qt_resolveFontFamilyAlias(family);
 }
 
 /*!
@@ -413,6 +458,15 @@ bool QPlatformFontDatabase::fontsAlwaysScalable() const
     return ret;
 }
 
+QFontEngine::SubpixelAntialiasingType QPlatformFontDatabase::subpixelAntialiasingTypeHint() const
+{
+    static int type = -1;
+    if (type == -1) {
+        if (QScreen *screen = QGuiApplication::primaryScreen())
+            type = screen->handle()->subpixelAntialiasingTypeHint();
+    }
+    return static_cast<QFontEngine::SubpixelAntialiasingType>(type);
+}
 
 // ### copied to tools/makeqpf/qpf2.cpp
 
@@ -455,10 +509,22 @@ static const ushort requiredUnicodeBits[QFontDatabase::WritingSystemsCount][2] =
 };
 
 enum {
+    Latin1CsbBit = 0,
+    CentralEuropeCsbBit = 1,
+    TurkishCsbBit = 4,
+    BalticCsbBit = 7,
+    CyrillicCsbBit = 2,
+    GreekCsbBit = 3,
+    HebrewCsbBit = 5,
+    ArabicCsbBit = 6,
+    VietnameseCsbBit = 8,
     SimplifiedChineseCsbBit = 18,
     TraditionalChineseCsbBit = 20,
+    ThaiCsbBit = 16,
     JapaneseCsbBit = 17,
-    KoreanCsbBit = 21
+    KoreanCsbBit = 19,
+    KoreanJohabCsbBit = 21,
+    SymbolCsbBit = 31
 };
 
 /*!
@@ -488,6 +554,41 @@ QSupportedWritingSystems QPlatformFontDatabase::writingSystemsFromTrueTypeBits(q
             }
         }
     }
+    if (codePageRange[0] & ((1 << Latin1CsbBit) | (1 << CentralEuropeCsbBit) | (1 << TurkishCsbBit) | (1 << BalticCsbBit))) {
+        writingSystems.setSupported(QFontDatabase::Latin);
+        hasScript = true;
+        //qDebug("font %s supports Latin", familyName.latin1());
+    }
+    if (codePageRange[0] & (1 << CyrillicCsbBit)) {
+        writingSystems.setSupported(QFontDatabase::Cyrillic);
+        hasScript = true;
+        //qDebug("font %s supports Cyrillic", familyName.latin1());
+    }
+    if (codePageRange[0] & (1 << GreekCsbBit)) {
+        writingSystems.setSupported(QFontDatabase::Greek);
+        hasScript = true;
+        //qDebug("font %s supports Greek", familyName.latin1());
+    }
+    if (codePageRange[0] & (1 << HebrewCsbBit)) {
+        writingSystems.setSupported(QFontDatabase::Hebrew);
+        hasScript = true;
+        //qDebug("font %s supports Hebrew", familyName.latin1());
+    }
+    if (codePageRange[0] & (1 << ArabicCsbBit)) {
+        writingSystems.setSupported(QFontDatabase::Arabic);
+        hasScript = true;
+        //qDebug("font %s supports Arabic", familyName.latin1());
+    }
+    if (codePageRange[0] & (1 << ThaiCsbBit)) {
+        writingSystems.setSupported(QFontDatabase::Thai);
+        hasScript = true;
+        //qDebug("font %s supports Thai", familyName.latin1());
+    }
+    if (codePageRange[0] & (1 << VietnameseCsbBit)) {
+        writingSystems.setSupported(QFontDatabase::Vietnamese);
+        hasScript = true;
+        //qDebug("font %s supports Vietnamese", familyName.latin1());
+    }
     if (codePageRange[0] & (1 << SimplifiedChineseCsbBit)) {
         writingSystems.setSupported(QFontDatabase::SimplifiedChinese);
         hasScript = true;
@@ -503,15 +604,59 @@ QSupportedWritingSystems QPlatformFontDatabase::writingSystemsFromTrueTypeBits(q
         hasScript = true;
         //qDebug("font %s supports Japanese", familyName.latin1());
     }
-    if (codePageRange[0] & (1 << KoreanCsbBit)) {
+    if (codePageRange[0] & ((1 << KoreanCsbBit) | (1 << KoreanJohabCsbBit))) {
         writingSystems.setSupported(QFontDatabase::Korean);
         hasScript = true;
         //qDebug("font %s supports Korean", familyName.latin1());
     }
+    if (codePageRange[0] & (1U << SymbolCsbBit)) {
+        writingSystems = QSupportedWritingSystems();
+        hasScript = false;
+    }
+
     if (!hasScript)
         writingSystems.setSupported(QFontDatabase::Symbol);
 
     return writingSystems;
+}
+
+/*!
+    Helper function that returns the Qt font weight matching a given opentype integer value.
+
+    \since 5.5
+*/
+
+// convert 0 ~ 1000 integer to QFont::Weight
+QFont::Weight QPlatformFontDatabase::weightFromInteger(int weight)
+{
+    if (weight < 150)
+        return QFont::Thin;
+    if (weight < 250)
+        return QFont::ExtraLight;
+    if (weight < 350)
+        return QFont::Light;
+    if (weight < 450)
+        return QFont::Normal;
+    if (weight < 550)
+        return QFont::Medium;
+    if (weight < 650)
+        return QFont::DemiBold;
+    if (weight < 750)
+        return QFont::Bold;
+    if (weight < 850)
+        return QFont::ExtraBold;
+    return QFont::Black;
+}
+
+/*!
+    Helper function that register the \a alias for the \a familyName.
+
+    \since 5.2
+*/
+
+void QPlatformFontDatabase::registerAliasToFontFamily(const QString &familyName, const QString &alias)
+{
+    qt_registerAliasToFontFamily(familyName, alias);
 }
 
 /*!

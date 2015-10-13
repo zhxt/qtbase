@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -45,7 +45,7 @@
 CustomStyle::CustomStyle()
 {
 //! [0]
-    QSpinBox *spinBox = qobject_cast<QSpinBox *>(widget);
+    const QSpinBox *spinBox = qobject_cast<const QSpinBox *>(widget);
     if (spinBox) {
 //! [0] //! [1]
     }
@@ -57,32 +57,32 @@ void CustomStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *op
                                 QPainter *painter, const QWidget *widget) const
 {
     if (element == PE_IndicatorSpinUp || element == PE_IndicatorSpinDown) {
-	QPolygon points(3);
-	int x = option->rect.x();
-	int y = option->rect.y();
-	int w = option->rect.width() / 2;
-	int h = option->rect.height() / 2;
-	x += (option->rect.width() - w) / 2;
-	y += (option->rect.height() - h) / 2;
+        QPolygon points(3);
+        int x = option->rect.x();
+        int y = option->rect.y();
+        int w = option->rect.width() / 2;
+        int h = option->rect.height() / 2;
+        x += (option->rect.width() - w) / 2;
+        y += (option->rect.height() - h) / 2;
 
-	if (element == PE_IndicatorSpinUp) {
-	    points[0] = QPoint(x, y + h);
-	    points[1] = QPoint(x + w, y + h);
-	    points[2] = QPoint(x + w / 2, y);
-	} else { // PE_SpinBoxDown
-	    points[0] = QPoint(x, y);
-	    points[1] = QPoint(x + w, y);
-	    points[2] = QPoint(x + w / 2, y + h);
-	}
+        if (element == PE_IndicatorSpinUp) {
+            points[0] = QPoint(x, y + h);
+            points[1] = QPoint(x + w, y + h);
+            points[2] = QPoint(x + w / 2, y);
+        } else { // PE_SpinBoxDown
+            points[0] = QPoint(x, y);
+            points[1] = QPoint(x + w, y);
+            points[2] = QPoint(x + w / 2, y + h);
+        }
 
-	if (option->state & State_Enabled) {
-	    painter->setPen(option->palette.mid().color());
-	    painter->setBrush(option->palette.buttonText());
-	} else {
-	    painter->setPen(option->palette.buttonText().color());
-	    painter->setBrush(option->palette.mid());
-	}
-	painter->drawPolygon(points);
+        if (option->state & State_Enabled) {
+            painter->setPen(option->palette.mid().color());
+            painter->setBrush(option->palette.buttonText());
+        } else {
+            painter->setPen(option->palette.buttonText().color());
+            painter->setBrush(option->palette.mid());
+        }
+        painter->drawPolygon(points);
     } else {
     QProxyStyle::drawPrimitive(element, option, painter, widget);
 //! [2] //! [3]

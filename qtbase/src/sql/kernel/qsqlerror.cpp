@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,11 +39,23 @@ QT_BEGIN_NAMESPACE
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QSqlError &s)
 {
-    dbg.nospace() << "QSqlError(" << s.number() << ", " << s.driverText() <<
-                     ", " << s.databaseText() << ')';
-    return dbg.space();
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    dbg << "QSqlError(" << s.nativeErrorCode() << ", " << s.driverText()
+        << ", " << s.databaseText() << ')';
+    return dbg;
 }
 #endif
+
+class QSqlErrorPrivate
+{
+public:
+    QString driverError;
+    QString databaseError;
+    QSqlError::ErrorType errorType;
+    QString errorCode;
+};
+
 
 /*!
     \class QSqlError
@@ -62,7 +66,7 @@ QDebug operator<<(QDebug dbg, const QSqlError &s)
 
     A QSqlError object can provide database-specific error data,
     including the driverText() and databaseText() messages (or both
-    concatenated together as text()), and the error number() and
+    concatenated together as text()), and the nativeErrorCode() and
     type().
 
     \sa QSqlDatabase::lastError(), QSqlQuery::lastError()
@@ -81,25 +85,53 @@ QDebug operator<<(QDebug dbg, const QSqlError &s)
 */
 
 /*!
+    \obsolete
+
     Constructs an error containing the driver error text \a
     driverText, the database-specific error text \a databaseText, the
     type \a type and the optional error number \a number.
 */
 
+#if QT_DEPRECATED_SINCE(5, 3)
 QSqlError::QSqlError(const QString& driverText, const QString& databaseText, ErrorType type,
                     int number)
-    : driverError(driverText), databaseError(databaseText), errorType(type), errorNumber(number)
 {
+    d = new QSqlErrorPrivate;
+
+    d->driverError = driverText;
+    d->databaseError = databaseText;
+    d->errorType = type;
+    if (number != -1)
+        d->errorCode = QString::number(number);
 }
+#endif
+
+/*!
+    Constructs an error containing the driver error text \a
+    driverText, the database-specific error text \a databaseText, the
+    type \a type and the error code \a code.
+*/
+
+QSqlError::QSqlError(const QString &driverText, const QString &databaseText,
+                     ErrorType type, const QString &code)
+{
+    d = new QSqlErrorPrivate;
+
+    d->driverError = driverText;
+    d->databaseError = databaseText;
+    d->errorType = type;
+    d->errorCode = code;
+}
+
 
 /*!
     Creates a copy of \a other.
 */
 QSqlError::QSqlError(const QSqlError& other)
-    : driverError(other.driverError), databaseError(other.databaseError),
-      errorType(other.errorType),
-      errorNumber(other.errorNumber)
 {
+    d = new QSqlErrorPrivate;
+
+    *d = *other.d;
 }
 
 /*!
@@ -108,30 +140,27 @@ QSqlError::QSqlError(const QSqlError& other)
 
 QSqlError& QSqlError::operator=(const QSqlError& other)
 {
-    driverError = other.driverError;
-    databaseError = other.databaseError;
-    errorType = other.errorType;
-    errorNumber = other.errorNumber;
+    *d = *other.d;
     return *this;
 }
 
 /*!
-    Compare the \a other error's values to this error and returns true, if it equal.
+    Compare the \a other error's values to this error and returns \c true, if it equal.
 */
 
 bool QSqlError::operator==(const QSqlError& other) const
 {
-    return (errorType == other.errorType);
+    return (d->errorType == other.d->errorType);
 }
 
 
 /*!
-    Compare the \a other error's values to this error and returns true if it is not equal.
+    Compare the \a other error's values to this error and returns \c true if it is not equal.
 */
 
 bool QSqlError::operator!=(const QSqlError& other) const
 {
-    return (errorType != other.errorType);
+    return (d->errorType != other.d->errorType);
 }
 
 
@@ -141,6 +170,7 @@ bool QSqlError::operator!=(const QSqlError& other) const
 
 QSqlError::~QSqlError()
 {
+    delete d;
 }
 
 /*!
@@ -151,7 +181,7 @@ QSqlError::~QSqlError()
 */
 QString QSqlError::driverText() const
 {
-    return driverError;
+    return d->driverError;
 }
 
 /*!
@@ -169,7 +199,7 @@ QString QSqlError::driverText() const
 #if QT_DEPRECATED_SINCE(5, 1)
 void QSqlError::setDriverText(const QString& driverText)
 {
-    driverError = driverText;
+    d->driverError = driverText;
 }
 #endif
 
@@ -182,7 +212,7 @@ void QSqlError::setDriverText(const QString& driverText)
 
 QString QSqlError::databaseText() const
 {
-    return databaseError;
+    return d->databaseError;
 }
 
 /*!
@@ -200,7 +230,7 @@ QString QSqlError::databaseText() const
 #if QT_DEPRECATED_SINCE(5, 1)
 void QSqlError::setDatabaseText(const QString& databaseText)
 {
-    databaseError = databaseText;
+    d->databaseError = databaseText;
 }
 #endif
 
@@ -210,7 +240,7 @@ void QSqlError::setDatabaseText(const QString& databaseText)
 
 QSqlError::ErrorType QSqlError::type() const
 {
-    return errorType;
+    return d->errorType;
 }
 
 /*!
@@ -228,19 +258,33 @@ QSqlError::ErrorType QSqlError::type() const
 #if QT_DEPRECATED_SINCE(5, 1)
 void QSqlError::setType(ErrorType type)
 {
-    errorType = type;
+    d->errorType = type;
 }
 #endif
 
 /*!
+    \fn int QSqlError::number() const
+    \obsolete
+
     Returns the database-specific error number, or -1 if it cannot be
     determined.
+
+    Returns 0 if the error code is not an integer.
+
+    \warning Some databases use alphanumeric error codes, which makes
+             number() unreliable if such a database is used.
+
+    Use nativeErrorCode() instead
+
+    \sa nativeErrorCode()
 */
 
+#if QT_DEPRECATED_SINCE(5, 3)
 int QSqlError::number() const
 {
-    return errorNumber;
+    return d->errorCode.isEmpty() ? -1 : d->errorCode.toInt();
 }
+#endif
 
 /*!
     \fn void QSqlError::setNumber(int number)
@@ -257,9 +301,19 @@ int QSqlError::number() const
 #if QT_DEPRECATED_SINCE(5, 1)
 void QSqlError::setNumber(int number)
 {
-    errorNumber = number;
+    d->errorCode = QString::number(number);
 }
 #endif
+
+/*!
+    Returns the database-specific error code, or an empty string if
+    it cannot be determined.
+*/
+
+QString QSqlError::nativeErrorCode() const
+{
+    return d->errorCode;
+}
 
 /*!
     This is a convenience function that returns databaseText() and
@@ -270,15 +324,15 @@ void QSqlError::setNumber(int number)
 
 QString QSqlError::text() const
 {
-    QString result = databaseError;
-    if (!databaseError.endsWith(QLatin1String("\n")))
+    QString result = d->databaseError;
+    if (!d->databaseError.endsWith(QLatin1String("\n")))
         result += QLatin1Char(' ');
-    result += driverError;
+    result += d->driverError;
     return result;
 }
 
 /*!
-    Returns true if an error is set, otherwise false.
+    Returns \c true if an error is set, otherwise false.
 
     Example:
     \snippet code/src_sql_kernel_qsqlerror.cpp 0
@@ -287,7 +341,7 @@ QString QSqlError::text() const
 */
 bool QSqlError::isValid() const
 {
-    return errorType != NoError;
+    return d->errorType != NoError;
 }
 
 QT_END_NAMESPACE

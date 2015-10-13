@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +35,8 @@
 
 //#define QT_DEBUG_SQL
 
+#include "qdebug.h"
+#include "qelapsedtimer.h"
 #include "qatomic.h"
 #include "qsqlrecord.h"
 #include "qsqlresult.h"
@@ -114,11 +108,11 @@ QSqlQueryPrivate::~QSqlQueryPrivate()
     standard SQL (e.g. \c{SET DATESTYLE=ISO} for PostgreSQL).
 
     Successfully executed SQL statements set the query's state to
-    active so that isActive() returns true. Otherwise the query's
+    active so that isActive() returns \c true. Otherwise the query's
     state is set to inactive. In either case, when executing a new SQL
     statement, the query is positioned on an invalid record. An active
     query must be navigated to a valid record (so that isValid()
-    returns true) before values can be retrieved.
+    returns \c true) before values can be retrieved.
 
     For some databases, if an active query that is a \c{SELECT}
     statement exists when you call \l{QSqlDatabase::}{commit()} or
@@ -309,26 +303,45 @@ QSqlQuery& QSqlQuery::operator=(const QSqlQuery& other)
 }
 
 /*!
-  Returns true if the query is \l{isActive()}{active} and positioned
-  on a valid record and the \a field is NULL; otherwise returns
-  false. Note that for some drivers, isNull() will not return accurate
-  information until after an attempt is made to retrieve data.
+    Returns \c true if the query is not \l{isActive()}{active},
+    the query is not positioned on a valid record,
+    there is no such \a field, or the \a field is null; otherwise \c false.
+    Note that for some drivers, isNull() will not return accurate
+    information until after an attempt is made to retrieve data.
 
-  \sa isActive(), isValid(), value()
+    \sa isActive(), isValid(), value()
 */
 
 bool QSqlQuery::isNull(int field) const
 {
-    if (d->sqlResult->isActive() && d->sqlResult->isValid())
-        return d->sqlResult->isNull(field);
+    return !d->sqlResult->isActive()
+             || !d->sqlResult->isValid()
+             || d->sqlResult->isNull(field);
+}
+
+/*!
+    \overload
+
+    Returns \c true if there is no field with this \a name; otherwise
+    returns isNull(int index) for the corresponding field index.
+
+    This overload is less efficient than \l{QSqlQuery::}{isNull()}
+*/
+
+bool QSqlQuery::isNull(const QString &name) const
+{
+    int index = d->sqlResult->record().indexOf(name);
+    if (index > -1)
+        return isNull(index);
+    qWarning("QSqlQuery::isNull: unknown field name '%s'", qPrintable(name));
     return true;
 }
 
 /*!
 
-  Executes the SQL in \a query. Returns true and sets the query state
+  Executes the SQL in \a query. Returns \c true and sets the query state
   to \l{isActive()}{active} if the query was successful; otherwise
-  returns false. The \a query string must use syntax appropriate for
+  returns \c false. The \a query string must use syntax appropriate for
   the SQL database being queried (for example, standard SQL).
 
   After the query is executed, the query is positioned on an \e
@@ -339,7 +352,7 @@ bool QSqlQuery::isNull(int field) const
   called.
 
   For SQLite, the query string can contain only one statement at a time.
-  If more than one statement is given, the function returns false.
+  If more than one statement is given, the function returns \c false.
 
   Example:
 
@@ -351,6 +364,10 @@ bool QSqlQuery::isNull(int field) const
 
 bool QSqlQuery::exec(const QString& query)
 {
+#ifdef QT_DEBUG_SQL
+    QElapsedTimer t;
+    t.start();
+#endif
     if (d->ref.load() != 1) {
         bool fo = isForwardOnly();
         *this = QSqlQuery(driver()->createResult());
@@ -372,10 +389,14 @@ bool QSqlQuery::exec(const QString& query)
         qWarning("QSqlQuery::exec: empty query");
         return false;
     }
+
+    bool retval = d->sqlResult->reset(query);
 #ifdef QT_DEBUG_SQL
-    qDebug("\n QSqlQuery: %s", query.toLocal8Bit().constData());
+    qDebug().nospace() << "Executed query (" << t.elapsed() << "ms, " << d->sqlResult->size()
+                       << " results, " << d->sqlResult->numRowsAffected()
+                       << " affected): " << d->sqlResult->lastQuery();
 #endif
-    return d->sqlResult->reset(query);
+    return retval;
 }
 
 /*!
@@ -492,12 +513,23 @@ const QSqlResult* QSqlQuery::result() const
 
   \list
 
-  \li If the result is currently positioned before the first record or
-  on the first record, and \a index is negative, there is no change,
-  and false is returned.
+  \li If the result is currently positioned before the first record and:
+  \list
+  \li \a index is negative or zero, there is no change, and false is
+  returned.
+  \li \a index is positive, an attempt is made to position the result
+  at absolute position \a index - 1, following the sames rule for non
+  relative seek, above.
+  \endlist
 
-  \li If the result is currently located after the last record, and \a
-  index is positive, there is no change, and false is returned.
+  \li If the result is currently positioned after the last record and:
+  \list
+  \li \a index is positive or zero, there is no change, and false is
+  returned.
+  \li \a index is negative, an attempt is made to position the result
+  at \a index + 1 relative position from last record, following the
+  rule below.
+  \endlist
 
   \li If the result is currently located somewhere in the middle, and
   the relative offset \a index moves the result below zero, the result
@@ -530,7 +562,7 @@ bool QSqlQuery::seek(int index, bool relative)
         switch (at()) { // relative seek
         case QSql::BeforeFirstRow:
             if (index > 0)
-                actualIdx = index;
+                actualIdx = index - 1;
             else {
                 return false;
             }
@@ -538,7 +570,7 @@ bool QSqlQuery::seek(int index, bool relative)
         case QSql::AfterLastRow:
             if (index < 0) {
                 d->sqlResult->fetchLast();
-                actualIdx = at() + index;
+                actualIdx = at() + index + 1;
             } else {
                 return false;
             }
@@ -686,7 +718,7 @@ bool QSqlQuery::previous()
   positions the query on the retrieved record. Note that the result
   must be in the \l{isActive()}{active} state and isSelect() must
   return true before calling this function or it will do nothing and
-  return false.  Returns true if successful. If unsuccessful the query
+  return false.  Returns \c true if successful. If unsuccessful the query
   position is set to an invalid position and false is returned.
 
   \sa next(), previous(), last(), seek(), at(), isActive(), isValid()
@@ -710,7 +742,7 @@ bool QSqlQuery::first()
   the query on the retrieved record. Note that the result must be in
   the \l{isActive()}{active} state and isSelect() must return true
   before calling this function or it will do nothing and return false.
-  Returns true if successful. If unsuccessful the query position is
+  Returns \c true if successful. If unsuccessful the query position is
   set to an invalid position and false is returned.
 
   \sa next(), previous(), first(), seek(), at(), isActive(), isValid()
@@ -729,8 +761,8 @@ bool QSqlQuery::last()
   Returns the size of the result (number of rows returned), or -1 if
   the size cannot be determined or if the database does not support
   reporting information about query sizes. Note that for non-\c SELECT
-  statements (isSelect() returns false), size() will return -1. If the
-  query is not active (isActive() returns false), -1 is returned.
+  statements (isSelect() returns \c false), size() will return -1. If the
+  query is not active (isActive() returns \c false), -1 is returned.
 
   To determine the number of rows affected by a non-\c SELECT
   statement, use numRowsAffected().
@@ -773,8 +805,8 @@ QSqlError QSqlQuery::lastError() const
 }
 
 /*!
-  Returns true if the query is currently positioned on a valid
-  record; otherwise returns false.
+  Returns \c true if the query is currently positioned on a valid
+  record; otherwise returns \c false.
 */
 
 bool QSqlQuery::isValid() const
@@ -784,7 +816,7 @@ bool QSqlQuery::isValid() const
 
 /*!
 
-  Returns true if the query is \e{active}. An active QSqlQuery is one
+  Returns \c true if the query is \e{active}. An active QSqlQuery is one
   that has been \l{QSqlQuery::exec()} {exec()'d} successfully but not
   yet finished with.  When you are finished with an active query, you
   can make the query inactive by calling finish() or clear(), or
@@ -805,8 +837,8 @@ bool QSqlQuery::isActive() const
 }
 
 /*!
-  Returns true if the current query is a \c SELECT statement;
-  otherwise returns false.
+  Returns \c true if the current query is a \c SELECT statement;
+  otherwise returns \c false.
 */
 
 bool QSqlQuery::isSelect() const
@@ -815,8 +847,8 @@ bool QSqlQuery::isSelect() const
 }
 
 /*!
-  Returns true if you can only scroll forward through a result set;
-  otherwise returns false.
+  Returns \c true if you can only scroll forward through a result set;
+  otherwise returns \c false.
 
   \sa setForwardOnly(), next()
 */
@@ -894,8 +926,8 @@ void QSqlQuery::clear()
 }
 
 /*!
-  Prepares the SQL query \a query for execution. Returns true if the
-  query is prepared successfully; otherwise returns false.
+  Prepares the SQL query \a query for execution. Returns \c true if the
+  query is prepared successfully; otherwise returns \c false.
 
   The query may contain placeholders for binding values. Both Oracle
   style colon-name (e.g., \c{:surname}), and ODBC style (\c{?})
@@ -909,7 +941,7 @@ void QSqlQuery::clear()
   will fail.
 
   For SQLite, the query string can contain only one statement at a time.
-  If more than one statement is given, the function returns false.
+  If more than one statement is given, the function returns \c false.
 
   Example:
 
@@ -949,8 +981,8 @@ bool QSqlQuery::prepare(const QString& query)
 }
 
 /*!
-  Executes a previously prepared SQL query. Returns true if the query
-  executed successfully; otherwise returns false.
+  Executes a previously prepared SQL query. Returns \c true if the query
+  executed successfully; otherwise returns \c false.
 
   Note that the last error for this query is reset when exec() is
   called.
@@ -959,12 +991,22 @@ bool QSqlQuery::prepare(const QString& query)
 */
 bool QSqlQuery::exec()
 {
+#ifdef QT_DEBUG_SQL
+    QElapsedTimer t;
+    t.start();
+#endif
     d->sqlResult->resetBindCount();
 
     if (d->sqlResult->lastError().isValid())
         d->sqlResult->setLastError(QSqlError());
 
-    return d->sqlResult->exec();
+    bool retval = d->sqlResult->exec();
+#ifdef QT_DEBUG_SQL
+    qDebug().nospace() << "Executed prepared query (" << t.elapsed() << "ms, "
+                       << d->sqlResult->size() << " results, " << d->sqlResult->numRowsAffected()
+                       << " affected): " << d->sqlResult->lastQuery();
+#endif
+    return retval;
 }
 
 /*! \enum QSqlQuery::BatchExecutionMode
@@ -981,8 +1023,8 @@ bool QSqlQuery::exec()
   support batch executions, the driver will simulate it using
   conventional exec() calls.
 
-  Returns true if the query is executed successfully; otherwise
-  returns false.
+  Returns \c true if the query is executed successfully; otherwise
+  returns \c false.
 
   Example:
 
@@ -1018,6 +1060,7 @@ bool QSqlQuery::exec()
 */
 bool QSqlQuery::execBatch(BatchExecutionMode mode)
 {
+    d->sqlResult->resetBindCount();
     return d->sqlResult->execBatch(mode == ValuesAsColumns);
 }
 
@@ -1032,12 +1075,6 @@ bool QSqlQuery::execBatch(BatchExecutionMode mode)
 
   To bind a NULL value, use a null QVariant; for example, use
   \c {QVariant(QVariant::String)} if you are binding a string.
-
-  Values cannot be bound to multiple locations in the query, eg:
-  \code
-  INSERT INTO testtable (id, name, samename) VALUES (:id, :name, :name)
-  \endcode
-  Binding to name will bind to the first :name, but not the second.
 
   \sa addBindValue(), prepare(), exec(), boundValue(), boundValues()
 */
@@ -1229,7 +1266,7 @@ void QSqlQuery::finish()
   The query will be repositioned on an \e invalid record in the new
   result set and must be navigated to a valid record before data
   values can be retrieved. If a new result set isn't available the
-  function returns false and the query is set to inactive. In any
+  function returns \c false and the query is set to inactive. In any
   case the old result set will be discarded.
 
   When one of the statements is a non-select statement a count of

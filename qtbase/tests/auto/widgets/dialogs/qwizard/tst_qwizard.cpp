@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -51,6 +43,9 @@
 #include <QVBoxLayout>
 #include <QWizard>
 #include <QTreeWidget>
+#include <QScreen>
+
+Q_DECLARE_METATYPE(QWizard::WizardButton);
 
 static QImage grabWidget(QWidget *window)
 {
@@ -88,6 +83,7 @@ private slots:
     void setOption_HaveNextButtonOnLastPage();
     void setOption_HaveFinishButtonOnEarlyPages();
     void setOption_NoCancelButton();
+    void setOption_NoCancelButtonOnLastPage();
     void setOption_CancelButtonOnLeft();
     void setOption_HaveHelpButton();
     void setOption_HelpButtonOnRight();
@@ -100,6 +96,8 @@ private slots:
     void setWizardStyle();
     void removePage();
     void sideWidget();
+    void objectNames_data();
+    void objectNames();
 
     // task-specific tests below me:
     void task177716_disableCommitButton();
@@ -151,6 +149,7 @@ void tst_QWizard::init()
 
 void tst_QWizard::cleanup()
 {
+    QVERIFY(QApplication::topLevelWidgets().isEmpty());
 }
 
 void tst_QWizard::buttonText()
@@ -439,14 +438,8 @@ void tst_QWizard::setPixmap()
     QVERIFY(wizard.pixmap(QWizard::BannerPixmap).isNull());
     QVERIFY(wizard.pixmap(QWizard::LogoPixmap).isNull());
     QVERIFY(wizard.pixmap(QWizard::WatermarkPixmap).isNull());
-#ifdef Q_OS_MAC
-    if (QSysInfo::MacintoshVersion > QSysInfo::MV_10_3) {
-        QEXPECT_FAIL("", "QTBUG-23701", Continue);
-        QVERIFY(wizard.pixmap(QWizard::BackgroundPixmap).isNull() == false);
-    } else {
-        // fall through since the image doesn't exist on a 10.3 system.
-        QVERIFY(page->pixmap(QWizard::BackgroundPixmap).isNull());
-    }
+#ifdef Q_OS_OSX
+    QVERIFY(wizard.pixmap(QWizard::BackgroundPixmap).isNull() == false);
 #else
     QVERIFY(wizard.pixmap(QWizard::BackgroundPixmap).isNull());
 #endif
@@ -454,14 +447,8 @@ void tst_QWizard::setPixmap()
     QVERIFY(page->pixmap(QWizard::BannerPixmap).isNull());
     QVERIFY(page->pixmap(QWizard::LogoPixmap).isNull());
     QVERIFY(page->pixmap(QWizard::WatermarkPixmap).isNull());
-#ifdef Q_OS_MAC
-    if (QSysInfo::MacintoshVersion > QSysInfo::MV_10_3) {
-        QEXPECT_FAIL("", "QTBUG-23701", Continue);
-        QVERIFY(wizard.pixmap(QWizard::BackgroundPixmap).isNull() == false);
-    } else {
-        // fall through since the image doesn't exist on a 10.3 system.
-        QVERIFY(page->pixmap(QWizard::BackgroundPixmap).isNull());
-    }
+#ifdef Q_OS_OSX
+    QVERIFY(wizard.pixmap(QWizard::BackgroundPixmap).isNull() == false);
 #else
     QVERIFY(page->pixmap(QWizard::BackgroundPixmap).isNull());
 #endif
@@ -990,9 +977,17 @@ void tst_QWizard::setOption_IgnoreSubTitles()
 #if defined(Q_OS_WINCE)
     QSKIP("Skipped because of limited resources and potential crash. (Task: 166824)");
 #endif
+    const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
+    const int kPixels = (availableGeometry.width() + 500) / 1000;
+    const int frame = 50 * kPixels;
+    const int size = 400 * kPixels;
     QWizard wizard1;
+#ifdef Q_OS_WIN
+    wizard1.setWizardStyle(QWizard::ClassicStyle); // Avoid Vista style focus animations, etc.
+#endif
     wizard1.setButtonLayout(QList<QWizard::WizardButton>() << QWizard::CancelButton);
-    wizard1.resize(500, 500);
+    wizard1.resize(size, size);
+    wizard1.move(availableGeometry.left() + frame, availableGeometry.top() + frame);
     QVERIFY(!wizard1.testOption(QWizard::IgnoreSubTitles));
     QWizardPage *page11 = new QWizardPage;
     page11->setTitle("Page X");
@@ -1005,8 +1000,12 @@ void tst_QWizard::setOption_IgnoreSubTitles()
     wizard1.addPage(page12);
 
     QWizard wizard2;
+#ifdef Q_OS_WIN
+    wizard2.setWizardStyle(QWizard::ClassicStyle); // Avoid Vista style focus animations, etc.
+#endif
     wizard2.setButtonLayout(QList<QWizard::WizardButton>() << QWizard::CancelButton);
-    wizard2.resize(500, 500);
+    wizard2.resize(size, size);
+    wizard2.move(availableGeometry.left() + 2 * frame + size, availableGeometry.top() + frame);
     wizard2.setOption(QWizard::IgnoreSubTitles, true);
     QWizardPage *page21 = new QWizardPage;
     page21->setTitle("Page X");
@@ -1020,6 +1019,7 @@ void tst_QWizard::setOption_IgnoreSubTitles()
 
     wizard1.show();
     wizard2.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wizard2));
 
     // Check that subtitles are shown when they should (i.e.,
     // they're set and IgnoreSubTitles is off).
@@ -1034,24 +1034,24 @@ void tst_QWizard::setOption_IgnoreSubTitles()
 
     QImage i12 = grabWidget(&wizard1);
     QImage i22 = grabWidget(&wizard2);
-    QVERIFY(i12 == i22);
-    QVERIFY(i21 == i22);
+    QCOMPARE(i12, i22);
+    QCOMPARE(i21, i22);
 
     wizard1.back();
     wizard2.back();
 
     QImage i13 = grabWidget(&wizard1);
     QImage i23 = grabWidget(&wizard2);
-    QVERIFY(i13 == i11);
-    QVERIFY(i23 == i21);
+    QCOMPARE(i13, i11);
+    QCOMPARE(i23, i21);
 
     wizard1.setOption(QWizard::IgnoreSubTitles, true);
     wizard2.setOption(QWizard::IgnoreSubTitles, false);
 
     QImage i14 = grabWidget(&wizard1);
     QImage i24 = grabWidget(&wizard2);
-    QVERIFY(i14 == i21);
-    QVERIFY(i24 == i11);
+    QCOMPARE(i14, i21);
+    QCOMPARE(i24, i11);
 
     // Check the impact of subtitles on the rest of the layout, by
     // using a subtitle that looks empty (but that isn't). In
@@ -1075,7 +1075,7 @@ void tst_QWizard::setOption_IgnoreSubTitles()
             QImage i2 = grabWidget(&wizard1);
 
             if (j == 0 || wizard1.wizardStyle() == QWizard::MacStyle) {
-                QVERIFY(i1 == i2);
+                QCOMPARE(i1, i2);
             } else {
                 QVERIFY(i1 != i2);
             }
@@ -1431,6 +1431,50 @@ void tst_QWizard::setOption_NoCancelButton()
     }
 }
 
+void tst_QWizard::setOption_NoCancelButtonOnLastPage()
+{
+    for (int i = 0; i < 2; ++i) {
+        QWizard wizard;
+        wizard.setOption(QWizard::NoCancelButton, false);
+        wizard.setOption(QWizard::NoCancelButtonOnLastPage, true);
+        wizard.addPage(new QWizardPage);
+        wizard.addPage(new QWizardPage);
+        wizard.page(1)->setFinalPage(true);     // changes nothing (final != last in general)
+        wizard.addPage(new QWizardPage);
+
+        wizard.setStartId(1);
+        wizard.show();
+        qApp->processEvents();
+
+        QVERIFY(wizard.button(QWizard::CancelButton)->isVisible());
+
+        wizard.next();
+        qApp->processEvents();
+        QVERIFY(!wizard.button(QWizard::CancelButton)->isVisible());
+
+        wizard.next();
+        qApp->processEvents();
+        QVERIFY(!wizard.button(QWizard::CancelButton)->isVisible());
+
+        wizard.back();
+        qApp->processEvents();
+        QVERIFY(wizard.button(QWizard::CancelButton)->isVisible());
+
+        wizard.next();
+        qApp->processEvents();
+        QVERIFY(!wizard.button(QWizard::CancelButton)->isVisible());
+
+        wizard.setOption(QWizard::NoCancelButtonOnLastPage, false);
+        QVERIFY(wizard.button(QWizard::CancelButton)->isVisible());
+
+        wizard.setOption(QWizard::NoCancelButtonOnLastPage, true);
+        QVERIFY(!wizard.button(QWizard::CancelButton)->isVisible());
+
+        wizard.addPage(new QWizardPage);
+        QVERIFY(!wizard.button(QWizard::CancelButton)->isVisible());  // this is maybe wrong
+    }
+}
+
 void tst_QWizard::setOption_CancelButtonOnLeft()
 {
     for (int i = 0; i < 2; ++i) {
@@ -1775,7 +1819,7 @@ public:
             QWizardPage *page_to_delete = page(id);
             removePage(id);
             delete page_to_delete;
-	}
+        }
     }
 
     void applyOperations(const QList<Operation *> &operations)
@@ -2382,9 +2426,9 @@ void tst_QWizard::sideWidget()
 
     wizard.setSideWidget(0);
     QVERIFY(wizard.sideWidget() == 0);
-    QWidget *w1 = new QWidget(&wizard);
-    wizard.setSideWidget(w1);
-    QVERIFY(wizard.sideWidget() == w1);
+    QScopedPointer<QWidget> w1(new QWidget(&wizard));
+    wizard.setSideWidget(w1.data());
+    QCOMPARE(wizard.sideWidget(), w1.data());
     QWidget *w2 = new QWidget(&wizard);
     wizard.setSideWidget(w2);
     QVERIFY(wizard.sideWidget() == w2);
@@ -2394,6 +2438,44 @@ void tst_QWizard::sideWidget()
     w1->setParent(0);
     wizard.setSideWidget(0);
     QVERIFY(wizard.sideWidget() == 0);
+}
+
+void tst_QWizard::objectNames_data()
+{
+    QTest::addColumn<QWizard::WizardButton>("wizardButton");
+    QTest::addColumn<QString>("buttonName");
+
+    QTest::newRow("BackButton")    << QWizard::BackButton    << QStringLiteral("__qt__passive_wizardbutton0");
+    QTest::newRow("NextButton")    << QWizard::NextButton    << QStringLiteral("__qt__passive_wizardbutton1");
+    QTest::newRow("CommitButton")  << QWizard::CommitButton  << QStringLiteral("qt_wizard_commit");
+    QTest::newRow("FinishButton")  << QWizard::FinishButton  << QStringLiteral("qt_wizard_finish");
+    QTest::newRow("CancelButton")  << QWizard::CancelButton  << QStringLiteral("qt_wizard_cancel");
+    QTest::newRow("HelpButton")    << QWizard::HelpButton    << QStringLiteral("__qt__passive_wizardbutton5");
+    QTest::newRow("CustomButton1") << QWizard::CustomButton1 << QStringLiteral("__qt__passive_wizardbutton6");
+    QTest::newRow("CustomButton2") << QWizard::CustomButton2 << QStringLiteral("__qt__passive_wizardbutton7");
+    QTest::newRow("CustomButton3") << QWizard::CustomButton3 << QStringLiteral("__qt__passive_wizardbutton8");
+}
+
+void tst_QWizard::objectNames()
+{
+    QFETCH(QWizard::WizardButton, wizardButton);
+    QFETCH(QString, buttonName);
+
+    QWizard wizard;
+    QList<QWizard::WizardButton> buttons = QList<QWizard::WizardButton>()
+        << QWizard::BackButton
+        << QWizard::NextButton
+        << QWizard::CommitButton
+        << QWizard::FinishButton
+        << QWizard::CancelButton
+        << QWizard::HelpButton
+        << QWizard::CustomButton1
+        << QWizard::CustomButton2
+        << QWizard::CustomButton3
+      ;
+    QVERIFY(buttons.contains(wizardButton));
+    QVERIFY(wizard.button(wizardButton));
+    QCOMPARE(wizard.button(wizardButton)->objectName(), buttonName);
 }
 
 class task177716_CommitPage : public QWizardPage
@@ -2530,6 +2612,9 @@ void tst_QWizard::task161658_alignments()
 
 void tst_QWizard::task177022_setFixedSize()
 {
+#ifdef Q_OS_BLACKBERRY
+    QSKIP("Window is forced fullscreen");
+#endif
     int width = 300;
     int height = 200;
     QWizard wiz;
@@ -2547,7 +2632,7 @@ void tst_QWizard::task177022_setFixedSize()
     QCOMPARE(wiz.maximumWidth(), width);
     QCOMPARE(wiz.maximumHeight(), height);
 
-    wiz.show();
+    wiz.showNormal();
     QVERIFY(QTest::qWaitForWindowExposed(&wiz));
 
     QCOMPARE(wiz.size(), QSize(width, height));

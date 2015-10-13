@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -80,14 +72,11 @@ QWindowsOleDataObject::QWindowsOleDataObject(QMimeData *mimeData) :
     CF_PERFORMEDDROPEFFECT(RegisterClipboardFormat(CFSTR_PERFORMEDDROPEFFECT)),
     performedEffect(DROPEFFECT_NONE)
 {
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s '%s'", __FUNCTION__, qPrintable(mimeData->formats().join(QStringLiteral(", "))));
+    qCDebug(lcQpaMime) << __FUNCTION__ << mimeData->formats();
 }
 
 QWindowsOleDataObject::~QWindowsOleDataObject()
 {
-    if (QWindowsContext::verboseOLE)
-        qDebug("%s", __FUNCTION__);
 }
 
 void QWindowsOleDataObject::releaseQt()
@@ -143,10 +132,10 @@ QWindowsOleDataObject::GetData(LPFORMATETC pformatetc, LPSTGMEDIUM pmedium)
 {
     HRESULT hr = ResultFromScode(DATA_E_FORMATETC);
 
-    if (QWindowsContext::verboseOLE) {
+    if (QWindowsContext::verbose > 1 && lcQpaMime().isDebugEnabled()) {
         wchar_t buf[256] = {0};
         GetClipboardFormatName(pformatetc->cfFormat, buf, 255);
-        qDebug("%s CF = %d : %s", __FUNCTION__, pformatetc->cfFormat, qPrintable(QString::fromWCharArray(buf)));
+        qCDebug(lcQpaMime) <<__FUNCTION__ << "CF = " << pformatetc->cfFormat << QString::fromWCharArray(buf);
     }
 
     if (data) {
@@ -156,11 +145,10 @@ QWindowsOleDataObject::GetData(LPFORMATETC pformatetc, LPSTGMEDIUM pmedium)
                 hr = ResultFromScode(S_OK);
     }
 
-    if (QWindowsContext::verboseOLE) {
+    if (QWindowsContext::verbose > 1) {
         wchar_t buf[256] = {0};
         GetClipboardFormatName(pformatetc->cfFormat, buf, 255);
-        qDebug("%s CF = %d : %s returns 0x%x", __FUNCTION__, pformatetc->cfFormat,
-               qPrintable(QString::fromWCharArray(buf)), int(hr));
+        qCDebug(lcQpaMime) <<__FUNCTION__ << "CF = " << pformatetc->cfFormat << " returns 0x" << int(hr) << dec;
     }
 
     return hr;
@@ -177,16 +165,16 @@ QWindowsOleDataObject::QueryGetData(LPFORMATETC pformatetc)
 {
     HRESULT hr = ResultFromScode(DATA_E_FORMATETC);
 
-    if (QWindowsContext::verboseOLE > 1)
-        qDebug("%s", __FUNCTION__);
+    if (QWindowsContext::verbose > 1)
+        qCDebug(lcQpaMime) << __FUNCTION__;
 
     if (data) {
         const QWindowsMimeConverter &mc = QWindowsContext::instance()->mimeConverter();
         hr = mc.converterFromMime(*pformatetc, data) ?
              ResultFromScode(S_OK) : ResultFromScode(S_FALSE);
     }
-    if (QWindowsContext::verboseOLE > 1)
-        qDebug("%s returns 0x%x", __FUNCTION__, int(hr));
+    if (QWindowsContext::verbose > 1)
+        qCDebug(lcQpaMime) <<  __FUNCTION__ << " returns 0x" << hex << int(hr);
     return hr;
 }
 
@@ -200,8 +188,8 @@ QWindowsOleDataObject::GetCanonicalFormatEtc(LPFORMATETC, LPFORMATETC pformatetc
 STDMETHODIMP
 QWindowsOleDataObject::SetData(LPFORMATETC pFormatetc, STGMEDIUM *pMedium, BOOL fRelease)
 {
-    if (QWindowsContext::verboseOLE > 1)
-        qDebug("%s", __FUNCTION__);
+    if (QWindowsContext::verbose > 1)
+        qCDebug(lcQpaMime) << __FUNCTION__;
 
     HRESULT hr = ResultFromScode(E_NOTIMPL);
 
@@ -213,8 +201,8 @@ QWindowsOleDataObject::SetData(LPFORMATETC pFormatetc, STGMEDIUM *pMedium, BOOL 
             ReleaseStgMedium(pMedium);
         hr = ResultFromScode(S_OK);
     }
-    if (QWindowsContext::verboseOLE > 1)
-        qDebug("%s returns 0x%x", __FUNCTION__, int(hr));
+    if (QWindowsContext::verbose > 1)
+        qCDebug(lcQpaMime) <<  __FUNCTION__ << " returns 0x" << hex << int(hr);
     return hr;
 }
 
@@ -222,8 +210,8 @@ QWindowsOleDataObject::SetData(LPFORMATETC pFormatetc, STGMEDIUM *pMedium, BOOL 
 STDMETHODIMP
 QWindowsOleDataObject::EnumFormatEtc(DWORD dwDirection, LPENUMFORMATETC FAR* ppenumFormatEtc)
 {
-     if (QWindowsContext::verboseOLE > 1)
-         qDebug("%s", __FUNCTION__);
+     if (QWindowsContext::verbose > 1)
+         qCDebug(lcQpaMime) << __FUNCTION__;
 
     if (!data)
         return ResultFromScode(DATA_E_FORMATETC);
@@ -285,8 +273,8 @@ QWindowsOleDataObject::EnumDAdvise(LPENUMSTATDATA FAR*)
 QWindowsOleEnumFmtEtc::QWindowsOleEnumFmtEtc(const QVector<FORMATETC> &fmtetcs) :
     m_dwRefs(1), m_nIndex(0), m_isNull(false)
 {
-    if (QWindowsContext::verboseOLE > 1)
-        qDebug("%s", __FUNCTION__);
+    if (QWindowsContext::verbose > 1)
+        qCDebug(lcQpaMime) << __FUNCTION__;
     m_lpfmtetcs.reserve(fmtetcs.count());
     for (int idx = 0; idx < fmtetcs.count(); ++idx) {
         LPFORMATETC destetc = new FORMATETC();
@@ -303,8 +291,8 @@ QWindowsOleEnumFmtEtc::QWindowsOleEnumFmtEtc(const QVector<FORMATETC> &fmtetcs) 
 QWindowsOleEnumFmtEtc::QWindowsOleEnumFmtEtc(const QVector<LPFORMATETC> &lpfmtetcs) :
     m_dwRefs(1), m_nIndex(0), m_isNull(false)
 {
-    if (QWindowsContext::verboseOLE > 1)
-        qDebug("%s", __FUNCTION__);
+    if (QWindowsContext::verbose > 1)
+        qCDebug(lcQpaMime) << __FUNCTION__;
     m_lpfmtetcs.reserve(lpfmtetcs.count());
     for (int idx = 0; idx < lpfmtetcs.count(); ++idx) {
         LPFORMATETC srcetc = lpfmtetcs.at(idx);

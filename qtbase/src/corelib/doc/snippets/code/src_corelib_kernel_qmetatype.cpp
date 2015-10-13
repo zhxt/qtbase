@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -112,3 +112,62 @@ id = qMetaTypeId<MyStruct>();       // compile error if MyStruct not declared
 typedef QString CustomString;
 qRegisterMetaType<CustomString>("CustomString");
 //! [9]
+
+//! [10]
+
+#include <deque>
+
+Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE(std::deque)
+
+void someFunc()
+{
+    std::deque<QFile*> container;
+    QVariant var = QVariant::fromValue(container);
+    // ...
+}
+
+//! [10]
+
+//! [11]
+
+#include <unordered_list>
+
+Q_DECLARE_ASSOCIATIVE_CONTAINER_METATYPE(std::unordered_map)
+
+void someFunc()
+{
+    std::unordered_map<int, bool> container;
+    QVariant var = QVariant::fromValue(container);
+    // ...
+}
+
+//! [11]
+
+//! [12]
+QPointer<QFile> fp(new QFile);
+QVariant var = QVariant::fromValue(fp);
+// ...
+if (var.canConvert<QObject*>()) {
+    QObject *sp = var.value<QObject*>();
+    qDebug() << sp->metaObject()->className(); // Prints 'QFile'.
+}
+//! [12]
+
+//! [13]
+
+#include <memory>
+
+Q_DECLARE_SMART_POINTER_METATYPE(std::shared_ptr)
+
+void someFunc()
+{
+    auto smart_ptr = std::make_shared<QFile>();
+    QVariant var = QVariant::fromValue(smart_ptr);
+    // ...
+    if (var.canConvert<QObject*>()) {
+        QObject *sp = var.value<QObject*>();
+        qDebug() << sp->metaObject()->className(); // Prints 'QFile'.
+    }
+}
+
+//! [13]

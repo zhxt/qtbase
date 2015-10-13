@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +35,7 @@
 #include <QtCore/qglobal.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QtGui/qopengl.h>
+#include <QtGui/qopenglfunctions.h>
 
 #include "qopengldebug.h"
 
@@ -114,7 +107,7 @@ QT_BEGIN_NAMESPACE
     QOpenGLDebugLogger supports both these modes of operation. Refer to the
     following sections to find out the differences between them.
 
-    \section1 Creating an OpenGL debug context
+    \section1 Creating an OpenGL Debug Context
 
     For efficiency reasons, OpenGL implementations are allowed not to create
     any debug output at all, unless the OpenGL context is a debug context. In order
@@ -141,7 +134,7 @@ QT_BEGIN_NAMESPACE
     version, as it relies on the availability of the \c{GL_KHR_debug} extension
     (see below).
 
-    \section1 Creating and initializing a QOpenGLDebugLogger
+    \section1 Creating and Initializing a QOpenGLDebugLogger
 
     QOpenGLDebugLogger is a simple QObject-derived class. Just like all QObject
     subclasses, you create an instance (and optionally specify a parent
@@ -170,7 +163,7 @@ QT_BEGIN_NAMESPACE
     where \c{ctx} is a valid QOpenGLContext. If the extension is not available,
     initialize() will return false.
 
-    \section1 Reading the internal OpenGL debug log
+    \section1 Reading the Internal OpenGL Debug Log
 
     OpenGL implementations keep an internal log of debug messages. Messages
     stored in this log can be retrieved by using the loggedMessages() function:
@@ -244,7 +237,7 @@ QT_BEGIN_NAMESPACE
     OpenGL log), it is important to always check if it contains any message
     after calling startLogging().
 
-    \section1 Inserting messages in the debug log
+    \section1 Inserting Messages in the Debug Log
 
     It is possible for applications and libraries to insert custom messages in
     the debug log, for instance for marking a group of related OpenGL commands
@@ -269,7 +262,7 @@ QT_BEGIN_NAMESPACE
     this length by calling the maximumMessageLength() method; messages longer
     than the limit will automatically get truncated.
 
-    \section1 Controlling the debug output
+    \section1 Controlling the Debug Output
 
     QOpenGLDebugMessage is also able to apply filters to the debug messages, and
     therefore limit the amount of messages logged. You can enable or disable
@@ -459,6 +452,17 @@ QT_BEGIN_NAMESPACE
         connecting to the messageLogged() signal.
 */
 
+// When using OpenGL ES 2.0, all the necessary GL_KHR_debug constants are
+// provided in qopengles2ext.h. Unfortunately, newer versions of that file
+// suffix everything with _KHR which causes extra headache when the goal is
+// to have a single piece of code that builds in all our target
+// environments. Therefore, try to detect this and use our custom defines
+// instead, which we anyway need for OS X.
+
+#if defined(GL_KHR_debug) && defined(GL_DEBUG_SOURCE_API_KHR)
+#define USE_MANUAL_DEFS
+#endif
+
 // Under OSX (at least up to 10.8) we cannot include our copy of glext.h,
 // but we use the system-wide one, which unfortunately lacks all the needed
 // defines/typedefs. In order to make the code compile, we just add here
@@ -466,6 +470,10 @@ QT_BEGIN_NAMESPACE
 
 #ifndef GL_KHR_debug
 #define GL_KHR_debug 1
+#define USE_MANUAL_DEFS
+#endif
+
+#ifdef USE_MANUAL_DEFS
 
 #ifndef GL_DEBUG_OUTPUT_SYNCHRONOUS
 #define GL_DEBUG_OUTPUT_SYNCHRONOUS       0x8242
@@ -588,9 +596,9 @@ QT_BEGIN_NAMESPACE
 #define GL_STACK_UNDERFLOW                0x0504
 #endif
 
-typedef void (QOPENGLF_APIENTRY *GLDEBUGPROC)(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,GLvoid *userParam);
+typedef void (QOPENGLF_APIENTRY *GLDEBUGPROC)(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,const GLvoid *userParam);
 
-#endif /* GL_KHR_debug */
+#endif /* USE_MANUAL_DEFS */
 
 
 /*!
@@ -908,6 +916,12 @@ QOpenGLDebugMessage &QOpenGLDebugMessage::operator=(const QOpenGLDebugMessage &d
 }
 
 /*!
+   \fn QOpenGLDebugMessage &QOpenGLDebugMessage::operator=(QOpenGLDebugMessage &&debugMessage)
+
+   Move-assigns \a debugMessage to this object.
+*/
+
+/*!
     \fn void QOpenGLDebugMessage::swap(QOpenGLDebugMessage &debugMessage)
 
     Swaps the message \a debugMessage with this message. This operation is very
@@ -997,7 +1011,7 @@ QOpenGLDebugMessage QOpenGLDebugMessage::createThirdPartyMessage(const QString &
 }
 
 /*!
-    Returns true if this debug message is equal to \a debugMessage, or false
+    Returns \c true if this debug message is equal to \a debugMessage, or false
     otherwise. Two debugging messages are equal if they have the same textual
     message, the same id, the same source, the same type and the same severity.
 
@@ -1016,7 +1030,7 @@ bool QOpenGLDebugMessage::operator==(const QOpenGLDebugMessage &debugMessage) co
 /*!
     \fn bool QOpenGLDebugMessage::operator!=(const QOpenGLDebugMessage &debugMessage) const
 
-    Returns true if this message is different from \a debugMessage, or false
+    Returns \c true if this message is different from \a debugMessage, or false
     otherwise.
 
     \sa operator==()
@@ -1031,10 +1045,11 @@ bool QOpenGLDebugMessage::operator==(const QOpenGLDebugMessage &debugMessage) co
 */
 QDebug operator<<(QDebug debug, QOpenGLDebugMessage::Source source)
 {
+    QDebugStateSaver saver(debug);
     debug.nospace() << "QOpenGLDebugMessage::Source("
                     << qt_messageSourceToString(source)
-                    << ")";
-    return debug.space();
+                    << ')';
+    return debug;
 }
 
 /*!
@@ -1045,10 +1060,11 @@ QDebug operator<<(QDebug debug, QOpenGLDebugMessage::Source source)
 */
 QDebug operator<<(QDebug debug, QOpenGLDebugMessage::Type type)
 {
+    QDebugStateSaver saver(debug);
     debug.nospace() << "QOpenGLDebugMessage::Type("
                     << qt_messageTypeToString(type)
-                    << ")";
-    return debug.space();
+                    << ')';
+    return debug;
 }
 
 /*!
@@ -1059,10 +1075,11 @@ QDebug operator<<(QDebug debug, QOpenGLDebugMessage::Type type)
 */
 QDebug operator<<(QDebug debug, QOpenGLDebugMessage::Severity severity)
 {
+    QDebugStateSaver saver(debug);
     debug.nospace() << "QOpenGLDebugMessage::Severity("
                     << qt_messageSeverityToString(severity)
-                    << ")";
-    return debug.space();
+                    << ')';
+    return debug;
 }
 
 /*!
@@ -1073,13 +1090,14 @@ QDebug operator<<(QDebug debug, QOpenGLDebugMessage::Severity severity)
 */
 QDebug operator<<(QDebug debug, const QOpenGLDebugMessage &message)
 {
+    QDebugStateSaver saver(debug);
     debug.nospace() << "QOpenGLDebugMessage("
                     << qt_messageSourceToString(message.source()) << ", "
                     << message.id() << ", "
                     << message.message() << ", "
                     << qt_messageSeverityToString(message.severity()) << ", "
-                    << qt_messageTypeToString(message.type()) << ")";
-    return debug.space();
+                    << qt_messageTypeToString(message.type()) << ')';
+    return debug;
 
 }
 #endif // QT_NO_DEBUG_STREAM
@@ -1275,9 +1293,9 @@ static void QOPENGLF_APIENTRY qt_opengl_debug_callback(GLenum source,
                                                        GLenum severity,
                                                        GLsizei length,
                                                        const GLchar *rawMessage,
-                                                       GLvoid *userParam)
+                                                       const GLvoid *userParam)
 {
-    QOpenGLDebugLoggerPrivate *loggerPrivate = static_cast<QOpenGLDebugLoggerPrivate *>(userParam);
+    QOpenGLDebugLoggerPrivate *loggerPrivate = static_cast<QOpenGLDebugLoggerPrivate *>(const_cast<GLvoid *>(userParam));
     loggerPrivate->handleMessage(source, type, id, severity, length, rawMessage);
 }
 }
@@ -1317,7 +1335,7 @@ QOpenGLDebugLogger::~QOpenGLDebugLogger()
     initialized object; note that in this case the object must not be logging
     when you call this function.
 
-    Returns true if the logger is successfully initialized; false otherwise.
+    Returns \c true if the logger is successfully initialized; false otherwise.
 
     \sa QOpenGLContext
 */
@@ -1364,10 +1382,23 @@ bool QOpenGLDebugLogger::initialize()
     GET_DEBUG_PROC_ADDRESS(glGetDebugMessageLog);
     GET_DEBUG_PROC_ADDRESS(glPushDebugGroup);
     GET_DEBUG_PROC_ADDRESS(glPopDebugGroup);
+
+    // Windows' Desktop GL doesn't allow resolution of "basic GL entry points"
+    // through wglGetProcAddress
+#if defined(Q_OS_WIN) && !defined(QT_OPENGL_ES_2)
+    {
+        HMODULE handle = static_cast<HMODULE>(QOpenGLContext::openGLModuleHandle());
+        if (!handle)
+            handle = GetModuleHandleA("opengl32.dll");
+        d->glGetPointerv = reinterpret_cast<qt_glGetPointerv_t>(GetProcAddress(handle, QByteArrayLiteral("glGetPointerv")));
+    }
+#else
     GET_DEBUG_PROC_ADDRESS(glGetPointerv)
+#endif
+
 #undef GET_DEBUG_PROC_ADDRESS
 
-    glGetIntegerv(GL_MAX_DEBUG_MESSAGE_LENGTH, &d->maxMessageLength);
+    QOpenGLContext::currentContext()->functions()->glGetIntegerv(GL_MAX_DEBUG_MESSAGE_LENGTH, &d->maxMessageLength);
 
 #ifndef QT_NO_DEBUG
     if (!d->context->format().testOption(QSurfaceFormat::DebugContext)) {
@@ -1383,7 +1414,7 @@ bool QOpenGLDebugLogger::initialize()
 }
 
 /*!
-    Returns true if this object is currently logging, false otherwise.
+    Returns \c true if this object is currently logging, false otherwise.
 
     \sa startLogging()
 */
@@ -1435,15 +1466,16 @@ void QOpenGLDebugLogger::startLogging(QOpenGLDebugLogger::LoggingMode loggingMod
 
     d->glDebugMessageCallback(&qt_opengl_debug_callback, d);
 
-    d->debugWasEnabled = glIsEnabled(GL_DEBUG_OUTPUT);
-    d->syncDebugWasEnabled = glIsEnabled(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
+    d->debugWasEnabled = funcs->glIsEnabled(GL_DEBUG_OUTPUT);
+    d->syncDebugWasEnabled = funcs->glIsEnabled(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 
     if (d->loggingMode == SynchronousLogging)
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        funcs->glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
     else
-        glDisable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        funcs->glDisable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 
-    glEnable(GL_DEBUG_OUTPUT);
+    funcs->glEnable(GL_DEBUG_OUTPUT);
 }
 
 /*!
@@ -1472,13 +1504,14 @@ void QOpenGLDebugLogger::stopLogging()
 
     d->glDebugMessageCallback(d->oldDebugCallbackFunction, d->oldDebugCallbackParameter);
 
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
     if (!d->debugWasEnabled)
-        glDisable(GL_DEBUG_OUTPUT);
+        funcs->glDisable(GL_DEBUG_OUTPUT);
 
     if (d->syncDebugWasEnabled)
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        funcs->glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
     else
-        glDisable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        funcs->glDisable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 }
 
 /*!

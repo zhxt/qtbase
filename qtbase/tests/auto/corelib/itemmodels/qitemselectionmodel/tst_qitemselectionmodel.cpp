@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,7 +34,8 @@
 #include <QtTest/QtTest>
 
 #include <QtGui/QtGui>
-#include <QtWidgets/QtWidgets>
+
+#include <algorithm>
 
 class tst_QItemSelectionModel : public QObject
 {
@@ -93,6 +86,7 @@ private slots:
     void deselectRemovedMiddleRange();
     void rangeOperatorLessThan_data();
     void rangeOperatorLessThan();
+    void setModel();
 
     void testDifferentModels();
 
@@ -113,8 +107,6 @@ QDataStream &operator>>(QDataStream &, QModelIndexList &);
 typedef QList<int> IntList;
 typedef QPair<int, int> IntPair;
 typedef QList<IntPair> PairList;
-
-Q_DECLARE_METATYPE(QItemSelection)
 
 class QStreamHelper: public QAbstractItemModel
 {
@@ -1526,22 +1518,21 @@ public:
 void tst_QItemSelectionModel::resetModel()
 {
     MyStandardItemModel model(20, 20);
-    QTreeView view;
-    view.setModel(&model);
+    QItemSelectionModel *selectionModel = new QItemSelectionModel(&model);
 
-    QSignalSpy spy(view.selectionModel(), SIGNAL(selectionChanged(QItemSelection,QItemSelection)));
+    QSignalSpy spy(selectionModel, &QItemSelectionModel::selectionChanged);
     QVERIFY(spy.isValid());
 
-    view.selectionModel()->select(QItemSelection(model.index(0, 0), model.index(5, 5)), QItemSelectionModel::Select);
+    selectionModel->select(QItemSelection(model.index(0, 0), model.index(5, 5)), QItemSelectionModel::Select);
 
     QCOMPARE(spy.count(), 1);
 
     model.reset();
 
-    QVERIFY(view.selectionModel()->selection().isEmpty());
-    QVERIFY(view.selectionModel()->hasSelection() == false);
+    QVERIFY(selectionModel->selection().isEmpty());
+    QVERIFY(selectionModel->hasSelection() == false);
 
-    view.selectionModel()->select(QItemSelection(model.index(0, 0), model.index(5, 5)), QItemSelectionModel::Select);
+    selectionModel->select(QItemSelection(model.index(0, 0), model.index(5, 5)), QItemSelectionModel::Select);
 
     QCOMPARE(spy.count(), 2);
     QCOMPARE(spy.at(1).count(), 2);
@@ -1592,7 +1583,7 @@ void tst_QItemSelectionModel::removeRows()
 
     MyStandardItemModel model(rowCount, columnCount);
     QItemSelectionModel selections(&model);
-    QSignalSpy spy(&selections, SIGNAL(selectionChanged(QItemSelection,QItemSelection)));
+    QSignalSpy spy(&selections, &QItemSelectionModel::selectionChanged);
     QVERIFY(spy.isValid());
 
     QModelIndex tl = model.index(selectTop, selectLeft);
@@ -1655,7 +1646,7 @@ void tst_QItemSelectionModel::removeColumns()
 
     MyStandardItemModel model(rowCount, columnCount);
     QItemSelectionModel selections(&model);
-    QSignalSpy spy(&selections, SIGNAL(selectionChanged(QItemSelection,QItemSelection)));
+    QSignalSpy spy(&selections, &QItemSelectionModel::selectionChanged);
     QVERIFY(spy.isValid());
 
     QModelIndex tl = model.index(selectTop, selectLeft);
@@ -1835,7 +1826,7 @@ void tst_QItemSelectionModel::selectedRows()
 
     QModelIndexList selectedRowIndexes = selectionModel.selectedRows(column);
     QCOMPARE(selectedRowIndexes.count(), expectedRows.count());
-    qSort(selectedRowIndexes);
+    std::sort(selectedRowIndexes.begin(), selectedRowIndexes.end());
     for (int l = 0; l < selectedRowIndexes.count(); ++l) {
         QCOMPARE(selectedRowIndexes.at(l).row(), expectedRows.at(l));
         QCOMPARE(selectedRowIndexes.at(l).column(), column);
@@ -1895,7 +1886,7 @@ void tst_QItemSelectionModel::selectedColumns()
 
     QModelIndexList selectedColumnIndexes = selectionModel.selectedColumns(row);
     QCOMPARE(selectedColumnIndexes.count(), expectedColumns.count());
-    qSort(selectedColumnIndexes);
+    std::sort(selectedColumnIndexes.begin(), selectedColumnIndexes.end());
     for (int l = 0; l < selectedColumnIndexes.count(); ++l) {
         QCOMPARE(selectedColumnIndexes.at(l).column(), expectedColumns.at(l));
         QCOMPARE(selectedColumnIndexes.at(l).row(), row);
@@ -1905,30 +1896,25 @@ void tst_QItemSelectionModel::selectedColumns()
 void tst_QItemSelectionModel::setCurrentIndex()
 {
     // Build up a simple tree
-    QStandardItemModel *treemodel = new QStandardItemModel(0, 1);
+    QScopedPointer<QStandardItemModel> treemodel(new QStandardItemModel(0, 1));
     treemodel->insertRow(0, new QStandardItem(1));
     treemodel->insertRow(1, new QStandardItem(2));
 
-    QTreeView treeView;
-    treeView.setModel(treemodel);
-    QItemSelectionModel *selectionModel = treeView.selectionModel();
-    selectionModel->setCurrentIndex(
+    QItemSelectionModel selectionModel(treemodel.data());
+    selectionModel.setCurrentIndex(
             treemodel->index(0, 0, treemodel->index(0, 0)),
             QItemSelectionModel::SelectCurrent);
 
-    QSignalSpy currentSpy(selectionModel,
-            SIGNAL(currentChanged(QModelIndex,QModelIndex)));
-    QSignalSpy rowSpy(selectionModel,
-            SIGNAL(currentRowChanged(QModelIndex,QModelIndex)));
-    QSignalSpy columnSpy(selectionModel,
-            SIGNAL(currentColumnChanged(QModelIndex,QModelIndex)));
+    QSignalSpy currentSpy(&selectionModel, &QItemSelectionModel::currentChanged);
+    QSignalSpy rowSpy(&selectionModel, &QItemSelectionModel::currentRowChanged);
+    QSignalSpy columnSpy(&selectionModel, &QItemSelectionModel::currentColumnChanged);
 
     QVERIFY(currentSpy.isValid());
     QVERIFY(rowSpy.isValid());
     QVERIFY(columnSpy.isValid());
 
     // Select the same row and column indexes, but with a different parent
-    selectionModel->setCurrentIndex(
+    selectionModel.setCurrentIndex(
             treemodel->index(0, 0, treemodel->index(1, 0)),
             QItemSelectionModel::SelectCurrent);
 
@@ -1937,15 +1923,13 @@ void tst_QItemSelectionModel::setCurrentIndex()
     QCOMPARE(columnSpy.count(), 1);
 
     // Select another row in the same parent
-    selectionModel->setCurrentIndex(
+    selectionModel.setCurrentIndex(
             treemodel->index(1, 0, treemodel->index(1, 0)),
             QItemSelectionModel::SelectCurrent);
 
     QCOMPARE(currentSpy.count(), 2);
     QCOMPARE(rowSpy.count(), 2);
     QCOMPARE(columnSpy.count(), 1);
-
-    delete treemodel;
 }
 
 void tst_QItemSelectionModel::splitOnInsert()
@@ -1960,29 +1944,27 @@ void tst_QItemSelectionModel::splitOnInsert()
 
 void tst_QItemSelectionModel::rowIntersectsSelection1()
 {
-    QTableWidget table;
-    table.setColumnCount(1);
-    table.setRowCount(1);
-    table.setItem(0, 0, new QTableWidgetItem("foo"));
-    QAbstractItemModel *model = table.model();
-    QItemSelectionModel *selectionModel = table.selectionModel();
-    QModelIndex index = model->index(0, 0, QModelIndex());
+    QStandardItemModel model;
+    model.setItem(0, 0, new QStandardItem("foo"));
+    QItemSelectionModel selectionModel(&model);
 
-    selectionModel->select(index, QItemSelectionModel::Select);
-    QVERIFY(selectionModel->rowIntersectsSelection(0, QModelIndex()));
-    QVERIFY(selectionModel->columnIntersectsSelection(0, QModelIndex()));
+    QModelIndex index = model.index(0, 0, QModelIndex());
 
-    selectionModel->select(index, QItemSelectionModel::Deselect);
-    QVERIFY(!selectionModel->rowIntersectsSelection(0, QModelIndex()));
-    QVERIFY(!selectionModel->columnIntersectsSelection(0, QModelIndex()));
+    selectionModel.select(index, QItemSelectionModel::Select);
+    QVERIFY(selectionModel.rowIntersectsSelection(0, QModelIndex()));
+    QVERIFY(selectionModel.columnIntersectsSelection(0, QModelIndex()));
 
-    selectionModel->select(index, QItemSelectionModel::Toggle);
-    QVERIFY(selectionModel->rowIntersectsSelection(0, QModelIndex()));
-    QVERIFY(selectionModel->columnIntersectsSelection(0, QModelIndex()));
+    selectionModel.select(index, QItemSelectionModel::Deselect);
+    QVERIFY(!selectionModel.rowIntersectsSelection(0, QModelIndex()));
+    QVERIFY(!selectionModel.columnIntersectsSelection(0, QModelIndex()));
 
-    selectionModel->select(index, QItemSelectionModel::Toggle);
-    QVERIFY(!selectionModel->rowIntersectsSelection(0, QModelIndex()));
-    QVERIFY(!selectionModel->columnIntersectsSelection(0, QModelIndex()));
+    selectionModel.select(index, QItemSelectionModel::Toggle);
+    QVERIFY(selectionModel.rowIntersectsSelection(0, QModelIndex()));
+    QVERIFY(selectionModel.columnIntersectsSelection(0, QModelIndex()));
+
+    selectionModel.select(index, QItemSelectionModel::Toggle);
+    QVERIFY(!selectionModel.rowIntersectsSelection(0, QModelIndex()));
+    QVERIFY(!selectionModel.columnIntersectsSelection(0, QModelIndex()));
 }
 
 void tst_QItemSelectionModel::rowIntersectsSelection2()
@@ -2057,16 +2039,21 @@ void tst_QItemSelectionModel::rowIntersectsSelection3()
 
 void tst_QItemSelectionModel::unselectable()
 {
-    QTreeWidget w;
-    for (int i = 0; i < 10; ++i)
-        w.setItemSelected(new QTreeWidgetItem(&w), true);
-    QCOMPARE(w.topLevelItemCount(), 10);
-    QCOMPARE(w.selectionModel()->selectedIndexes().count(), 10);
-    QCOMPARE(w.selectionModel()->selectedRows().count(), 10);
+    QStandardItemModel model;
+    QStandardItem *parentItem = model.invisibleRootItem();
+
+    for (int i = 0; i < 10; ++i) {
+        QStandardItem *item = new QStandardItem(QString("item %0").arg(i));
+        parentItem->appendRow(item);
+    }
+    QItemSelectionModel selectionModel(&model);
+    selectionModel.select(QItemSelection(model.index(0, 0), model.index(9, 0)), QItemSelectionModel::Select);
+    QCOMPARE(selectionModel.selectedIndexes().count(), 10);
+    QCOMPARE(selectionModel.selectedRows().count(), 10);
     for (int j = 0; j < 10; ++j)
-        w.topLevelItem(j)->setFlags(0);
-    QCOMPARE(w.selectionModel()->selectedIndexes().count(), 0);
-    QCOMPARE(w.selectionModel()->selectedRows().count(), 0);
+        model.item(j)->setFlags(0);
+    QCOMPARE(selectionModel.selectedIndexes().count(), 0);
+    QCOMPARE(selectionModel.selectedRows().count(), 0);
 }
 
 void tst_QItemSelectionModel::selectedIndexes()
@@ -2224,7 +2211,7 @@ void tst_QItemSelectionModel::childrenDeselectionSignal()
     QItemSelectionModel selectionModel(&model);
     selectionModel.select(sel, QItemSelectionModel::SelectCurrent);
 
-    QSignalSpy deselectSpy(&selectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)));
+    QSignalSpy deselectSpy(&selectionModel, &QItemSelectionModel::selectionChanged);
     QVERIFY(deselectSpy.isValid());
     model.removeRows(0, 1, root);
     QVERIFY(deselectSpy.count() == 1);
@@ -2407,7 +2394,7 @@ void tst_QItemSelectionModel::deselectRemovedMiddleRange()
 
     RemovalObserver ro(&selModel);
 
-    QSignalSpy spy(&selModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)));
+    QSignalSpy spy(&selModel, &QItemSelectionModel::selectionChanged);
     QVERIFY(spy.isValid());
     bool ok = model.removeRows(4, 2);
 
@@ -2571,6 +2558,21 @@ void tst_QItemSelectionModel::rangeOperatorLessThan()
 
     if (!(r2 < r4))
         QVERIFY(r4 < r2);
+}
+
+void tst_QItemSelectionModel::setModel()
+{
+    QItemSelectionModel sel;
+    QVERIFY(!sel.model());
+    QSignalSpy modelChangedSpy(&sel, SIGNAL(modelChanged(QAbstractItemModel*)));
+    QStringListModel model(QStringList() << "Blah" << "Blah" << "Blah");
+    sel.setModel(&model);
+    QCOMPARE(sel.model(), &model);
+    QCOMPARE(modelChangedSpy.count(), 1);
+    sel.select(model.index(0), QItemSelectionModel::Select);
+    QVERIFY(!sel.selection().isEmpty());
+    sel.setModel(0);
+    QVERIFY(sel.selection().isEmpty());
 }
 
 void tst_QItemSelectionModel::testDifferentModels()
@@ -2739,7 +2741,7 @@ void tst_QItemSelectionModel::testClearCurrentIndex()
 
     QItemSelectionModel selectionModel(&model, 0);
 
-    QSignalSpy currentIndexSpy(&selectionModel, SIGNAL(currentChanged(QModelIndex,QModelIndex)));
+    QSignalSpy currentIndexSpy(&selectionModel, &QItemSelectionModel::currentChanged);
     QVERIFY(currentIndexSpy.isValid());
 
     QModelIndex firstIndex = model.index(0, 0);

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -278,6 +270,7 @@ void QGraphicsProxyWidgetPrivate::sendWidgetMouseEvent(QGraphicsSceneMouseEvent 
     QMouseEvent mouseEvent(type, pos, receiver->mapTo(receiver->topLevelWidget(), pos.toPoint()),
                            receiver->mapToGlobal(pos.toPoint()),
                            event->button(), event->buttons(), event->modifiers());
+    QGuiApplicationPrivate::setMouseEventSource(&mouseEvent, event->source());
 
     QWidget *embeddedMouseGrabberPtr = (QWidget *)embeddedMouseGrabber;
     QApplicationPrivate::sendMouseEvent(receiver, &mouseEvent, alienWidget, widget,
@@ -348,7 +341,7 @@ QWidget *QGraphicsProxyWidgetPrivate::findFocusChild(QWidget *child, bool next) 
 
     // Run around the focus chain until we find a widget that can take tab focus.
     if (!child) {
-	child = next ? (QWidget *)widget : widget->d_func()->focus_prev;
+        child = next ? (QWidget *)widget : widget->d_func()->focus_prev;
     } else {
         child = next ? child->d_func()->focus_next : child->d_func()->focus_prev;
         if ((next && child == widget) || (!next && child == widget->d_func()->focus_prev)) {
@@ -356,11 +349,14 @@ QWidget *QGraphicsProxyWidgetPrivate::findFocusChild(QWidget *child, bool next) 
         }
     }
 
+    if (!child)
+        return 0;
+
     QWidget *oldChild = child;
     uint focus_flag = qt_tab_all_widgets() ? Qt::TabFocus : Qt::StrongFocus;
     do {
         if (child->isEnabled()
-	    && child->isVisibleTo(widget)
+            && child->isVisibleTo(widget)
             && ((child->focusPolicy() & focus_flag) == focus_flag)
             && !(child->d_func()->extra && child->d_func()->extra->focus_proxy)) {
             return child;
@@ -376,6 +372,10 @@ QWidget *QGraphicsProxyWidgetPrivate::findFocusChild(QWidget *child, bool next) 
 void QGraphicsProxyWidgetPrivate::_q_removeWidgetSlot()
 {
     Q_Q(QGraphicsProxyWidget);
+    if (!widget.isNull()) {
+        if (QWExtra *extra = widget->d_func()->extra)
+            extra->proxyWidget = 0;
+    }
     widget = 0;
     delete q;
 }
@@ -1321,17 +1321,17 @@ void QGraphicsProxyWidget::focusInEvent(QFocusEvent *event)
 
     switch (event->reason()) {
     case Qt::TabFocusReason: {
-	if (QWidget *focusChild = d->findFocusChild(0, true))
+        if (QWidget *focusChild = d->findFocusChild(0, true))
             focusChild->setFocus(event->reason());
         break;
     }
     case Qt::BacktabFocusReason:
-	if (QWidget *focusChild = d->findFocusChild(0, false))
+        if (QWidget *focusChild = d->findFocusChild(0, false))
             focusChild->setFocus(event->reason());
         break;
     default:
-	if (d->widget && d->widget->focusWidget()) {
-	    d->widget->focusWidget()->setFocus(event->reason());
+        if (d->widget && d->widget->focusWidget()) {
+            d->widget->focusWidget()->setFocus(event->reason());
         }
         break;
     }
@@ -1368,8 +1368,8 @@ bool QGraphicsProxyWidget::focusNextPrevChild(bool next)
     Qt::FocusReason reason = next ? Qt::TabFocusReason : Qt::BacktabFocusReason;
     QWidget *lastFocusChild = d->widget->focusWidget();
     if (QWidget *newFocusChild = d->findFocusChild(lastFocusChild, next)) {
-	newFocusChild->setFocus(reason);
-	return true;
+        newFocusChild->setFocus(reason);
+        return true;
     }
 
     return QGraphicsWidget::focusNextPrevChild(next);

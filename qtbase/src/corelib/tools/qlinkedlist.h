@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +39,12 @@
 
 #include <iterator>
 #include <list>
+
+#include <algorithm>
+
+#if defined(Q_COMPILER_INITIALIZER_LISTS)
+# include <initializer_list>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -78,6 +76,13 @@ class QLinkedList
 public:
     inline QLinkedList() : d(const_cast<QLinkedListData *>(&QLinkedListData::shared_null)) { }
     inline QLinkedList(const QLinkedList<T> &l) : d(l.d) { d->ref.ref(); if (!d->sharable) detach(); }
+#if defined(Q_COMPILER_INITIALIZER_LISTS)
+    inline QLinkedList(std::initializer_list<T> list)
+        : d(const_cast<QLinkedListData *>(&QLinkedListData::shared_null))
+    {
+        std::copy(list.begin(), list.end(), std::back_inserter(*this));
+    }
+#endif
     ~QLinkedList();
     QLinkedList<T> &operator=(const QLinkedList<T> &);
 #ifdef Q_COMPILER_RVALUE_REFS
@@ -91,9 +96,11 @@ public:
 
     inline int size() const { return d->size; }
     inline void detach()
-    { if (d->ref.isShared()) detach_helper(); }
+    { if (d->ref.isShared()) detach_helper2(this->e); }
     inline bool isDetached() const { return !d->ref.isShared(); }
+#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
     inline void setSharable(bool sharable) { if (!sharable) detach(); if (d != &QLinkedListData::shared_null) d->sharable = sharable; }
+#endif
     inline bool isSharedWith(const QLinkedList<T> &other) const { return d == other.d; }
 
     inline bool isEmpty() const { return d->size == 0; }
@@ -157,7 +164,7 @@ public:
         inline const_iterator(Node *n) : i(n) {}
         inline const_iterator(const const_iterator &o) : i(o.i){}
         inline const_iterator(iterator ci) : i(ci.i){}
-	inline const_iterator &operator=(const const_iterator &o) { i = o.i; return *this; }
+        inline const_iterator &operator=(const const_iterator &o) { i = o.i; return *this; }
         inline const T &operator*() const { return i->t; }
         inline const T *operator->() const { return &i->t; }
         inline bool operator==(const const_iterator &o) const { return i == o.i; }
@@ -219,9 +226,9 @@ public:
     typedef qptrdiff difference_type;
 
     static inline QLinkedList<T> fromStdList(const std::list<T> &list)
-    { QLinkedList<T> tmp; qCopy(list.begin(), list.end(), std::back_inserter(tmp)); return tmp; }
+    { QLinkedList<T> tmp; std::copy(list.begin(), list.end(), std::back_inserter(tmp)); return tmp; }
     inline std::list<T> toStdList() const
-    { std::list<T> tmp; qCopy(constBegin(), constEnd(), std::back_inserter(tmp)); return tmp; }
+    { std::list<T> tmp; std::copy(constBegin(), constEnd(), std::back_inserter(tmp)); return tmp; }
 
     // comfort
     QLinkedList<T> &operator+=(const QLinkedList<T> &l);
@@ -232,6 +239,7 @@ public:
 
 private:
     void detach_helper();
+    iterator detach_helper2(iterator);
     void freeData(QLinkedListData*);
 };
 
@@ -245,6 +253,14 @@ inline QLinkedList<T>::~QLinkedList()
 template <typename T>
 void QLinkedList<T>::detach_helper()
 {
+    detach_helper2(this->e);
+}
+
+template <typename T>
+typename QLinkedList<T>::iterator QLinkedList<T>::detach_helper2(iterator orgite)
+{
+    // detach and convert orgite to an iterator in the detached instance
+    bool isEndIterator = (orgite.i == this->e);
     union { QLinkedListData *d; Node *e; } x;
     x.d = new QLinkedListData;
     x.d->ref.initializeOwned();
@@ -252,6 +268,22 @@ void QLinkedList<T>::detach_helper()
     x.d->sharable = true;
     Node *original = e->n;
     Node *copy = x.e;
+    Node *org = orgite.i;
+
+    while (original != org) {
+        QT_TRY {
+            copy->n = new Node(original->t);
+            copy->n->p = copy;
+            original = original->n;
+            copy = copy->n;
+        } QT_CATCH(...) {
+            copy->n = x.e;
+            Q_ASSERT(!x.d->ref.deref()); // Don't trigger assert in free
+            freeData(x.d);
+            QT_RETHROW;
+        }
+    }
+    iterator r(copy);
     while (original != e) {
         QT_TRY {
             copy->n = new Node(original->t);
@@ -270,6 +302,9 @@ void QLinkedList<T>::detach_helper()
     if (!d->ref.deref())
         freeData(d);
     d = x.d;
+    if (!isEndIterator)
+        ++r; // since we stored the element right before the original node.
+    return r;
 }
 
 template <typename T>
@@ -376,7 +411,7 @@ template <typename T>
 bool QLinkedList<T>::removeOne(const T &_t)
 {
     detach();
-    iterator it = qFind(begin(), end(), _t);
+    iterator it = std::find(begin(), end(), _t);
     if (it != end()) {
         erase(it);
         return true;
@@ -425,6 +460,9 @@ int QLinkedList<T>::count(const T &t) const
 template <typename T>
 typename QLinkedList<T>::iterator QLinkedList<T>::insert(iterator before, const T &t)
 {
+    if (d->ref.isShared())
+        before = detach_helper2(before);
+
     Node *i = before.i;
     Node *m = new Node(t);
     m->n = i;
@@ -448,7 +486,9 @@ typename QLinkedList<T>::iterator QLinkedList<T>::erase(typename QLinkedList<T>:
 template <typename T>
 typename QLinkedList<T>::iterator QLinkedList<T>::erase(iterator pos)
 {
-    detach();
+    if (d->ref.isShared())
+        pos = detach_helper2(pos);
+
     Node *i = pos.i;
     if (i != e) {
         Node *n = i;

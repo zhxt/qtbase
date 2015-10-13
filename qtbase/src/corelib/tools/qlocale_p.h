@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -56,13 +48,17 @@
 #include "QtCore/qstring.h"
 #include "QtCore/qvarlengtharray.h"
 #include "QtCore/qvariant.h"
+#include "QtCore/qnumeric.h"
 
 #include "qlocale.h"
+
+#include <limits>
+#include <cmath>
 
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_SYSTEMLOCALE
-class QSystemLocale
+class Q_CORE_EXPORT QSystemLocale
 {
 public:
     QSystemLocale();
@@ -166,6 +162,100 @@ public:
                                              QLocale::Country country);
     static const QLocaleData *c();
 
+    enum DoubleForm {
+        DFExponent = 0,
+        DFDecimal,
+        DFSignificantDigits,
+        _DFMax = DFSignificantDigits
+    };
+
+    enum Flags {
+        NoFlags             = 0,
+        Alternate           = 0x01,
+        ZeroPadded          = 0x02,
+        LeftAdjusted        = 0x04,
+        BlankBeforePositive = 0x08,
+        AlwaysShowSign      = 0x10,
+        ThousandsGroup      = 0x20,
+        CapitalEorX         = 0x40,
+
+        ShowBase            = 0x80,
+        UppercaseBase       = 0x100,
+        ForcePoint          = Alternate
+    };
+
+    enum GroupSeparatorMode {
+        FailOnGroupSeparators,
+        ParseGroupSeparators
+    };
+
+    enum NumberMode { IntegerMode, DoubleStandardMode, DoubleScientificMode };
+
+    typedef QVarLengthArray<char, 256> CharBuff;
+
+    static QString doubleToString(const QChar zero, const QChar plus,
+                                  const QChar minus, const QChar exponent,
+                                  const QChar group, const QChar decimal,
+                                  double d, int precision,
+                                  DoubleForm form,
+                                  int width, unsigned flags);
+    static QString longLongToString(const QChar zero, const QChar group,
+                                    const QChar plus, const QChar minus,
+                                    qint64 l, int precision, int base,
+                                    int width, unsigned flags);
+    static QString unsLongLongToString(const QChar zero, const QChar group,
+                                       const QChar plus,
+                                       quint64 l, int precision,
+                                       int base, int width,
+                                       unsigned flags);
+
+    QString doubleToString(double d,
+                           int precision = -1,
+                           DoubleForm form = DFSignificantDigits,
+                           int width = -1,
+                           unsigned flags = NoFlags) const;
+    QString longLongToString(qint64 l, int precision = -1,
+                             int base = 10,
+                             int width = -1,
+                             unsigned flags = NoFlags) const;
+    QString unsLongLongToString(quint64 l, int precision = -1,
+                                int base = 10,
+                                int width = -1,
+                                unsigned flags = NoFlags) const;
+
+    // this function is meant to be called with the result of stringToDouble or bytearrayToDouble
+    static float convertDoubleToFloat(double d, bool *ok)
+    {
+        if (qIsInf(d))
+            return float(d);
+        if (std::fabs(d) > std::numeric_limits<float>::max()) {
+            if (ok != 0)
+                *ok = false;
+            return 0.0f;
+        }
+        return float(d);
+    }
+
+    double stringToDouble(const QChar *begin, int len, bool *ok, GroupSeparatorMode group_sep_mode) const;
+    qint64 stringToLongLong(const QChar *begin, int len, int base, bool *ok, GroupSeparatorMode group_sep_mode) const;
+    quint64 stringToUnsLongLong(const QChar *begin, int len, int base, bool *ok, GroupSeparatorMode group_sep_mode) const;
+
+    // these functions are used in QIntValidator (QtGui)
+    Q_CORE_EXPORT static double bytearrayToDouble(const char *num, bool *ok, bool *overflow = 0);
+    Q_CORE_EXPORT static qint64 bytearrayToLongLong(const char *num, int base, bool *ok, bool *overflow = 0);
+    Q_CORE_EXPORT static quint64 bytearrayToUnsLongLong(const char *num, int base, bool *ok);
+
+    bool numberToCLocale(const QChar *str, int len,
+                          GroupSeparatorMode group_sep_mode,
+                          CharBuff *result) const;
+    inline char digitToCLocale(QChar c) const;
+
+    // this function is used in QIntValidator (QtGui)
+    Q_CORE_EXPORT bool validateChars(const QString &str, NumberMode numMode,
+                                     QByteArray *buff, int decDigits = -1,
+                                     bool rejectGroupSeparators = false) const;
+
+public:
     quint16 m_language_id, m_script_id, m_country_id;
 
     quint16 m_decimal, m_group, m_list, m_percent, m_zero, m_minus, m_plus, m_exponential;
@@ -250,87 +340,10 @@ public:
 
     QLocale::MeasurementSystem measurementSystem() const;
 
-    enum DoubleForm {
-        DFExponent = 0,
-        DFDecimal,
-        DFSignificantDigits,
-        _DFMax = DFSignificantDigits
-    };
-
-    enum Flags {
-        NoFlags             = 0,
-        Alternate           = 0x01,
-        ZeroPadded          = 0x02,
-        LeftAdjusted        = 0x04,
-        BlankBeforePositive = 0x08,
-        AlwaysShowSign      = 0x10,
-        ThousandsGroup      = 0x20,
-        CapitalEorX         = 0x40,
-
-        ShowBase            = 0x80,
-        UppercaseBase       = 0x100,
-        ForcePoint          = Alternate
-    };
-
-    enum GroupSeparatorMode {
-        FailOnGroupSeparators,
-        ParseGroupSeparators
-    };
-
-    static QString doubleToString(const QChar zero, const QChar plus,
-                                  const QChar minus, const QChar exponent,
-                                  const QChar group, const QChar decimal,
-                                  double d, int precision,
-                                  DoubleForm form,
-                                  int width, unsigned flags);
-    static QString longLongToString(const QChar zero, const QChar group,
-                                    const QChar plus, const QChar minus,
-                                    qint64 l, int precision, int base,
-                                    int width, unsigned flags);
-    static QString unsLongLongToString(const QChar zero, const QChar group,
-                                       const QChar plus,
-                                       quint64 l, int precision,
-                                       int base, int width,
-                                       unsigned flags);
-
-    QString doubleToString(double d,
-                           int precision = -1,
-                           DoubleForm form = DFSignificantDigits,
-                           int width = -1,
-                           unsigned flags = NoFlags) const;
-    QString longLongToString(qint64 l, int precision = -1,
-                             int base = 10,
-                             int width = -1,
-                             unsigned flags = NoFlags) const;
-    QString unsLongLongToString(quint64 l, int precision = -1,
-                                int base = 10,
-                                int width = -1,
-                                unsigned flags = NoFlags) const;
-    double stringToDouble(const QString &num, bool *ok, GroupSeparatorMode group_sep_mode) const;
-    qint64 stringToLongLong(const QString &num, int base, bool *ok, GroupSeparatorMode group_sep_mode) const;
-    quint64 stringToUnsLongLong(const QString &num, int base, bool *ok, GroupSeparatorMode group_sep_mode) const;
-
-    double stringToDouble(const QStringRef &num, bool *ok, GroupSeparatorMode group_sep_mode) const;
-    qint64 stringToLongLong(const QStringRef &num, int base, bool *ok, GroupSeparatorMode group_sep_mode) const;
-    quint64 stringToUnsLongLong(const QStringRef &num, int base, bool *ok, GroupSeparatorMode group_sep_mode) const;
-
-
-    static double bytearrayToDouble(const char *num, bool *ok, bool *overflow = 0);
-    static qint64 bytearrayToLongLong(const char *num, int base, bool *ok, bool *overflow = 0);
-    static quint64 bytearrayToUnsLongLong(const char *num, int base, bool *ok);
-
-    typedef QVarLengthArray<char, 256> CharBuff;
-    bool numberToCLocale(const QChar *str, int len,
-    	    	    	  GroupSeparatorMode group_sep_mode,
-                          CharBuff *result) const;
-    inline char digitToCLocale(QChar c) const;
-
     static void updateSystemPrivate();
 
-    enum NumberMode { IntegerMode, DoubleStandardMode, DoubleScientificMode };
-    bool validateChars(const QString &str, NumberMode numMode, QByteArray *buff, int decDigits = -1) const;
-
-    QString dateTimeToString(const QString &format, const QDate *date, const QTime *time,
+    QString dateTimeToString(const QString &format, const QDateTime &datetime,
+                             const QDate &dateOnly, const QTime &timeOnly,
                              const QLocale *q) const;
 
     const QLocaleData *m_data;
@@ -346,37 +359,34 @@ inline QLocalePrivate *QSharedDataPointer<QLocalePrivate>::clone()
     return QLocalePrivate::create(d->m_data, d->m_numberOptions);
 }
 
-inline char QLocalePrivate::digitToCLocale(QChar in) const
+inline char QLocaleData::digitToCLocale(QChar in) const
 {
-    const QChar _zero = zero();
-    const QChar _group = group();
-    const ushort zeroUnicode = _zero.unicode();
-    const ushort tenUnicode = zeroUnicode + 10;
+    const ushort tenUnicode = m_zero + 10;
 
-    if (in.unicode() >= zeroUnicode && in.unicode() < tenUnicode)
-        return '0' + in.unicode() - zeroUnicode;
+    if (in.unicode() >= m_zero && in.unicode() < tenUnicode)
+        return '0' + in.unicode() - m_zero;
 
     if (in.unicode() >= '0' && in.unicode() <= '9')
         return in.toLatin1();
 
-    if (in == plus())
+    if (in == m_plus || in == QLatin1Char('+'))
         return '+';
 
-    if (in == minus())
+    if (in == m_minus || in == QLatin1Char('-') || in == QChar(0x2212))
         return '-';
 
-    if (in == decimal())
+    if (in == m_decimal)
         return '.';
 
-    if (in == group())
+    if (in == m_group)
         return ',';
 
-    if (in == exponential() || in == exponential().toUpper())
+    if (in == m_exponential || in == QChar::toUpper(m_exponential))
         return 'e';
 
     // In several languages group() is the char 0xA0, which looks like a space.
     // People use a regular space instead of it and complain it doesn't work.
-    if (_group.unicode() == 0xA0 && in.unicode() == ' ')
+    if (m_group == 0xA0 && in.unicode() == ' ')
         return ',';
 
     return 0;
@@ -385,6 +395,33 @@ inline char QLocalePrivate::digitToCLocale(QChar in) const
 QString qt_readEscapedFormatString(const QString &format, int *idx);
 bool qt_splitLocaleName(const QString &name, QString &lang, QString &script, QString &cntry);
 int qt_repeatCount(const QString &s, int i);
+
+enum { AsciiSpaceMask = (1 << (' ' - 1)) |
+                        (1 << ('\t' - 1)) |   // 9: HT - horizontal tab
+                        (1 << ('\n' - 1)) |   // 10: LF - line feed
+                        (1 << ('\v' - 1)) |   // 11: VT - vertical tab
+                        (1 << ('\f' - 1)) |   // 12: FF - form feed
+                        (1 << ('\r' - 1)) };  // 13: CR - carriage return
+Q_DECL_CONSTEXPR inline bool ascii_isspace(uchar c)
+{
+    return c >= 1U && c <= 32U && (uint(AsciiSpaceMask) >> uint(c - 1)) & 1U;
+}
+
+#if defined(Q_COMPILER_CONSTEXPR)
+Q_STATIC_ASSERT(ascii_isspace(' '));
+Q_STATIC_ASSERT(ascii_isspace('\t'));
+Q_STATIC_ASSERT(ascii_isspace('\n'));
+Q_STATIC_ASSERT(ascii_isspace('\v'));
+Q_STATIC_ASSERT(ascii_isspace('\f'));
+Q_STATIC_ASSERT(ascii_isspace('\r'));
+Q_STATIC_ASSERT(!ascii_isspace('\0'));
+Q_STATIC_ASSERT(!ascii_isspace('\a'));
+Q_STATIC_ASSERT(!ascii_isspace('a'));
+Q_STATIC_ASSERT(!ascii_isspace('\177'));
+Q_STATIC_ASSERT(!ascii_isspace(uchar('\200')));
+Q_STATIC_ASSERT(!ascii_isspace(uchar('\xA0')));
+Q_STATIC_ASSERT(!ascii_isspace(uchar('\377')));
+#endif
 
 QT_END_NAMESPACE
 

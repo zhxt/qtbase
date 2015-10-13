@@ -1,9 +1,6 @@
-TARGET = qeglfs
+TEMPLATE = subdirs
+CONFIG += ordered
 
-PLUGIN_TYPE = platforms
-PLUGIN_CLASS_NAME = QEglFSIntegrationPlugin
-load(qt_plugin)
-
-SOURCES += $$PWD/main.cpp
-
-include(eglfs.pri)
+SUBDIRS += eglfs_device_lib.pro
+SUBDIRS += eglfs-plugin.pro
+SUBDIRS += deviceintegration

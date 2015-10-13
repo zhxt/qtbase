@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +33,7 @@
 
 #include "qcocoaintegration.h"
 
+#include "qcocoaautoreleasepool.h"
 #include "qcocoawindow.h"
 #include "qcocoabackingstore.h"
 #include "qcocoanativeinterface.h"
@@ -52,18 +45,16 @@
 #include "qcocoafiledialoghelper.h"
 #include "qcocoatheme.h"
 #include "qcocoainputcontext.h"
-#include "qmacmime.h"
+#include "qcocoamimetypes.h"
 #include "qcocoaaccessibility.h"
 
 #include <qpa/qplatformaccessibility.h>
 #include <QtCore/qcoreapplication.h>
 
-#include <QtPlatformSupport/private/qcoretextfontdatabase_p.h>
 #include <IOKit/graphics/IOGraphicsLib.h>
 
 static void initResources()
 {
-    Q_INIT_RESOURCE_EXTERN(qcocoaresources)
     Q_INIT_RESOURCE(qcocoaresources);
 }
 
@@ -83,12 +74,16 @@ QCocoaScreen::~QCocoaScreen()
 
 NSScreen *QCocoaScreen::osScreen() const
 {
-    return [[NSScreen screens] objectAtIndex:m_screenIndex];
+    NSArray *screens = [NSScreen screens];
+    return ((NSUInteger)m_screenIndex < [screens count]) ? [screens objectAtIndex:m_screenIndex] : nil;
 }
 
 void QCocoaScreen::updateGeometry()
 {
     NSScreen *nsScreen = osScreen();
+    if (!nsScreen)
+        return;
+
     NSRect frameRect = [nsScreen frame];
 
     if (m_screenIndex == 0) {
@@ -135,22 +130,56 @@ void QCocoaScreen::updateGeometry()
         m_name = QString::fromUtf8([[localizedNames objectForKey:[[localizedNames allKeys] objectAtIndex:0]] UTF8String]);
     [deviceInfo release];
 
-    QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry());
+    QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), availableGeometry());
     QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(screen(), m_logicalDpi.first, m_logicalDpi.second);
     QWindowSystemInterface::handleScreenRefreshRateChange(screen(), m_refreshRate);
-    QWindowSystemInterface::handleScreenAvailableGeometryChange(screen(), availableGeometry());
 }
 
 qreal QCocoaScreen::devicePixelRatio() const
 {
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7) {
-        return qreal([osScreen() backingScaleFactor]);
-    } else
-#endif
-    {
-        return 1.0;
-    }
+    QCocoaAutoReleasePool pool;
+    NSScreen * screen = osScreen();
+    return qreal(screen ? [screen backingScaleFactor] : 1.0);
+}
+
+QWindow *QCocoaScreen::topLevelAt(const QPoint &point) const
+{
+    NSPoint screenPoint = qt_mac_flipPoint(point);
+
+    // Search (hit test) for the top-level window. [NSWidow windowNumberAtPoint:
+    // belowWindowWithWindowNumber] may return windows that are not interesting
+    // to Qt. The search iterates until a suitable window or no window is found.
+    NSInteger topWindowNumber = 0;
+    QWindow *window = 0;
+    do {
+        // Get the top-most window, below any previously rejected window.
+        topWindowNumber = [NSWindow windowNumberAtPoint:screenPoint
+                                    belowWindowWithWindowNumber:topWindowNumber];
+
+        // Continue the search if the window does not belong to this process.
+        NSWindow *nsWindow = [NSApp windowWithWindowNumber:topWindowNumber];
+        if (nsWindow == 0)
+            continue;
+
+        // Continue the search if the window does not belong to Qt.
+        if (![nsWindow conformsToProtocol:@protocol(QNSWindowProtocol)])
+            continue;
+
+        id<QNSWindowProtocol> proto = static_cast<id<QNSWindowProtocol> >(nsWindow);
+        QCocoaWindow *cocoaWindow = proto.helper.platformWindow;
+        if (!cocoaWindow)
+            continue;
+        window = cocoaWindow->window();
+
+        // Continue the search if the window is not a top-level window.
+        if (!window->isTopLevel())
+             continue;
+
+        // Stop searching. The current window is the correct window.
+        break;
+    } while (topWindowNumber > 0);
+
+    return window;
 }
 
 extern CGContextRef qt_mac_cg_context(const QPaintDevice *pdev);
@@ -199,6 +228,7 @@ QPixmap QCocoaScreen::grabWindow(WId window, int x, int y, int width, int height
         int w = (width < 0 ? bounds.size.width : width) * devicePixelRatio();
         int h = (height < 0 ? bounds.size.height : height) * devicePixelRatio();
         QRect displayRect = QRect(x, y, w, h);
+        displayRect = displayRect.translated(qRound(-bounds.origin.x), qRound(-bounds.origin.y));
         QCFType<CGImageRef> image = CGDisplayCreateImageForRect(displays[i],
             CGRectMake(displayRect.x(), displayRect.y(), displayRect.width(), displayRect.height()));
         QPixmap pix(w, h);
@@ -209,17 +239,18 @@ QPixmap QCocoaScreen::grabWindow(WId window, int x, int y, int width, int height
         CGContextRelease(ctx);
 
         QPainter painter(&windowPixmap);
-        painter.drawPixmap(bounds.origin.x, bounds.origin.y, pix);
+        painter.drawPixmap(0, 0, pix);
     }
     return windowPixmap;
 }
 
+QCocoaIntegration *QCocoaIntegration::mInstance = 0;
+
 QCocoaIntegration::QCocoaIntegration()
     : mFontDb(new QCoreTextFontDatabase())
-    , mEventDispatcher(new QCocoaEventDispatcher())
     , mInputContext(new QCocoaInputContext)
 #ifndef QT_NO_ACCESSIBILITY
-    , mAccessibility(new QCococaAccessibility)
+    , mAccessibility(new QCocoaAccessibility)
 #endif
     , mCocoaClipboard(new QCocoaClipboard)
     , mCocoaDrag(new QCocoaDrag)
@@ -227,12 +258,16 @@ QCocoaIntegration::QCocoaIntegration()
     , mServices(new QCocoaServices)
     , mKeyboardMapper(new QCocoaKeyMapper)
 {
+    if (mInstance != 0)
+        qWarning("Creating multiple Cocoa platform integrations is not supported");
+    mInstance = this;
+
     initResources();
     QCocoaAutoReleasePool pool;
 
     qApp->setAttribute(Qt::AA_DontUseNativeMenuBar, false);
 
-    NSApplication *cocoaApplication = [QT_MANGLE_NAMESPACE(QNSApplication) sharedApplication];
+    NSApplication *cocoaApplication = [QNSApplication sharedApplication];
     qt_redirectNSApplicationSendEvent();
 
     if (qEnvironmentVariableIsEmpty("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM")) {
@@ -256,12 +291,12 @@ QCocoaIntegration::QCocoaIntegration()
     if (!QCoreApplication::testAttribute(Qt::AA_MacPluginApplication)) {
 
         // Set app delegate, link to the current delegate (if any)
-        QT_MANGLE_NAMESPACE(QCocoaApplicationDelegate) *newDelegate = [QT_MANGLE_NAMESPACE(QCocoaApplicationDelegate) sharedDelegate];
+        QCocoaApplicationDelegate *newDelegate = [QCocoaApplicationDelegate sharedDelegate];
         [newDelegate setReflectionDelegate:[cocoaApplication delegate]];
         [cocoaApplication setDelegate:newDelegate];
 
         // Load the application menu. This menu contains Preferences, Hide, Quit.
-        QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader = [[QT_MANGLE_NAMESPACE(QCocoaMenuLoader) alloc] init];
+        QCocoaMenuLoader *qtMenuLoader = [[QCocoaMenuLoader alloc] init];
         qt_mac_loadMenuNib(qtMenuLoader);
         [cocoaApplication setMenu:[qtMenuLoader menu]];
         [newDelegate setMenuLoader:qtMenuLoader];
@@ -269,17 +304,20 @@ QCocoaIntegration::QCocoaIntegration()
 
     updateScreens();
 
-    QMacPasteboardMime::initializeMimeTypes();
+    QMacInternalPasteboardMime::initializeMimeTypes();
+    QCocoaMimeTypes::initializeMimeTypes();
 }
 
 QCocoaIntegration::~QCocoaIntegration()
 {
+    mInstance = 0;
+
     qt_resetNSApplicationSendEvent();
 
     QCocoaAutoReleasePool pool;
     if (!QCoreApplication::testAttribute(Qt::AA_MacPluginApplication)) {
         // remove the apple event handlers installed by QCocoaApplicationDelegate
-        QT_MANGLE_NAMESPACE(QCocoaApplicationDelegate) *delegate = [QT_MANGLE_NAMESPACE(QCocoaApplicationDelegate) sharedDelegate];
+        QCocoaApplicationDelegate *delegate = [QCocoaApplicationDelegate sharedDelegate];
         [delegate removeAppleEventHandlers];
         // reset the application delegate
         [[NSApplication sharedApplication] setDelegate: 0];
@@ -289,12 +327,19 @@ QCocoaIntegration::~QCocoaIntegration()
     // Deleting the clipboard integration flushes promised pastes using
     // the mime converters - the ordering here is important.
     delete mCocoaClipboard;
-    QMacPasteboardMime::destroyMimeTypes();
+    QMacInternalPasteboardMime::destroyMimeTypes();
 
     // Delete screens in reverse order to avoid crash in case of multiple screens
     while (!mScreens.isEmpty()) {
-        delete mScreens.takeLast();
+        destroyScreen(mScreens.takeLast());
     }
+
+    clearToolbars();
+}
+
+QCocoaIntegration *QCocoaIntegration::instance()
+{
+    return mInstance;
 }
 
 /*!
@@ -302,14 +347,24 @@ QCocoaIntegration::~QCocoaIntegration()
 */
 void QCocoaIntegration::updateScreens()
 {
-    NSArray *screens = [NSScreen screens];
+    NSArray *scrs = [NSScreen screens];
+    NSMutableArray *screens = [NSMutableArray arrayWithArray:scrs];
+    if ([screens count] == 0)
+        if ([NSScreen mainScreen])
+           [screens addObject:[NSScreen mainScreen]];
+    if ([screens count] == 0)
+        return;
     QSet<QCocoaScreen*> remainingScreens = QSet<QCocoaScreen*>::fromList(mScreens);
     QList<QPlatformScreen *> siblings;
-    for (uint i = 0; i < [screens count]; i++) {
-        NSScreen* scr = [[NSScreen screens] objectAtIndex:i];
+    uint screenCount = [screens count];
+    for (uint i = 0; i < screenCount; i++) {
+        NSScreen* scr = [screens objectAtIndex:i];
         CGDirectDisplayID dpy = [[[scr deviceDescription] objectForKey:@"NSScreenNumber"] unsignedIntValue];
         // If this screen is a mirror and is not the primary one of the mirror set, ignore it.
-        if (CGDisplayIsInMirrorSet(dpy)) {
+        // Exception: The NSScreen API has been observed to a return a screen list with one
+        // mirrored, non-primary screen when Qt is running as a startup item. Always use the
+        // screen if there's only one screen in the list.
+        if (screenCount > 1 && CGDisplayIsInMirrorSet(dpy)) {
             CGDirectDisplayID primary = CGDisplayMirrorsDisplay(dpy);
             if (primary != kCGNullDirectDisplay && primary != dpy)
                 continue;
@@ -336,67 +391,84 @@ void QCocoaIntegration::updateScreens()
     // Now the leftovers in remainingScreens are no longer current, so we can delete them.
     foreach (QCocoaScreen* screen, remainingScreens) {
         mScreens.removeOne(screen);
-        delete screen;
+        destroyScreen(screen);
     }
     // All screens in mScreens are siblings, because we ignored the mirrors.
     foreach (QCocoaScreen* screen, mScreens)
         screen->setVirtualSiblings(siblings);
 }
 
+QCocoaScreen *QCocoaIntegration::screenAtIndex(int index)
+{
+    if (index >= mScreens.count())
+        updateScreens();
+
+    return mScreens.at(index);
+}
+
 bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) const
 {
     switch (cap) {
     case ThreadedPixmaps:
+#ifndef QT_NO_OPENGL
     case OpenGL:
     case ThreadedOpenGL:
     case BufferQueueingOpenGL:
+#endif
     case WindowMasks:
     case MultipleWindows:
     case ForeignWindows:
+    case RasterGLSurface:
+    case ApplicationState:
+    case ApplicationIcon:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
     }
 }
 
-
-
 QPlatformWindow *QCocoaIntegration::createPlatformWindow(QWindow *window) const
 {
     return new QCocoaWindow(window);
 }
 
+#ifndef QT_NO_OPENGL
 QPlatformOpenGLContext *QCocoaIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
-    return new QCocoaGLContext(context->format(), context->shareHandle());
+    QCocoaGLContext *glContext = new QCocoaGLContext(context->format(),
+                                                     context->shareHandle(),
+                                                     context->nativeHandle());
+    context->setNativeHandle(glContext->nativeHandle());
+    return glContext;
 }
+#endif
 
 QPlatformBackingStore *QCocoaIntegration::createPlatformBackingStore(QWindow *window) const
 {
     return new QCocoaBackingStore(window);
 }
 
-QAbstractEventDispatcher *QCocoaIntegration::guiThreadEventDispatcher() const
+QAbstractEventDispatcher *QCocoaIntegration::createEventDispatcher() const
 {
-    return mEventDispatcher;
+    return new QCocoaEventDispatcher;
 }
 
-QPlatformFontDatabase *QCocoaIntegration::fontDatabase() const
+QCoreTextFontDatabase *QCocoaIntegration::fontDatabase() const
 {
     return mFontDb.data();
 }
 
-QPlatformNativeInterface *QCocoaIntegration::nativeInterface() const
+QCocoaNativeInterface *QCocoaIntegration::nativeInterface() const
 {
     return mNativeInterface.data();
 }
 
-QPlatformInputContext *QCocoaIntegration::inputContext() const
+QCocoaInputContext *QCocoaIntegration::inputContext() const
 {
     return mInputContext.data();
 }
 
-QPlatformAccessibility *QCocoaIntegration::accessibility() const
+QCocoaAccessibility *QCocoaIntegration::accessibility() const
 {
 #ifndef QT_NO_ACCESSIBILITY
     return mAccessibility.data();
@@ -405,12 +477,12 @@ QPlatformAccessibility *QCocoaIntegration::accessibility() const
 #endif
 }
 
-QPlatformClipboard *QCocoaIntegration::clipboard() const
+QCocoaClipboard *QCocoaIntegration::clipboard() const
 {
     return mCocoaClipboard;
 }
 
-QPlatformDrag *QCocoaIntegration::drag() const
+QCocoaDrag *QCocoaIntegration::drag() const
 {
     return mCocoaDrag.data();
 }
@@ -427,7 +499,7 @@ QPlatformTheme *QCocoaIntegration::createPlatformTheme(const QString &name) cons
     return QPlatformIntegration::createPlatformTheme(name);
 }
 
-QPlatformServices *QCocoaIntegration::services() const
+QCocoaServices *QCocoaIntegration::services() const
 {
     return mServices.data();
 }
@@ -436,15 +508,78 @@ QVariant QCocoaIntegration::styleHint(StyleHint hint) const
 {
     if (hint == QPlatformIntegration::FontSmoothingGamma)
         return 2.0;
-    if (hint == QPlatformIntegration::SynthesizeMouseFromTouchEvents)
-        return false;
 
     return QPlatformIntegration::styleHint(hint);
+}
+
+Qt::KeyboardModifiers QCocoaIntegration::queryKeyboardModifiers() const
+{
+    return QCocoaKeyMapper::queryKeyboardModifiers();
 }
 
 QList<int> QCocoaIntegration::possibleKeys(const QKeyEvent *event) const
 {
     return mKeyboardMapper->possibleKeys(event);
+}
+
+void QCocoaIntegration::setToolbar(QWindow *window, NSToolbar *toolbar)
+{
+    if (NSToolbar *prevToolbar = mToolbars.value(window))
+        [prevToolbar release];
+
+    [toolbar retain];
+    mToolbars.insert(window, toolbar);
+}
+
+NSToolbar *QCocoaIntegration::toolbar(QWindow *window) const
+{
+    return mToolbars.value(window);
+}
+
+void QCocoaIntegration::clearToolbars()
+{
+    QHash<QWindow *, NSToolbar *>::const_iterator it = mToolbars.constBegin();
+    while (it != mToolbars.constEnd()) {
+        [it.value() release];
+        ++it;
+    }
+    mToolbars.clear();
+}
+
+void QCocoaIntegration::pushPopupWindow(QCocoaWindow *window)
+{
+    m_popupWindowStack.append(window);
+}
+
+QCocoaWindow *QCocoaIntegration::popPopupWindow()
+{
+    if (m_popupWindowStack.isEmpty())
+        return 0;
+    return m_popupWindowStack.takeLast();
+}
+
+QCocoaWindow *QCocoaIntegration::activePopupWindow() const
+{
+    if (m_popupWindowStack.isEmpty())
+        return 0;
+    return m_popupWindowStack.front();
+}
+
+QList<QCocoaWindow *> *QCocoaIntegration::popupWindowStack()
+{
+    return &m_popupWindowStack;
+}
+
+void QCocoaIntegration::setApplicationIcon(const QIcon &icon) const
+{
+    NSImage *image = nil;
+    if (!icon.isNull()) {
+        NSSize size = [[[NSApplication sharedApplication] dockTile] size];
+        QPixmap pixmap = icon.pixmap(size.width, size.height);
+        image = static_cast<NSImage *>(qt_mac_create_nsimage(pixmap));
+    }
+    [[NSApplication sharedApplication] setApplicationIconImage:image];
+    [image release];
 }
 
 QT_END_NAMESPACE

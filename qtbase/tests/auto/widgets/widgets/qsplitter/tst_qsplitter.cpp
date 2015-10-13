@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,9 @@
 #include <qtextedit.h>
 #include <qtreeview.h>
 #include <qlabel.h>
+#include <qdialog.h>
+#include <qscreen.h>
+#include <qproxystyle.h>
 #include <qdebug.h> // for file error messages
 
 QT_FORWARD_DECLARE_CLASS(QSplitter)
@@ -86,6 +81,7 @@ private slots:
     void testRemoval();
     void rubberBandNotInSplitter();
     void saveAndRestoreStateOfNotYetShownSplitter();
+    void saveAndRestoreHandleWidth();
 
     // task-specific tests below me:
     void task187373_addAbstractScrollAreas();
@@ -94,6 +90,8 @@ private slots:
     void taskQTBUG_4101_ensureOneNonCollapsedWidget_data();
     void taskQTBUG_4101_ensureOneNonCollapsedWidget();
     void setLayout();
+    void autoAdd();
+
 private:
     void removeThirdWidget();
     void addThirdWidget();
@@ -109,6 +107,8 @@ void tst_QSplitter::getSetCheck()
     QSplitter obj1;
     // bool QSplitter::opaqueResize()
     // void QSplitter::setOpaqueResize(bool)
+    bool styleHint = obj1.style()->styleHint(QStyle::SH_Splitter_OpaqueResize);
+    QCOMPARE(styleHint, obj1.opaqueResize());
     obj1.setOpaqueResize(false);
     QCOMPARE(false, obj1.opaqueResize());
     obj1.setOpaqueResize(true);
@@ -293,6 +293,41 @@ void tst_QSplitter::saveAndRestoreStateOfNotYetShownSplitter()
     QCOMPARE(l2->geometry().isValid(), true);
 
     delete spl;
+}
+
+class TestSplitterStyle : public QProxyStyle
+{
+public:
+    TestSplitterStyle() : handleWidth(5) {}
+    int pixelMetric(PixelMetric metric, const QStyleOption *option = 0, const QWidget *widget = 0) const Q_DECL_OVERRIDE
+    {
+        if (metric == QStyle::PM_SplitterWidth)
+            return handleWidth;
+        else
+            return QProxyStyle::pixelMetric(metric, option, widget);
+    }
+    int handleWidth;
+};
+
+void tst_QSplitter::saveAndRestoreHandleWidth()
+{
+    TestSplitterStyle style;
+    style.handleWidth = 5;
+    QSplitter spl;
+    spl.setStyle(&style);
+
+    QCOMPARE(spl.handleWidth(), style.handleWidth);
+    style.handleWidth = 10;
+    QCOMPARE(spl.handleWidth(), style.handleWidth);
+    QByteArray ba = spl.saveState();
+    spl.setHandleWidth(20);
+    QCOMPARE(spl.handleWidth(), 20);
+    spl.setHandleWidth(-1);
+    QCOMPARE(spl.handleWidth(), style.handleWidth);
+    spl.setHandleWidth(15);
+    QCOMPARE(spl.handleWidth(), 15);
+    spl.restoreState(ba);
+    QCOMPARE(spl.handleWidth(), style.handleWidth);
 }
 
 void tst_QSplitter::saveState_data()
@@ -733,7 +768,7 @@ void tst_QSplitter::task169702_sizes()
     QTest::qWait(100);
     testW->m_iFactor++;
     testW->updateGeometry();
-    QTest::qWait(500);//100 is too fast for Maemo
+    QTest::qWait(500);
 
     //Make sure the minimimSizeHint is respected
     QCOMPARE(testW->size().height(), testW->minimumSizeHint().height());
@@ -777,6 +812,29 @@ void tst_QSplitter::setLayout()
     splitter.setLayout(&layout);
     // It will work, but we don't recommend it...
     QCOMPARE(splitter.layout(), &layout);
+}
+
+void tst_QSplitter::autoAdd()
+{
+    QSplitter splitter;
+    splitter.setWindowTitle("autoAdd");
+    splitter.setMinimumSize(QSize(200, 200));
+    splitter.move(QGuiApplication::primaryScreen()->availableGeometry().center() - QPoint(100, 100));
+    splitter.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&splitter));
+    // Constructing a child widget on the splitter should
+    // automatically add and show it.
+    QWidget *childWidget = new QWidget(&splitter);
+    QCOMPARE(splitter.count(), 1);
+    QTRY_VERIFY(childWidget->isVisible());
+    // Deleting should automatically remove it
+    delete childWidget;
+    QCOMPARE(splitter.count(), 0);
+    // QTBUG-40132, top level windows should not be affected by this.
+    QDialog *dialog = new QDialog(&splitter);
+    QCOMPARE(splitter.count(), 0);
+    QCoreApplication::processEvents();
+    QVERIFY(!dialog->isVisible());
 }
 
 QTEST_MAIN(tst_QSplitter)

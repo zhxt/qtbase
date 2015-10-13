@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,7 +33,8 @@
 
 #include "qpoint.h"
 #include "qdatastream.h"
-#include "qdebug.h"
+
+#include <private/qdebug_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -49,13 +42,14 @@ QT_BEGIN_NAMESPACE
     \class QPoint
     \inmodule QtCore
     \ingroup painting
+    \reentrant
 
     \brief The QPoint class defines a point in the plane using integer
     precision.
 
     A point is specified by a x coordinate and an y coordinate which
     can be accessed using the x() and y() functions. The isNull()
-    function returns true if both x and y are set to 0. The
+    function returns \c true if both x and y are set to 0. The
     coordinates can be set (or altered) using the setX() and setY()
     functions, or alternatively the rx() and ry() functions which
     return references to the coordinates (allowing direct
@@ -102,8 +96,8 @@ QT_BEGIN_NAMESPACE
 /*!
     \fn bool QPoint::isNull() const
 
-    Returns true if both the x and y coordinates are set to 0,
-    otherwise returns false.
+    Returns \c true if both the x and y coordinates are set to 0,
+    otherwise returns \c false.
 */
 
 /*!
@@ -235,7 +229,7 @@ QT_BEGIN_NAMESPACE
     \fn bool operator==(const QPoint &p1, const QPoint &p2)
     \relates QPoint
 
-    Returns true if \a p1 and \a p2 are equal; otherwise returns
+    Returns \c true if \a p1 and \a p2 are equal; otherwise returns
     false.
 */
 
@@ -243,7 +237,7 @@ QT_BEGIN_NAMESPACE
     \fn bool operator!=(const QPoint &p1, const QPoint &p2)
     \relates QPoint
 
-    Returns true if \a p1 and \a p2 are not equal; otherwise returns false.
+    Returns \c true if \a p1 and \a p2 are not equal; otherwise returns \c false.
 */
 
 /*!
@@ -451,15 +445,24 @@ QDataStream &operator>>(QDataStream &s, QPoint &p)
 */
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug dbg, const QPoint &p) {
-    dbg.nospace() << "QPoint(" << p.x() << ',' << p.y() << ')';
-    return dbg.space();
+QDebug operator<<(QDebug dbg, const QPoint &p)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    dbg << "QPoint" << '(';
+    QtDebugUtils::formatQPoint(dbg, p);
+    dbg << ')';
+    return dbg;
 }
 
-QDebug operator<<(QDebug d, const QPointF &p)
+QDebug operator<<(QDebug dbg, const QPointF &p)
 {
-    d.nospace() << "QPointF(" << p.x() << ", " << p.y() << ')';
-    return d.space();
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    dbg << "QPointF" << '(';
+    QtDebugUtils::formatQPoint(dbg, p);
+    dbg << ')';
+    return dbg;
 }
 #endif
 
@@ -467,6 +470,7 @@ QDebug operator<<(QDebug d, const QPointF &p)
     \class QPointF
     \inmodule QtCore
     \ingroup painting
+    \reentrant
 
     \brief The QPointF class defines a point in the plane using
     floating point precision.
@@ -474,7 +478,7 @@ QDebug operator<<(QDebug d, const QPointF &p)
     A point is specified by a x coordinate and an y coordinate which
     can be accessed using the x() and y() functions. The coordinates
     of the point are specified using floating point numbers for
-    accuracy. The isNull() function returns true if both x and y are
+    accuracy. The isNull() function returns \c true if both x and y are
     set to 0.0. The coordinates can be set (or altered) using the setX()
     and setY() functions, or alternatively the rx() and ry() functions which
     return references to the coordinates (allowing direct
@@ -524,12 +528,8 @@ QDebug operator<<(QDebug d, const QPointF &p)
 /*!
     \fn bool QPointF::isNull() const
 
-    Returns true if both the x and y coordinates are set to +0.0;
-    otherwise returns false.
-
-    \note Since this function treats +0.0 and -0.0 differently, points
-    with zero-valued coordinates where either or both values have a
-    negative sign are not defined to be null points.
+    Returns \c true if both the x and y coordinates are set to 0.0 (ignoring
+    the sign); otherwise returns \c false.
 */
 
 
@@ -733,14 +733,14 @@ QDebug operator<<(QDebug d, const QPointF &p)
     \fn bool operator==(const QPointF &p1, const QPointF &p2)
     \relates QPointF
 
-    Returns true if \a p1 is equal to \a p2; otherwise returns false.
+    Returns \c true if \a p1 is equal to \a p2; otherwise returns \c false.
 */
 
 /*!
     \fn bool operator!=(const QPointF &p1, const QPointF &p2);
     \relates QPointF
 
-    Returns true if \a p1 is not equal to \a p2; otherwise returns false.
+    Returns \c true if \a p1 is not equal to \a p2; otherwise returns \c false.
 */
 
 #ifndef QT_NO_DATASTREAM

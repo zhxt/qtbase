@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,6 +41,7 @@
 #include <qevent.h>
 #include <qfontmetrics.h>
 #include <qwindow.h>
+#include <qscreen.h>
 #include <qmainwindow.h>
 #include <qrubberband.h>
 #include <qstylepainter.h>
@@ -59,7 +52,7 @@
 
 #include "qdockwidget_p.h"
 #include "qmainwindowlayout_p.h"
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 #include <private/qapplication_p.h>
 #include <private/qt_mac_p.h>
 #include <private/qmacstyle_mac_p.h>
@@ -116,13 +109,13 @@ class QDockWidgetTitleButton : public QAbstractButton
 public:
     QDockWidgetTitleButton(QDockWidget *dockWidget);
 
-    QSize sizeHint() const;
-    inline QSize minimumSizeHint() const
+    QSize sizeHint() const Q_DECL_OVERRIDE;
+    QSize minimumSizeHint() const Q_DECL_OVERRIDE
     { return sizeHint(); }
 
-    void enterEvent(QEvent *event);
-    void leaveEvent(QEvent *event);
-    void paintEvent(QPaintEvent *event);
+    void enterEvent(QEvent *event) Q_DECL_OVERRIDE;
+    void leaveEvent(QEvent *event) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
 };
 
 
@@ -214,7 +207,8 @@ static bool isXcb()
 
 bool QDockWidgetLayout::nativeWindowDeco(bool floating) const
 {
-#ifdef Q_OS_WINCE
+#if defined(Q_OS_WINCE) || defined(Q_OS_ANDROID)
+    Q_UNUSED(floating)
     return false;
 #else
     return !isXcb() && (floating && item_list[QDockWidgetLayout::TitleBar] == 0);
@@ -454,14 +448,6 @@ int QDockWidgetLayout::titleHeight() const
                             perp(verticalTitleBar, floatSize));
 
     QFontMetrics titleFontMetrics = q->fontMetrics();
-#ifdef Q_WS_MAC
-    if (qobject_cast<QMacStyle *>(q->style())) {
-        //### this breaks on proxy styles.  (But is this code still called?)
-        QFont font = qt_app_fonts_hash()->value("QToolButton", q->font());
-        titleFontMetrics = QFontMetrics(font);
-    }
-#endif
-
     int mw = q->style()->pixelMetric(QStyle::PM_DockWidgetTitleMargin, 0, q);
 
     return qMax(buttonHeight + 2, titleFontMetrics.height() + 2*mw);
@@ -598,10 +584,6 @@ void QDockWidgetPrivate::init()
     QObject::connect(button, SIGNAL(clicked()), q, SLOT(close()));
     layout->setWidgetForRole(QDockWidgetLayout::CloseButton, button);
 
-    resizer = new QWidgetResizeHandler(q);
-    resizer->setMovingEnabled(false);
-    resizer->setActive(false);
-
 #ifndef QT_NO_ACTION
     toggleViewAction = new QAction(q);
     toggleViewAction->setCheckable(true);
@@ -673,12 +655,20 @@ void QDockWidgetPrivate::updateButtons()
         = qobject_cast<QAbstractButton*>(dwLayout->widgetForRole(QDockWidgetLayout::FloatButton));
     button->setIcon(q->style()->standardIcon(QStyle::SP_TitleBarNormalButton, &opt, q));
     button->setVisible(canFloat && !hideButtons);
-
+#ifndef QT_NO_ACCESSIBILITY
+    //: Accessible name for button undocking a dock widget (floating state)
+    button->setAccessibleName(QDockWidget::tr("Float"));
+    button->setAccessibleDescription(QDockWidget::tr("Undocks and re-attaches the dock widget"));
+#endif
     button
         = qobject_cast <QAbstractButton*>(dwLayout->widgetForRole(QDockWidgetLayout::CloseButton));
     button->setIcon(q->style()->standardIcon(QStyle::SP_TitleBarCloseButton, &opt, q));
     button->setVisible(canClose && !hideButtons);
-
+#ifndef QT_NO_ACCESSIBILITY
+    //: Accessible name for button closing a dock widget
+    button->setAccessibleName(QDockWidget::tr("Close"));
+    button->setAccessibleDescription(QDockWidget::tr("Closes the dock widget"));
+#endif
     q->setAttribute(Qt::WA_ContentsPropagated,
                     (canFloat || canClose) && !hideButtons);
 
@@ -759,13 +749,12 @@ void QDockWidgetPrivate::endDrag(bool abort)
                     Qt::WindowFlags flags = q->windowFlags();
                     flags &= ~Qt::X11BypassWindowManagerHint;
                     q->setWindowFlags(flags);
-                    resizer->setActive(QWidgetResizeHandler::Resize, true);
+                    setResizerActive(true);
                     q->show();
                 } else {
                     QDockWidgetLayout *myLayout
                             = qobject_cast<QDockWidgetLayout*>(layout);
-                    resizer->setActive(QWidgetResizeHandler::Resize,
-                                       myLayout->widgetForRole(QDockWidgetLayout::TitleBar) != 0);
+                    setResizerActive(myLayout->widgetForRole(QDockWidgetLayout::TitleBar) != 0);
                 }
                 undockedGeometry = q->geometry();
                 q->activateWindow();
@@ -776,6 +765,17 @@ void QDockWidgetPrivate::endDrag(bool abort)
     }
     delete state;
     state = 0;
+}
+
+void QDockWidgetPrivate::setResizerActive(bool active)
+{
+    Q_Q(QDockWidget);
+    if (active && !resizer) {
+        resizer = new QWidgetResizeHandler(q);
+        resizer->setMovingEnabled(false);
+    }
+    if (resizer)
+        resizer->setActive(QWidgetResizeHandler::Resize, active);
 }
 
 bool QDockWidgetPrivate::isAnimating() const
@@ -790,7 +790,7 @@ bool QDockWidgetPrivate::isAnimating() const
     if (mainWinLayout == 0)
         return false;
 
-    return (void*)mainWinLayout->pluggingWidget == (void*)q;
+    return (const void*)mainWinLayout->pluggingWidget == (const void*)q;
 }
 
 bool QDockWidgetPrivate::mousePressEvent(QMouseEvent *event)
@@ -860,7 +860,7 @@ bool QDockWidgetPrivate::mouseMoveEvent(QMouseEvent *event)
             && (event->pos() - state->pressPos).manhattanLength()
                 > QApplication::startDragDistance()) {
             startDrag();
-#ifdef Q_WS_WIN
+#ifdef Q_DEAD_CODE_FROM_QT4_WIN
             grabMouseWhileInWindow();
 #else
             q->grabMouse();
@@ -904,7 +904,7 @@ void QDockWidgetPrivate::nonClientAreaMouseEvent(QMouseEvent *event)
 
     QRect geo = q->geometry();
     QRect titleRect = q->frameGeometry();
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     if ((features & QDockWidget::DockWidgetVerticalTitleBar)) {
         titleRect.setTop(geo.top());
         titleRect.setBottom(geo.bottom());
@@ -931,12 +931,7 @@ void QDockWidgetPrivate::nonClientAreaMouseEvent(QMouseEvent *event)
             initDrag(event->pos(), true);
             if (state == 0)
                 break;
-#ifdef Q_WS_WIN
-            // On Windows, NCA mouse events don't contain modifier info
-            state->ctrlDrag = GetKeyState(VK_CONTROL) & 0x8000;
-#else
             state->ctrlDrag = event->modifiers() & Qt::ControlModifier;
-#endif
             startDrag();
             break;
         case QEvent::NonClientAreaMouseMove:
@@ -1010,6 +1005,8 @@ void QDockWidgetPrivate::setWindowState(bool floating, bool unplug, const QRect 
     }
 
     bool wasFloating = q->isFloating();
+    if (wasFloating) // Prevent repetitive unplugging from nested invocations (QTBUG-42818)
+        unplug = false;
     bool hidden = q->isHidden();
 
     if (q->isVisible())
@@ -1034,8 +1031,14 @@ void QDockWidgetPrivate::setWindowState(bool floating, bool unplug, const QRect 
     q->setWindowFlags(flags);
 
 
-    if (!rect.isNull())
-        q->setGeometry(rect);
+    if (!rect.isNull()) {
+        if (floating) {
+            q->resize(rect.size());
+            q->move(rect.topLeft());
+        } else {
+            q->setGeometry(rect);
+        }
+    }
 
     updateButtons();
 
@@ -1051,7 +1054,7 @@ void QDockWidgetPrivate::setWindowState(bool floating, bool unplug, const QRect 
         }
     }
 
-    resizer->setActive(QWidgetResizeHandler::Resize, !unplug && floating && !nativeDeco);
+    setResizerActive(!unplug && floating && !nativeDeco);
 }
 
 /*!
@@ -1105,8 +1108,8 @@ void QDockWidgetPrivate::setWindowState(bool floating, bool unplug, const QRect 
     \enum QDockWidget::DockWidgetFeature
 
     \value DockWidgetClosable   The dock widget can be closed. On some systems the dock
-	                            widget always has a close button when it's floating
-								(for example on MacOS 10.5).
+                                widget always has a close button when it's floating
+                                (for example on MacOS 10.5).
     \value DockWidgetMovable    The dock widget can be moved between docks
                                 by the user.
     \value DockWidgetFloatable  The dock widget can be detached from the
@@ -1246,7 +1249,7 @@ QDockWidget::DockWidgetFeatures QDockWidget::features() const
     window "on top" of its parent QMainWindow, instead of being
     docked in the QMainWindow.
 
-    By default, this property is true.
+    By default, this property is \c true.
 
     \sa isWindow()
 */
@@ -1259,6 +1262,9 @@ void QDockWidget::setFloating(bool floating)
         d->endDrag(true);
 
     QRect r = d->undockedGeometry;
+    // Keep position when undocking for the first time.
+    if (floating && isVisible() && !r.isValid())
+        r = QRect(mapToGlobal(QPoint(0, 0)), size());
 
     d->setWindowState(floating, false, floating ? r : QRect());
 
@@ -1297,8 +1303,8 @@ Qt::DockWidgetAreas QDockWidget::allowedAreas() const
 /*!
     \fn bool QDockWidget::isAreaAllowed(Qt::DockWidgetArea area) const
 
-    Returns true if this dock widget can be placed in the given \a area;
-    otherwise returns false.
+    Returns \c true if this dock widget can be placed in the given \a area;
+    otherwise returns \c false.
 */
 
 /*! \reimp */
@@ -1384,9 +1390,17 @@ bool QDockWidget::event(QEvent *event)
         d->toggleViewAction->setChecked(false);
         emit visibilityChanged(false);
         break;
-    case QEvent::Show:
+    case QEvent::Show: {
         d->toggleViewAction->setChecked(true);
-        emit visibilityChanged(geometry().right() >= 0 && geometry().bottom() >= 0);
+        QPoint parentTopLeft(0, 0);
+        if (isWindow()) {
+            if (const QWindow *window = windowHandle())
+                parentTopLeft = window->screen()->availableVirtualGeometry().topLeft();
+            else
+                parentTopLeft = QGuiApplication::primaryScreen()->availableVirtualGeometry().topLeft();
+        }
+        emit visibilityChanged(geometry().right() >= parentTopLeft.x() && geometry().bottom() >= parentTopLeft.y());
+}
         break;
 #endif
     case QEvent::ApplicationLayoutDirectionChange:
@@ -1429,7 +1443,7 @@ bool QDockWidget::event(QEvent *event)
         if (d->mouseMoveEvent(static_cast<QMouseEvent *>(event)))
             return true;
         break;
-#ifdef Q_WS_WIN
+#ifdef Q_DEAD_CODE_FROM_QT4_WIN
     case QEvent::Leave:
         if (d->state != 0 && d->state->dragging && !d->state->nca) {
             // This is a workaround for loosing the mouse on Vista.

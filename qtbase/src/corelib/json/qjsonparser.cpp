@@ -1,39 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2013 Intel Corporation
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +38,7 @@
 #include <qdebug.h>
 #include "qjsonparser_p.h"
 #include "qjson_p.h"
+#include "private/qutfcodec_p.h"
 
 //#define PARSER_DEBUG
 #ifdef PARSER_DEBUG
@@ -77,15 +71,19 @@ QT_BEGIN_NAMESPACE
 #define JSONERR_MISS_OBJ    QT_TRANSLATE_NOOP("QJsonParseError", "object is missing after a comma")
 #define JSONERR_DEEP_NEST   QT_TRANSLATE_NOOP("QJsonParseError", "too deeply nested document")
 #define JSONERR_DOC_LARGE   QT_TRANSLATE_NOOP("QJsonParseError", "too large document")
+#define JSONERR_GARBAGEEND  QT_TRANSLATE_NOOP("QJsonParseError", "garbage at the end of the document")
 
 /*!
     \class QJsonParseError
     \inmodule QtCore
     \ingroup json
+    \ingroup shared
     \reentrant
     \since 5.0
 
     \brief The QJsonParseError class is used to report errors during JSON parsing.
+
+    \sa {JSON Support in Qt}, {JSON Save Game Example}
 */
 
 /*!
@@ -107,6 +105,8 @@ QT_BEGIN_NAMESPACE
     \value MissingObject            An object was expected but couldn't be found
     \value DeepNesting              The JSON document is too deeply nested for the parser to parse it
     \value DocumentTooLarge         The JSON document is too large for the parser to parse it
+    \value GarbageAtEnd             The parsed document contains additional garbage characters at the end
+
 */
 
 /*!
@@ -177,6 +177,9 @@ QString QJsonParseError::errorString() const
         break;
     case DocumentTooLarge:
         sz = JSONERR_DOC_LARGE;
+        break;
+    case GarbageAtEnd:
+        sz = JSONERR_GARBAGEEND;
         break;
     }
 #ifndef QT_BOOTSTRAPPED
@@ -316,6 +319,12 @@ QJsonDocument Parser::parse(QJsonParseError *error)
             goto error;
     } else {
         lastError = QJsonParseError::IllegalValue;
+        goto error;
+    }
+
+    eatSpace();
+    if (json < end) {
+        lastError = QJsonParseError::GarbageAtEnd;
         goto error;
     }
 
@@ -818,45 +827,16 @@ static inline bool scanEscapeSequence(const char *&json, const char *end, uint *
 
 static inline bool scanUtf8Char(const char *&json, const char *end, uint *result)
 {
-    int need;
-    uint min_uc;
-    uint uc;
-    uchar ch = *json++;
-    if (ch < 128) {
-        *result = ch;
-        return true;
-    } else if ((ch & 0xe0) == 0xc0) {
-        uc = ch & 0x1f;
-        need = 1;
-        min_uc = 0x80;
-    } else if ((ch & 0xf0) == 0xe0) {
-        uc = ch & 0x0f;
-        need = 2;
-        min_uc = 0x800;
-    } else if ((ch&0xf8) == 0xf0) {
-        uc = ch & 0x07;
-        need = 3;
-        min_uc = 0x10000;
-    } else {
+    const uchar *&src = reinterpret_cast<const uchar *&>(json);
+    const uchar *uend = reinterpret_cast<const uchar *>(end);
+    uchar b = *src++;
+    int res = QUtf8Functions::fromUtf8<QUtf8BaseTraits>(b, result, src, uend);
+    if (res < 0) {
+        // decoding error, backtrack the character we read above
+        --json;
         return false;
     }
 
-    if (json >= end - need)
-        return false;
-
-    for (int i = 0; i < need; ++i) {
-        ch = *json++;
-        if ((ch&0xc0) != 0x80)
-            return false;
-        uc = (uc << 6) | (ch & 0x3f);
-    }
-
-    if (uc < min_uc || QChar::isNonCharacter(uc) ||
-        QChar::isSurrogate(uc) || uc > QChar::LastValidCodePoint) {
-        return false;
-    }
-
-    *result = uc;
     return true;
 }
 

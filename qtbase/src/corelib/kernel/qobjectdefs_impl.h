@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +36,7 @@
 
 #ifndef QOBJECTDEFS_H
 #error Do not include qobjectdefs_impl.h directly
+#include <QtCore/qnamespace.h>
 #endif
 
 #if 0
@@ -129,7 +122,7 @@ namespace QtPrivate {
        its call function is the same as the FunctionPointer::call function.
      */
 #ifndef Q_COMPILER_VARIADIC_TEMPLATES
-    template<typename Func> struct FunctionPointer { enum {ArgumentCount = -1}; };
+    template<typename Func> struct FunctionPointer { enum {ArgumentCount = -1, IsPointerToMemberFunction = false}; };
     //Pointers to member functions
     template<class Obj, typename Ret> struct FunctionPointer<Ret (Obj::*) ()>
     {
@@ -137,7 +130,7 @@ namespace QtPrivate {
         typedef void Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) ();
-        enum {ArgumentCount = 0};
+        enum {ArgumentCount = 0, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) { (o->*f)(), ApplyReturnValue<R>(arg[0]); }
     };
@@ -147,7 +140,7 @@ namespace QtPrivate {
         typedef List<Arg1, void> Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1);
-        enum {ArgumentCount = 1};
+        enum {ArgumentCount = 1, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)((*reinterpret_cast<typename RemoveRef<typename Args::Car>::Type *>(arg[1]))), ApplyReturnValue<R>(arg[0]);
@@ -159,7 +152,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, void> >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2);
-        enum {ArgumentCount = 2};
+        enum {ArgumentCount = 2, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -172,7 +165,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, void> > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3);
-        enum {ArgumentCount = 3};
+        enum {ArgumentCount = 3, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -186,7 +179,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, void> > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3, Arg4);
-        enum {ArgumentCount = 4};
+        enum {ArgumentCount = 4, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -201,7 +194,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, List<Arg5, void> > > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3, Arg4, Arg5);
-        enum {ArgumentCount = 5};
+        enum {ArgumentCount = 5, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -218,7 +211,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, List<Arg5, List<Arg6, void> > > > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
-        enum {ArgumentCount = 6};
+        enum {ArgumentCount = 6, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -237,7 +230,7 @@ namespace QtPrivate {
         typedef void Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) () const;
-        enum {ArgumentCount = 0};
+        enum {ArgumentCount = 0, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) { (o->*f)(), ApplyReturnValue<R>(arg[0]); }
     };
@@ -247,7 +240,7 @@ namespace QtPrivate {
         typedef List<Arg1, void> Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1) const;
-        enum {ArgumentCount = 1};
+        enum {ArgumentCount = 1, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)((*reinterpret_cast<typename RemoveRef<typename Args::Car>::Type *>(arg[1]))), ApplyReturnValue<R>(arg[0]);
@@ -259,7 +252,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, void> >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2) const;
-        enum {ArgumentCount = 2};
+        enum {ArgumentCount = 2, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -272,7 +265,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, void> > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3) const;
-        enum {ArgumentCount = 3};
+        enum {ArgumentCount = 3, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -286,7 +279,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, void> > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3, Arg4) const;
-        enum {ArgumentCount = 4};
+        enum {ArgumentCount = 4, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -301,7 +294,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, List<Arg5, void> > > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3, Arg4, Arg5) const;
-        enum {ArgumentCount = 5};
+        enum {ArgumentCount = 5, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -318,7 +311,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, List<Arg5, List<Arg6, void> > > > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Arg1, Arg2, Arg3, Arg4, Arg5, Arg6) const;
-        enum {ArgumentCount = 6};
+        enum {ArgumentCount = 6, IsPointerToMemberFunction = true};
         template <typename Args, typename R>
         static void call(Function f, Obj *o, void **arg) {
             (o->*f)( *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -336,7 +329,7 @@ namespace QtPrivate {
         typedef void Arguments;
         typedef Ret (*Function) ();
         typedef Ret ReturnType;
-        enum {ArgumentCount = 0};
+        enum {ArgumentCount = 0, IsPointerToMemberFunction = false};
         template <typename Args, typename R>
         static void call(Function f, void *, void **arg) { f(), ApplyReturnValue<R>(arg[0]); }
     };
@@ -345,7 +338,7 @@ namespace QtPrivate {
         typedef List<Arg1, void> Arguments;
         typedef Ret ReturnType;
         typedef Ret (*Function) (Arg1);
-        enum {ArgumentCount = 1};
+        enum {ArgumentCount = 1, IsPointerToMemberFunction = false};
         template <typename Args, typename R>
         static void call(Function f, void *, void **arg)
         { f(*reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1])), ApplyReturnValue<R>(arg[0]); }
@@ -355,7 +348,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, void> > Arguments;
         typedef Ret ReturnType;
         typedef Ret (*Function) (Arg1, Arg2);
-        enum {ArgumentCount = 2};
+        enum {ArgumentCount = 2, IsPointerToMemberFunction = false};
         template <typename Args, typename R>
         static void call(Function f, void *, void **arg) {
             f(*reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -366,7 +359,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, void> > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (*Function) (Arg1, Arg2, Arg3);
-        enum {ArgumentCount = 3};
+        enum {ArgumentCount = 3, IsPointerToMemberFunction = false};
         template <typename Args, typename R>
         static void call(Function f, void *, void **arg) {
             f(       *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -379,7 +372,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, void> > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (*Function) (Arg1, Arg2, Arg3, Arg4);
-        enum {ArgumentCount = 4};
+        enum {ArgumentCount = 4, IsPointerToMemberFunction = false};
         template <typename Args, typename R>
         static void call(Function f, void *, void **arg) {
             f(       *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -394,7 +387,7 @@ namespace QtPrivate {
         List<Arg4, List<Arg5, void > > > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (*Function) (Arg1, Arg2, Arg3, Arg4, Arg5);
-        enum {ArgumentCount = 5};
+        enum {ArgumentCount = 5, IsPointerToMemberFunction = false};
         template <typename Args, typename R>
         static void call(Function f, void *, void **arg) {
             f(       *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -409,7 +402,7 @@ namespace QtPrivate {
         typedef List<Arg1, List<Arg2, List<Arg3, List<Arg4, List<Arg5, List<Arg6, void> > > > > >  Arguments;
         typedef Ret ReturnType;
         typedef Ret (*Function) (Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
-        enum {ArgumentCount = 6};
+        enum {ArgumentCount = 6, IsPointerToMemberFunction = false};
         template <typename Args, typename R>
         static void call(Function f, void *, void **arg) {
             f(       *reinterpret_cast<typename RemoveRef<typename List_Select<Args, 0>::Value>::Type *>(arg[1]),
@@ -493,25 +486,25 @@ namespace QtPrivate {
     template <int N> struct Indexes
     { typedef typename IndexesAppend<typename Indexes<N - 1>::Value, N - 1>::Value Value; };
     template <> struct Indexes<0> { typedef IndexesList<> Value; };
-    template<typename Func> struct FunctionPointer { enum {ArgumentCount = -1}; };
+    template<typename Func> struct FunctionPointer { enum {ArgumentCount = -1, IsPointerToMemberFunction = false}; };
 
     template <typename, typename, typename, typename> struct FunctorCall;
-    template <int... I, typename... SignalArgs, typename R, typename Function>
-    struct FunctorCall<IndexesList<I...>, List<SignalArgs...>, R, Function> {
+    template <int... II, typename... SignalArgs, typename R, typename Function>
+    struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, Function> {
         static void call(Function f, void **arg) {
-            f((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[I+1]))...), ApplyReturnValue<R>(arg[0]);
+            f((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[II+1]))...), ApplyReturnValue<R>(arg[0]);
         }
     };
-    template <int... I, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
-    struct FunctorCall<IndexesList<I...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...)> {
+    template <int... II, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
+    struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...)> {
         static void call(SlotRet (Obj::*f)(SlotArgs...), Obj *o, void **arg) {
-            (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[I+1]))...), ApplyReturnValue<R>(arg[0]);
+            (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[II+1]))...), ApplyReturnValue<R>(arg[0]);
         }
     };
-    template <int... I, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
-    struct FunctorCall<IndexesList<I...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...) const> {
+    template <int... II, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
+    struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...) const> {
         static void call(SlotRet (Obj::*f)(SlotArgs...) const, Obj *o, void **arg) {
-            (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[I+1]))...), ApplyReturnValue<R>(arg[0]);
+            (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[II+1]))...), ApplyReturnValue<R>(arg[0]);
         }
     };
 
@@ -521,7 +514,7 @@ namespace QtPrivate {
         typedef List<Args...>  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Args...);
-        enum {ArgumentCount = sizeof...(Args)};
+        enum {ArgumentCount = sizeof...(Args), IsPointerToMemberFunction = true};
         template <typename SignalArgs, typename R>
         static void call(Function f, Obj *o, void **arg) {
             FunctorCall<typename Indexes<ArgumentCount>::Value, SignalArgs, R, Function>::call(f, o, arg);
@@ -533,7 +526,7 @@ namespace QtPrivate {
         typedef List<Args...>  Arguments;
         typedef Ret ReturnType;
         typedef Ret (Obj::*Function) (Args...) const;
-        enum {ArgumentCount = sizeof...(Args)};
+        enum {ArgumentCount = sizeof...(Args), IsPointerToMemberFunction = true};
         template <typename SignalArgs, typename R>
         static void call(Function f, Obj *o, void **arg) {
             FunctorCall<typename Indexes<ArgumentCount>::Value, SignalArgs, R, Function>::call(f, o, arg);
@@ -545,7 +538,7 @@ namespace QtPrivate {
         typedef List<Args...> Arguments;
         typedef Ret ReturnType;
         typedef Ret (*Function) (Args...);
-        enum {ArgumentCount = sizeof...(Args)};
+        enum {ArgumentCount = sizeof...(Args), IsPointerToMemberFunction = false};
         template <typename SignalArgs, typename R>
         static void call(Function f, void *, void **arg) {
             FunctorCall<typename Indexes<ArgumentCount>::Value, SignalArgs, R, Function>::call(f, arg);
@@ -567,9 +560,9 @@ namespace QtPrivate {
        Q_STATIC_ASSERT(CheckCompatibleArguments<FunctionPointer<Signal>::Arguments, FunctionPointer<Slot>::Arguments>::value)
     */
     template<typename A1, typename A2> struct AreArgumentsCompatible {
-        static int test(A2);
+        static int test(const typename RemoveRef<A2>::Type&);
         static char test(...);
-        static A1 dummy();
+        static const typename RemoveRef<A1>::Type &dummy();
         enum { value = sizeof(test(dummy())) == sizeof(int) };
     };
     template<typename A1, typename A2> struct AreArgumentsCompatible<A1, A2&> { enum { value = false }; };
@@ -622,7 +615,7 @@ namespace QtPrivate {
         static char test(...);
         enum {
             Ok = sizeof(test(dummy<Functor>())) == sizeof(int),
-            Value = Ok ? sizeof...(ArgList) : int(ComputeFunctorArgumentCountHelper<Functor, List<ArgList...>, Ok>::Value)
+            Value = Ok ? int(sizeof...(ArgList)) : int(ComputeFunctorArgumentCountHelper<Functor, List<ArgList...>, Ok>::Value)
         };
     };
 

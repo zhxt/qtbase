@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -66,6 +58,11 @@
 # define QT_NO_IPV6IFNAME
 #endif
 
+#ifdef Q_OS_HAIKU
+# include <sys/sockio.h>
+# define IFF_RUNNING 0x0001
+#endif
+
 #ifndef QT_NO_GETIFADDRS
 # include <ifaddrs.h>
 #endif
@@ -81,7 +78,7 @@
 
 QT_BEGIN_NAMESPACE
 
-static QHostAddress addressFromSockaddr(sockaddr *sa)
+static QHostAddress addressFromSockaddr(sockaddr *sa, int ifindex = 0, const QString &ifname = QString())
 {
     QHostAddress address;
     if (!sa)
@@ -92,14 +89,18 @@ static QHostAddress addressFromSockaddr(sockaddr *sa)
     else if (sa->sa_family == AF_INET6) {
         address.setAddress(((sockaddr_in6 *)sa)->sin6_addr.s6_addr);
         int scope = ((sockaddr_in6 *)sa)->sin6_scope_id;
-        if (scope) {
+        if (scope && scope == ifindex) {
+            // this is the most likely scenario:
+            // a scope ID in a socket is that of the interface this address came from
+            address.setScopeId(ifname);
+        } else  if (scope) {
 #ifndef QT_NO_IPV6IFNAME
             char scopeid[IFNAMSIZ];
             if (::if_indextoname(scope, scopeid)) {
                 address.setScopeId(QLatin1String(scopeid));
             } else
 #endif
-                address.setScopeId(QString::number(scope));
+                address.setScopeId(QString::number(uint(scope)));
         }
     }
     return address;
@@ -224,7 +225,7 @@ static QNetworkInterfacePrivate *findInterface(int socket, QList<QNetworkInterfa
             memcpy(req.ifr_name, oldName, qMin<int>(oldName.length() + 1, sizeof(req.ifr_name) - 1));
         } else
 #endif
-	{
+        {
             // use this name anyways
             iface->name = QString::fromLatin1(req.ifr_name);
         }
@@ -273,16 +274,16 @@ static QList<QNetworkInterfacePrivate *> interfaceListing()
             }
         }
 
-        // Get the interface netmask
-        if (qt_safe_ioctl(socket, SIOCGIFNETMASK, &req) >= 0) {
-            sockaddr *sa = &req.ifr_addr;
-	    entry.setNetmask(addressFromSockaddr(sa));
-        }
-
         // Get the address of the interface
         if (qt_safe_ioctl(socket, SIOCGIFADDR, &req) >= 0) {
             sockaddr *sa = &req.ifr_addr;
             entry.setIp(addressFromSockaddr(sa));
+        }
+
+        // Get the interface netmask
+        if (qt_safe_ioctl(socket, SIOCGIFNETMASK, &req) >= 0) {
+            sockaddr *sa = &req.ifr_addr;
+            entry.setNetmask(addressFromSockaddr(sa));
         }
 
         iface->addressEntries << entry;
@@ -308,38 +309,38 @@ QT_END_INCLUDE_NAMESPACE
 static QList<QNetworkInterfacePrivate *> createInterfaces(ifaddrs *rawList)
 {
     QList<QNetworkInterfacePrivate *> interfaces;
+    QSet<QString> seenInterfaces;
 
+    // on Linux, AF_PACKET addresses carry the hardware address and interface index;
+    // scan for them first (they're usually first, but we have no guarantee this
+    // will be the case forever)
     for (ifaddrs *ptr = rawList; ptr; ptr = ptr->ifa_next) {
-        if ( !ptr->ifa_addr )
-            continue;
-
-        // Get the interface index
-        int ifindex = if_nametoindex(ptr->ifa_name);
-
-        // on Linux we use AF_PACKET and sockaddr_ll to obtain hHwAddress
-        QList<QNetworkInterfacePrivate *>::Iterator if_it = interfaces.begin();
-        for ( ; if_it != interfaces.end(); ++if_it)
-            if ((*if_it)->index == ifindex) {
-                // this one has been added already
-                if ( ptr->ifa_addr->sa_family == AF_PACKET
-                        && (*if_it)->hardwareAddress.isEmpty()) {
-                    sockaddr_ll *sll = (sockaddr_ll *)ptr->ifa_addr;
-                    (*if_it)->hardwareAddress = (*if_it)->makeHwAddress(sll->sll_halen, (uchar*)sll->sll_addr);
-                }
-                break;
-            }
-        if ( if_it != interfaces.end() )
-            continue;
-
-        QNetworkInterfacePrivate *iface = new QNetworkInterfacePrivate;
-        interfaces << iface;
-        iface->index = ifindex;
-        iface->name = QString::fromLatin1(ptr->ifa_name);
-        iface->flags = convertFlags(ptr->ifa_flags);
-
-        if ( ptr->ifa_addr->sa_family == AF_PACKET ) {
+        if (ptr->ifa_addr && ptr->ifa_addr->sa_family == AF_PACKET) {
             sockaddr_ll *sll = (sockaddr_ll *)ptr->ifa_addr;
+            QNetworkInterfacePrivate *iface = new QNetworkInterfacePrivate;
+            interfaces << iface;
+            iface->index = sll->sll_ifindex;
+            iface->name = QString::fromLatin1(ptr->ifa_name);
+            iface->flags = convertFlags(ptr->ifa_flags);
             iface->hardwareAddress = iface->makeHwAddress(sll->sll_halen, (uchar*)sll->sll_addr);
+
+            seenInterfaces.insert(iface->name);
+        }
+    }
+
+    // see if we missed anything:
+    // virtual interfaces with no HW address have no AF_PACKET
+    for (ifaddrs *ptr = rawList; ptr; ptr = ptr->ifa_next) {
+        if (ptr->ifa_addr && ptr->ifa_addr->sa_family != AF_PACKET) {
+            QString name = QString::fromLatin1(ptr->ifa_name);
+            if (seenInterfaces.contains(name))
+                continue;
+
+            QNetworkInterfacePrivate *iface = new QNetworkInterfacePrivate;
+            interfaces << iface;
+            iface->name = name;
+            iface->flags = convertFlags(ptr->ifa_flags);
+            iface->index = if_nametoindex(ptr->ifa_name);
         }
     }
 
@@ -410,25 +411,20 @@ static QList<QNetworkInterfacePrivate *> interfaceListing()
 {
     QList<QNetworkInterfacePrivate *> interfaces;
 
-    int socket;
-    if ((socket = qt_safe_socket(AF_INET, SOCK_STREAM, IPPROTO_IP)) == -1)
-        return interfaces;      // error
-
     ifaddrs *interfaceListing;
     if (getifaddrs(&interfaceListing) == -1) {
         // error
-        ::close(socket);
         return interfaces;
     }
 
     interfaces = createInterfaces(interfaceListing);
     for (ifaddrs *ptr = interfaceListing; ptr; ptr = ptr->ifa_next) {
         // Get the interface index
-        int ifindex = if_nametoindex(ptr->ifa_name);
+        QString name = QString::fromLatin1(ptr->ifa_name);
         QNetworkInterfacePrivate *iface = 0;
         QList<QNetworkInterfacePrivate *>::Iterator if_it = interfaces.begin();
         for ( ; if_it != interfaces.end(); ++if_it)
-            if ((*if_it)->index == ifindex) {
+            if ((*if_it)->name == name) {
                 // found this interface already
                 iface = *if_it;
                 break;
@@ -439,20 +435,19 @@ static QList<QNetworkInterfacePrivate *> interfaceListing()
         }
 
         QNetworkAddressEntry entry;
-        entry.setIp(addressFromSockaddr(ptr->ifa_addr));
+        entry.setIp(addressFromSockaddr(ptr->ifa_addr, iface->index, iface->name));
         if (entry.ip().isNull())
             // could not parse the address
             continue;
 
-        entry.setNetmask(addressFromSockaddr(ptr->ifa_netmask));
+        entry.setNetmask(addressFromSockaddr(ptr->ifa_netmask, iface->index, iface->name));
         if (iface->flags & QNetworkInterface::CanBroadcast)
-            entry.setBroadcast(addressFromSockaddr(ptr->ifa_broadaddr));
+            entry.setBroadcast(addressFromSockaddr(ptr->ifa_broadaddr, iface->index, iface->name));
 
         iface->addressEntries << entry;
     }
 
     freeifaddrs(interfaceListing);
-    ::close(socket);
     return interfaces;
 }
 #endif

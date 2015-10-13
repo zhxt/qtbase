@@ -12,6 +12,7 @@ HEADERS += \
 	itemviews/qtreeview.h \
 	itemviews/qtreeview_p.h \
 	itemviews/qabstractitemdelegate.h \
+        itemviews/qabstractitemdelegate_p.h \
         itemviews/qitemdelegate.h \
 	itemviews/qdirmodel.h \
 	itemviews/qlistwidget.h \
@@ -26,6 +27,7 @@ HEADERS += \
 	itemviews/qtreewidgetitemiterator.h \
     itemviews/qdatawidgetmapper.h \
     itemviews/qfileiconprovider.h \
+    itemviews/qfileiconprovider_p.h \
     itemviews/qcolumnviewgrip_p.h \
     itemviews/qcolumnview.h  \
     itemviews/qcolumnview_p.h \

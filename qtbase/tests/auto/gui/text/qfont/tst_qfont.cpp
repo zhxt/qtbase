@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -74,10 +66,10 @@ private slots:
     void resetFont();
 #endif
     void isCopyOf();
-    void setFontRaw();
     void italicOblique();
     void insertAndRemoveSubstitutions();
-    void serializeSpacing();
+    void serialize_data();
+    void serialize();
     void lastResortFont();
     void styleName();
     void defaultFamily_data();
@@ -316,25 +308,25 @@ void tst_QFont::italicOblique()
     QStringList::ConstIterator f_it, f_end = families.end();
     for (f_it = families.begin(); f_it != f_end; ++f_it) {
 
-	QString family = *f_it;
-	QStringList styles = fdb.styles(family);
-	QVERIFY(!styles.isEmpty());
-	QStringList::ConstIterator s_it, s_end = styles.end();
-	for (s_it = styles.begin(); s_it != s_end; ++s_it) {
-	    QString style = *s_it;
+        QString family = *f_it;
+        QStringList styles = fdb.styles(family);
+        QVERIFY(!styles.isEmpty());
+        QStringList::ConstIterator s_it, s_end = styles.end();
+        for (s_it = styles.begin(); s_it != s_end; ++s_it) {
+            QString style = *s_it;
 
-	    if (fdb.isSmoothlyScalable(family, style)) {
-		if (style.contains("Oblique")) {
-		    style.replace("Oblique", "Italic");
-		} else if (style.contains("Italic")) {
-		    style.replace("Italic", "Oblique");
-		} else {
-		    continue;
-		}
-		QFont f = fdb.font(family, style, 12);
-		QVERIFY(f.italic());
-	    }
-	}
+            if (fdb.isSmoothlyScalable(family, style)) {
+                if (style.contains("Oblique")) {
+                    style.replace("Oblique", "Italic");
+                } else if (style.contains("Italic")) {
+                    style.replace("Italic", "Oblique");
+                } else {
+                    continue;
+                }
+                QFont f = fdb.font(family, style, 12);
+                QVERIFY(f.italic());
+            }
+        }
     }
 }
 
@@ -342,16 +334,16 @@ void tst_QFont::compare()
 {
     QFont font;
     {
-	QFont font2 = font;
-	font2.setPointSize( 24 );
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
+        QFont font2 = font;
+        font2.setPointSize(24);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
     }
     {
-	QFont font2 = font;
-	font2.setPixelSize( 24 );
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
+        QFont font2 = font;
+        font2.setPixelSize(24);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
     }
 
     font.setPointSize(12);
@@ -361,71 +353,62 @@ void tst_QFont::compare()
     font.setStrikeOut(false);
     font.setOverline(false);
     {
-	QFont font2 = font;
-	font2.setPointSize( 24 );
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
+        QFont font2 = font;
+        font2.setPointSize(24);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
     }
     {
-	QFont font2 = font;
-	font2.setPixelSize( 24 );
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
+        QFont font2 = font;
+        font2.setPixelSize(24);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
     }
     {
-	QFont font2 = font;
+        QFont font2 = font;
 
-	font2.setItalic(true);
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
-	font2.setItalic(false);
-	QVERIFY( font == font2 );
-    QVERIFY(!(font < font2));
+        font2.setItalic(true);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
+        font2.setItalic(false);
+        QVERIFY(font == font2);
+        QVERIFY(!(font < font2));
 
-	font2.setWeight(QFont::Bold);
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
-	font2.setWeight(QFont::Normal);
-	QVERIFY( font == font2 );
-    QVERIFY(!(font < font2));
+        font2.setWeight(QFont::Bold);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
+        font2.setWeight(QFont::Normal);
+        QVERIFY(font == font2);
+        QVERIFY(!(font < font2));
 
-	font.setUnderline(true);
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
-	font.setUnderline(false);
-	QVERIFY( font == font2 );
-    QVERIFY(!(font < font2));
+        font.setUnderline(true);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
+        font.setUnderline(false);
+        QVERIFY(font == font2);
+        QVERIFY(!(font < font2));
 
-	font.setStrikeOut(true);
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
-	font.setStrikeOut(false);
-	QVERIFY( font == font2 );
-    QVERIFY(!(font < font2));
+        font.setStrikeOut(true);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
+        font.setStrikeOut(false);
+        QVERIFY(font == font2);
+        QVERIFY(!(font < font2));
 
-	font.setOverline(true);
-	QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
-	font.setOverline(false);
-	QVERIFY( font == font2 );
-    QVERIFY(!(font < font2));
+        font.setOverline(true);
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
+        font.setOverline(false);
+        QVERIFY(font == font2);
+        QVERIFY(!(font < font2));
 
         font.setCapitalization(QFont::SmallCaps);
-        QVERIFY( font != font2 );
-    QCOMPARE(font < font2,!(font2 < font));
+        QVERIFY(font != font2);
+        QCOMPARE(font < font2,!(font2 < font));
         font.setCapitalization(QFont::MixedCase);
-        QVERIFY( font == font2 );
-    QVERIFY(!(font < font2));
+        QVERIFY(font == font2);
+        QVERIFY(!(font < font2));
     }
-
-#if defined(Q_WS_X11)
-    {
-	QFont font1, font2;
-	font1.setRawName("-Adobe-Helvetica-medium-r-normal--12-120-75-75-p-67-iso8859-1");
-	font2.setRawName("-Adobe-Helvetica-medium-r-normal--24-240-75-75-p-130-iso8859-1");
-	QVERIFY(font1 != font2);
-    }
-#endif
 }
 
 void tst_QFont::resolve()
@@ -519,30 +502,6 @@ void tst_QFont::isCopyOf()
     QVERIFY(!font3.isCopyOf(font));
 }
 
-void tst_QFont::setFontRaw()
-{
-#ifndef Q_WS_X11
-    QSKIP("Only tested on X11");
-#else
-    QFont f;
-    f.setRawName("-*-fixed-bold-r-normal--0-0-*-*-*-0-iso8859-1");
-//     qDebug("font family: %s", f.family().utf8());
-    QFontDatabase fdb;
-    QStringList families = fdb.families();
-    bool found = false;
-    for (int i = 0; i < families.size(); ++i) {
-        QString str = families.at(i);
-        if (str.contains('['))
-            str = str.left(str.indexOf('[')-1);
-        if (str.toLower() == "fixed")
-            found = true;
-    }
-    if (!found)
-        QSKIP("Fixed font not available.");
-    QCOMPARE(QFontInfo(f).family().left(5).toLower(), QString("fixed"));
-#endif
-}
-
 void tst_QFont::insertAndRemoveSubstitutions()
 {
     QFont::removeSubstitution("BogusFontFamily");
@@ -568,44 +527,111 @@ void tst_QFont::insertAndRemoveSubstitutions()
     QVERIFY(QFont::substitutes("bogusfontfamily").isEmpty());
 }
 
+Q_DECLARE_METATYPE(QDataStream::Version)
 
-static QFont copyFont(const QFont &font1) // copy using a QDataStream
+void tst_QFont::serialize_data()
 {
-    QBuffer buffer;
-    buffer.open(QIODevice::WriteOnly);
-    QDataStream ds(&buffer);
-    ds << font1;
-    buffer.close();
+    QTest::addColumn<QFont>("font");
+    // The version in which the tested feature was added.
+    QTest::addColumn<QDataStream::Version>("minimumStreamVersion");
 
-    buffer.open(QIODevice::ReadOnly);
-    QFont font2;
-    ds >> font2;
-    return font2;
-}
+    QFont basicFont;
+    // Versions <= Qt 2.1 had broken point size serialization,
+    // so we set an integer point size.
+    basicFont.setPointSize(9);
 
-void tst_QFont::serializeSpacing()
-{
-    QFont font;
-    QCOMPARE(font.letterSpacing(), 0.);
-    QCOMPARE(font.wordSpacing(), 0.);
+    QFont font = basicFont;
+    QTest::newRow("defaultConstructed") << font << QDataStream::Qt_1_0;
 
     font.setLetterSpacing(QFont::AbsoluteSpacing, 105);
-    QCOMPARE(font.letterSpacing(), 105.);
-    QCOMPARE(font.letterSpacingType(), QFont::AbsoluteSpacing);
-    QCOMPARE(font.wordSpacing(), 0.);
-    QFont font2 = copyFont(font);
-    QCOMPARE(font2.letterSpacing(), 105.);
-    QCOMPARE(font2.letterSpacingType(), QFont::AbsoluteSpacing);
-    QCOMPARE(font2.wordSpacing(), 0.);
+    QTest::newRow("letterSpacing") << font << QDataStream::Qt_4_5;
 
+    font = basicFont;
     font.setWordSpacing(50.0);
-    QCOMPARE(font.letterSpacing(), 105.);
-    QCOMPARE(font.wordSpacing(), 50.);
+    QTest::newRow("wordSpacing") << font << QDataStream::Qt_4_5;
 
-    QFont font3 = copyFont(font);
-    QCOMPARE(font3.letterSpacing(), 105.);
-    QCOMPARE(font3.letterSpacingType(), QFont::AbsoluteSpacing);
-    QCOMPARE(font3.wordSpacing(), 50.);
+    font = basicFont;
+    font.setPointSize(20);
+    QTest::newRow("pointSize") << font << QDataStream::Qt_1_0;
+
+    font = basicFont;
+    font.setPixelSize(32);
+    QTest::newRow("pixelSize") << font << QDataStream::Qt_3_0;
+
+    font = basicFont;
+    font.setStyleHint(QFont::Monospace);
+    QTest::newRow("styleHint") << font << QDataStream::Qt_1_0;
+
+    font = basicFont;
+    font.setStretch(4000);
+    QTest::newRow("stretch") << font << QDataStream::Qt_4_3;
+
+    font = basicFont;
+    font.setWeight(99);
+    QTest::newRow("weight") << font << QDataStream::Qt_1_0;
+
+    font = basicFont;
+    font.setUnderline(true);
+    QTest::newRow("underline") << font << QDataStream::Qt_1_0;
+
+    font = basicFont;
+    font.setStrikeOut(true);
+    QTest::newRow("strikeOut") << font << QDataStream::Qt_1_0;
+
+    font = basicFont;
+    font.setFixedPitch(true);
+    // This fails for versions less than this, as ignorePitch is set to false
+    // whenever setFixedPitch() is called, but ignorePitch is considered an
+    // extended bit, which were apparently not available until 4.4.
+    QTest::newRow("fixedPitch") << font << QDataStream::Qt_4_4;
+
+    font = basicFont;
+    font.setLetterSpacing(QFont::AbsoluteSpacing, 10);
+    // Fails for 4.4 because letterSpacing wasn't read until 4.5.
+    QTest::newRow("letterSpacing") << font << QDataStream::Qt_4_5;
+
+    font = basicFont;
+    font.setKerning(false);
+    QTest::newRow("kerning") << font << QDataStream::Qt_4_0;
+
+    font = basicFont;
+    font.setStyleStrategy(QFont::NoFontMerging);
+    // This wasn't read properly until 5.4.
+    QTest::newRow("styleStrategy") << font << QDataStream::Qt_5_4;
+
+    font = basicFont;
+    font.setHintingPreference(QFont::PreferFullHinting);
+    // This wasn't read until 5.4.
+    QTest::newRow("hintingPreference") << font << QDataStream::Qt_5_4;
+
+    font = basicFont;
+    font.setStyleName("Regular Black Condensed");
+    // This wasn't read until 5.4.
+    QTest::newRow("styleName") << font << QDataStream::Qt_5_4;
+}
+
+void tst_QFont::serialize()
+{
+    QFETCH(QFont, font);
+    QFETCH(QDataStream::Version, minimumStreamVersion);
+
+    QDataStream stream;
+    const int thisVersion = stream.version();
+
+    for (int version = minimumStreamVersion; version <= thisVersion; ++version) {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly);
+        stream.setDevice(&buffer);
+        stream.setVersion(version);
+        stream << font;
+        buffer.close();
+
+        buffer.open(QIODevice::ReadOnly);
+        QFont readFont;
+        stream >> readFont;
+        QVERIFY2(readFont == font, qPrintable(QString::fromLatin1("Fonts do not compare equal for QDataStream version ") +
+            QString::fromLatin1("%1:\nactual: %2\nexpected: %3").arg(version).arg(readFont.toString()).arg(font.toString())));
+    }
 }
 
 // QFont::lastResortFont() may abort with qFatal() on QWS/QPA
@@ -646,7 +672,7 @@ QString getPlatformGenericFont(const char* genericName)
 
 static inline QByteArray msgNotAcceptableFont(const QString &defaultFamily, const QStringList &acceptableFamilies)
 {
-    QString res = QString::fromLatin1("Font family '%1' is not one of the following accaptable results: ").arg(defaultFamily);
+    QString res = QString::fromLatin1("Font family '%1' is not one of the following acceptable results: ").arg(defaultFamily);
     Q_FOREACH (const QString &family, acceptableFamilies)
         res += QString::fromLatin1("\n %1").arg(family);
     return res.toLocal8Bit();
@@ -658,11 +684,11 @@ void tst_QFont::defaultFamily_data()
     QTest::addColumn<QFont::StyleHint>("styleHint");
     QTest::addColumn<QStringList>("acceptableFamilies");
 
-    QTest::newRow("serif") << QFont::Serif << (QStringList() << "Times New Roman" << "Times" << getPlatformGenericFont("serif"));
-    QTest::newRow("monospace") << QFont::Monospace << (QStringList() << "Courier New" << "Monaco" << getPlatformGenericFont("monospace"));
-    QTest::newRow("cursive") << QFont::Cursive << (QStringList() << "Comic Sans MS" << "Apple Chancery" << getPlatformGenericFont("cursive"));
-    QTest::newRow("fantasy") << QFont::Fantasy << (QStringList() << "Impact" << "Zapfino"  << getPlatformGenericFont("fantasy"));
-    QTest::newRow("sans-serif") << QFont::SansSerif << (QStringList() << "Arial" << "Lucida Grande" << getPlatformGenericFont("sans-serif"));
+    QTest::newRow("serif") << QFont::Serif << (QStringList() << "Times New Roman" << "Times" << "Droid Serif" << getPlatformGenericFont("serif"));
+    QTest::newRow("monospace") << QFont::Monospace << (QStringList() << "Courier New" << "Monaco" << "Droid Sans Mono" << getPlatformGenericFont("monospace"));
+    QTest::newRow("cursive") << QFont::Cursive << (QStringList() << "Comic Sans MS" << "Apple Chancery" << "Roboto" << "Droid Sans" << getPlatformGenericFont("cursive"));
+    QTest::newRow("fantasy") << QFont::Fantasy << (QStringList() << "Impact" << "Zapfino"  << "Roboto" << "Droid Sans" << getPlatformGenericFont("fantasy"));
+    QTest::newRow("sans-serif") << QFont::SansSerif << (QStringList() << "Arial" << "Lucida Grande" << "Roboto" << "Droid Sans" << getPlatformGenericFont("sans-serif"));
 }
 
 void tst_QFont::defaultFamily()
@@ -685,6 +711,7 @@ void tst_QFont::defaultFamily()
             break;
         }
     }
+
     QVERIFY2(isAcceptable, msgNotAcceptableFont(familyForHint, acceptableFamilies));
 }
 

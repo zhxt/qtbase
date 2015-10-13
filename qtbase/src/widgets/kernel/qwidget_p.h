@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -60,6 +52,8 @@
 #include "QtCore/qset.h"
 #include "QtGui/qregion.h"
 #include "QtGui/qinputmethod.h"
+#include "QtGui/qopengl.h"
+#include "QtGui/qsurfaceformat.h"
 #include "QtWidgets/qsizepolicy.h"
 #include "QtWidgets/qstyle.h"
 #include "QtWidgets/qapplication.h"
@@ -80,6 +74,7 @@ class QPixmap;
 class QWidgetBackingStore;
 class QGraphicsProxyWidget;
 class QWidgetItemV2;
+class QOpenGLContext;
 
 class QStyle;
 
@@ -182,7 +177,7 @@ struct QTLWExtra {
     uint embedded : 1;
 
     // *************************** Platform specific values (bit fields first) **********
-#if defined(Q_WS_X11) // <----------------------------------------------------------- X11
+#if defined(Q_DEAD_CODE_FROM_QT4_X11) // <----------------------------------------------------------- X11
     uint spont_unmapped: 1; // window was spontaneously unmapped
     uint dnd : 1; // DND properties installed
     uint validWMState : 1; // is WM_STATE valid?
@@ -196,11 +191,11 @@ struct QTLWExtra {
     qint32 newCounterValueHi;
     quint32 newCounterValueLo;
 #endif
-#elif defined(Q_WS_WIN) // <--------------------------------------------------------- WIN
+#elif defined(Q_DEAD_CODE_FROM_QT4_WIN) // <--------------------------------------------------------- WIN
     uint hotkeyRegistered: 1; // Hot key from the STARTUPINFO has been registered.
     HICON winIconBig; // internal big Windows icon
     HICON winIconSmall; // internal small Windows icon
-#elif defined(Q_WS_MAC) // <--------------------------------------------------------- MAC
+#elif defined(Q_DEAD_CODE_FROM_QT4_MAC) // <--------------------------------------------------------- MAC
     uint resizer : 4;
     uint isSetGeometry : 1;
     uint isMove : 1;
@@ -216,7 +211,8 @@ struct QTLWExtra {
     bool wasMaximized;
 #endif
     QWidgetWindow *window;
-    quint32 screenIndex; // index in qplatformscreenlist
+    QOpenGLContext *shareContext;
+    int initialScreenIndex; // Screen number when passing a QDesktop[Screen]Widget as parent.
 };
 
 struct QWExtra {
@@ -254,17 +250,18 @@ struct QWExtra {
     uint nativeChildrenForced : 1;
     uint inRenderWithPainter : 1;
     uint hasMask : 1;
+    uint hasWindowContainer : 1;
 
     // *************************** Platform specific values (bit fields first) **********
-#if defined(Q_WS_WIN) // <----------------------------------------------------------- WIN
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN) // <----------------------------------------------------------- WIN
 #ifndef QT_NO_DRAGANDDROP
     QOleDropTarget *dropTarget; // drop target
     QList<QPointer<QWidget> > oleDropWidgets;
 #endif
-#elif defined(Q_WS_X11) // <--------------------------------------------------------- X11
+#elif defined(Q_DEAD_CODE_FROM_QT4_X11) // <--------------------------------------------------------- X11
     uint compress_events : 1;
     WId xDndProxy; // XDND forwarding to embedded windows
-#elif defined(Q_WS_MAC) // <------------------------------------------------------ MAC
+#elif defined(Q_DEAD_CODE_FROM_QT4_MAC) // <------------------------------------------------------ MAC
     // Cocoa Mask stuff
     QImage maskBits;
     CGImageRef imageMask;
@@ -274,7 +271,7 @@ struct QWExtra {
 /*!
     \internal
 
-    Returns true if \a p or any of its parents enable the
+    Returns \c true if \a p or any of its parents enable the
     Qt::BypassGraphicsProxyWidget window flag. Used in QWidget::show() and
     QWidget::setParent() to determine whether it's necessary to embed the
     widget into a QGraphicsProxyWidget or not.
@@ -323,6 +320,8 @@ public:
     explicit QWidgetPrivate(int version = QObjectPrivateVersion);
     ~QWidgetPrivate();
 
+    static QWidgetPrivate *get(QWidget *w) { return w->d_func(); }
+
     QWExtra *extraData() const;
     QTLWExtra *topData() const;
     QTLWExtra *maybeTopData() const;
@@ -359,7 +358,7 @@ public:
 
     void updateFont(const QFont &);
     inline void setFont_helper(const QFont &font) {
-        if (data.fnt == font && data.fnt.resolve() == font.resolve())
+        if (data.fnt.resolve() == font.resolve() && data.fnt == font)
             return;
         updateFont(font);
     }
@@ -383,9 +382,10 @@ public:
     void render_helper(QPainter *painter, const QPoint &targetOffset, const QRegion &sourceRegion,
                        QWidget::RenderFlags renderFlags);
     void render(QPaintDevice *target, const QPoint &targetOffset, const QRegion &sourceRegion,
-                QWidget::RenderFlags renderFlags, bool readyToRender);
+                QWidget::RenderFlags renderFlags);
     void drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QPoint &offset, int flags,
                     QPainter *sharedPainter = 0, QWidgetBackingStore *backingStore = 0);
+    void sendPaintEvent(const QRegion &toBePainted);
 
 
     void paintSiblingsRecursive(QPaintDevice *pdev, const QObjectList& children, int index,
@@ -437,7 +437,7 @@ public:
     void syncBackingStore(const QRegion &region);
 
     // tells the input method about the widgets transform
-    void updateWidgetTransform();
+    void updateWidgetTransform(QEvent *event);
 
     void reparentFocusWidgets(QWidget *oldtlw);
 
@@ -488,13 +488,14 @@ public:
     void setWindowTitle_helper(const QString &cap);
     void setWindowFilePath_helper(const QString &filePath);
     void setWindowModified_helper();
+    virtual void setWindowFlags(Qt::WindowFlags windowFlags);
 
     bool setMinimumSize_helper(int &minw, int &minh);
     bool setMaximumSize_helper(int &maxw, int &maxh);
     void setConstraints_sys();
     bool pointInsideRectAndMask(const QPoint &) const;
     QWidget *childAt_helper(const QPoint &, bool) const;
-    QWidget *childAtRecursiveHelper(const QPoint &p, bool, bool includeFrame = false) const;
+    QWidget *childAtRecursiveHelper(const QPoint &p, bool) const;
     void updateGeometry_helper(bool forceUpdate);
 
     void getLayoutItemMargins(int *left, int *top, int *right, int *bottom) const;
@@ -536,6 +537,8 @@ public:
                 }
             }
         }
+#else
+        Q_UNUSED(widget);
 #endif
         return screen;
     }
@@ -595,12 +598,12 @@ public:
             QStyle::RequestSoftwareInputPanel behavior = QStyle::RequestSoftwareInputPanel(
                     q->style()->styleHint(QStyle::SH_RequestSoftwareInputPanel));
             if (!clickCausedFocus || behavior == QStyle::RSIP_OnMouseClick) {
-                qApp->inputMethod()->show();
+                QGuiApplication::inputMethod()->show();
             }
         }
     }
 
-    void setWSGeometry(bool dontShow=false, const QRect &oldRect = QRect());
+    void setWSGeometry();
 
     inline QPoint mapToWS(const QPoint &p) const
     { return p - data.wrect.topLeft(); }
@@ -609,10 +612,48 @@ public:
     { return p + data.wrect.topLeft(); }
 
     inline QRect mapToWS(const QRect &r) const
-    { QRect rr(r); rr.translate(-data.wrect.topLeft()); return rr; }
+    { return r.translated(-data.wrect.topLeft()); }
 
     inline QRect mapFromWS(const QRect &r) const
-    { QRect rr(r); rr.translate(data.wrect.topLeft()); return rr; }
+    { return r.translated(data.wrect.topLeft()); }
+
+    QOpenGLContext *shareContext() const;
+
+    virtual QObject *focusObject() { return 0; }
+
+#ifndef QT_NO_OPENGL
+    virtual GLuint textureId() const { return 0; }
+    virtual QImage grabFramebuffer() { return QImage(); }
+    virtual void beginBackingStorePainting() { }
+    virtual void endBackingStorePainting() { }
+    virtual void beginCompose() { }
+    virtual void endCompose() { }
+    void setRenderToTexture() { renderToTexture = true; setTextureChildSeen(); }
+    void setTextureChildSeen()
+    {
+        Q_Q(QWidget);
+        if (textureChildSeen)
+            return;
+        textureChildSeen = 1;
+
+        if (!q->isWindow()) {
+            QWidget *parent = q->parentWidget();
+            if (parent)
+                get(parent)->setTextureChildSeen();
+        }
+    }
+    static void sendComposeStatus(QWidget *w, bool end);
+    // Called on setViewport().
+    virtual void initializeViewportFramebuffer() { }
+    // When using a QOpenGLWidget as viewport with QAbstractScrollArea, resize events are
+    // filtered away from the widget. This is fine for QGLWidget but bad for QOpenGLWidget
+    // since the fbo must be resized. We need an alternative way to notify.
+    virtual void resizeViewportFramebuffer() { }
+    // Called after each paint event.
+    virtual void resolveSamples() { }
+#endif
+
+    static void setWidgetParentHelper(QObject *widgetAsObject, QObject *newParent);
 
     // Variables.
     // Regular pointers (keep them together to avoid gaps on 64 bit architectures).
@@ -644,6 +685,7 @@ public:
     QRegion dirty;
 #ifndef QT_NO_TOOLTIP
     QString toolTip;
+    int toolTipDuration;
 #endif
 #ifndef QT_NO_STATUSTIP
     QString statusTip;
@@ -687,19 +729,23 @@ public:
     QPalette::ColorRole bg_role : 8;
     uint dirtyOpaqueChildren : 1;
     uint isOpaque : 1;
+    uint retainSizeWhenHiddenChanged : 1;
     uint inDirtyList : 1;
     uint isScrolled : 1;
     uint isMoved : 1;
     uint usesDoubleBufferedGLContext : 1;
+    uint mustHaveWindowHandle : 1;
+    uint renderToTexture : 1;
+    uint textureChildSeen : 1;
 #ifndef QT_NO_IM
     uint inheritsInputMethodHints : 1;
 #endif
 
     // *************************** Platform specific ************************************
 #if defined(Q_OS_WIN)
-    uint noPaintOnScreen : 1; // see qwidget_qpa.cpp ::paintEngine()
+    uint noPaintOnScreen : 1; // see qwidget.cpp ::paintEngine()
 #endif
-#if defined(Q_WS_X11) // <----------------------------------------------------------- X11
+#if defined(Q_DEAD_CODE_FROM_QT4_X11) // <----------------------------------------------------------- X11
     Qt::HANDLE picture;
     static QWidget *mouseGrabber;
     static QWidget *keyboardGrabber;
@@ -712,7 +758,7 @@ public:
     void updateX11AcceptFocus();
     QPoint mapToGlobal(const QPoint &pos) const;
     QPoint mapFromGlobal(const QPoint &pos) const;
-#elif defined(Q_WS_WIN) // <--------------------------------------------------------- WIN
+#elif defined(Q_DEAD_CODE_FROM_QT4_WIN) // <--------------------------------------------------------- WIN
 #ifndef QT_NO_GESTURES
     uint nativeGesturePanEnabled : 1;
 #endif
@@ -728,7 +774,7 @@ public:
     void winSetupGestures();
 #elif defined(Q_OS_MAC) // <--------------------------------------------------------- MAC
     void macUpdateSizeAttribute();
-#elif defined(Q_WS_MAC) // <--------------------------------------------------------- MAC (old stuff)
+#elif defined(Q_DEAD_CODE_FROM_QT4_MAC) // <--------------------------------------------------------- MAC (old stuff)
     // This is new stuff
     uint needWindowChange : 1;
 
@@ -776,7 +822,6 @@ public:
     void finishCreateWindow_sys_Cocoa(void * /*NSWindow * */ windowRef);
     void syncCocoaMask();
     void finishCocoaMaskSetup();
-    void syncUnifiedMode();
     // Did we add the drawRectOriginal method?
     bool drawRectOriginalAdded;
     // Is the original drawRect method available?
@@ -831,26 +876,26 @@ public:
         : QGraphicsEffectSourcePrivate(), m_widget(widget), context(0), updateDueToGraphicsEffect(false)
     {}
 
-    inline void detach()
+    void detach() Q_DECL_OVERRIDE
     { m_widget->d_func()->graphicsEffect = 0; }
 
-    inline const QGraphicsItem *graphicsItem() const
+    const QGraphicsItem *graphicsItem() const Q_DECL_OVERRIDE
     { return 0; }
 
-    inline const QWidget *widget() const
+    const QWidget *widget() const Q_DECL_OVERRIDE
     { return m_widget; }
 
-    inline void update()
+    void update() Q_DECL_OVERRIDE
     {
         updateDueToGraphicsEffect = true;
         m_widget->update();
         updateDueToGraphicsEffect = false;
     }
 
-    inline bool isPixmap() const
+    bool isPixmap() const Q_DECL_OVERRIDE
     { return false; }
 
-    inline void effectBoundingRectChanged()
+    void effectBoundingRectChanged() Q_DECL_OVERRIDE
     {
         // ### This function should take a rect parameter; then we can avoid
         // updating too much on the parent widget.
@@ -860,16 +905,16 @@ public:
             update();
     }
 
-    inline const QStyleOption *styleOption() const
+    const QStyleOption *styleOption() const Q_DECL_OVERRIDE
     { return 0; }
 
-    inline QRect deviceRect() const
+    QRect deviceRect() const Q_DECL_OVERRIDE
     { return m_widget->window()->rect(); }
 
-    QRectF boundingRect(Qt::CoordinateSystem system) const;
-    void draw(QPainter *p);
+    QRectF boundingRect(Qt::CoordinateSystem system) const Q_DECL_OVERRIDE;
+    void draw(QPainter *p) Q_DECL_OVERRIDE;
     QPixmap pixmap(Qt::CoordinateSystem system, QPoint *offset,
-                   QGraphicsEffect::PixmapPadMode mode) const;
+                   QGraphicsEffect::PixmapPadMode mode) const Q_DECL_OVERRIDE;
 
     QWidget *m_widget;
     QWidgetPaintContext *context;

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -48,6 +40,12 @@
 #include <private/qstylesheetstyle_p.h>
 
 #include "../../../qtest-config.h"
+
+static inline void centerOnScreen(QWidget *w)
+{
+    const QPoint offset = QPoint(w->width() / 2, w->height() / 2);
+    w->move(QGuiApplication::primaryScreen()->availableGeometry().center() - offset);
+}
 
 class tst_QStyleSheetStyle : public QObject
 {
@@ -99,7 +97,8 @@ private slots:
     void task232085_spinBoxLineEditBg();
     void changeStyleInChangeEvent();
     void QTBUG15910_crashNullWidget();
-
+    void QTBUG36933_brokenPseudoClassLookup();
+    void styleSheetChangeBeforePolish();
     //at the end because it mess with the style.
     void widgetStyle();
     void appStyle();
@@ -141,6 +140,8 @@ tst_QStyleSheetStyle::~tst_QStyleSheetStyle()
 void tst_QStyleSheetStyle::numinstances()
 {
     QWidget w;
+    w.resize(200, 200);
+    centerOnScreen(&w);
     QCommonStyle *style = new QCommonStyle;
     style->setParent(&w);
     QWidget c(&w);
@@ -530,7 +531,14 @@ void tst_QStyleSheetStyle::dynamicProperty()
     qApp->setStyleSheet(QString());
 
     QString appStyle = qApp->style()->metaObject()->className();
-    QPushButton pb1, pb2;
+    QPushButton pb1(QStringLiteral("dynamicProperty_pb1"));
+    pb1.setMinimumWidth(160);
+    pb1.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(20, 100));
+
+    QPushButton pb2(QStringLiteral("dynamicProperty_pb2"));
+    pb2.setMinimumWidth(160);
+    pb2.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(20, 200));
+
     pb1.setProperty("type", "critical");
     qApp->setStyleSheet("*[class~=\"QPushButton\"] { color: red; } *[type=\"critical\"] { background: white; }");
     QVERIFY(COLOR(pb1) == Qt::red);
@@ -674,6 +682,8 @@ void tst_QStyleSheetStyle::onWidgetDestroyed()
 void tst_QStyleSheetStyle::fontPrecedence()
 {
     QLineEdit edit;
+    edit.setMinimumWidth(200);
+    centerOnScreen(&edit);
     edit.show();
     QFont font;
     QVERIFY(FONTSIZE(edit) != 22); // Sanity check to make sure this test makes sense.
@@ -736,8 +746,9 @@ void tst_QStyleSheetStyle::focusColors()
     // ten pixels of the right color requires quite a many characters, as the
     // majority of the pixels will have slightly different colors due to the
     // anti-aliasing effect.
-#if !defined(Q_OS_WIN32) && !defined(Q_OS_MAC) && !(defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(Q_CC_INTEL))
-    QSKIP("This is a fragile test which fails on many esoteric platforms because of focus problems. "
+#if !defined(Q_OS_WIN32) && !(defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(Q_CC_INTEL))
+    QSKIP("This is a fragile test which fails on many esoteric platforms because of focus problems"
+          " (for example, QTBUG-33959)."
           "That doesn't mean that the feature doesn't work in practice.");
 #endif
     QList<QWidget *> widgets;
@@ -767,6 +778,7 @@ void tst_QStyleSheetStyle::focusColors()
         layout->addWidget(widget);
         frame.setLayout(layout);
 
+        centerOnScreen(&frame);
         frame.show();
         QApplication::setActiveWindow(&frame);
         QVERIFY(QTest::qWaitForWindowActive(&frame));
@@ -794,6 +806,9 @@ void tst_QStyleSheetStyle::focusColors()
 #ifndef QTEST_NO_CURSOR
 void tst_QStyleSheetStyle::hoverColors()
 {
+#ifdef Q_OS_OSX
+    QSKIP("This test is fragile on Mac, most likely due to QTBUG-33959.");
+#endif
     QList<QWidget *> widgets;
     widgets << new QPushButton("TESTING TESTING");
     widgets << new QLineEdit("TESTING TESTING");
@@ -821,31 +836,22 @@ void tst_QStyleSheetStyle::hoverColors()
         layout->addWidget(widget);
         frame.setLayout(layout);
 
+        centerOnScreen(&frame);
         frame.show();
 
         QApplication::setActiveWindow(&frame);
         QVERIFY(QTest::qWaitForWindowActive(&frame));
         //move the mouse inside the widget, it should be colored
         QTest::mouseMove ( widget, QPoint(6,6));
-        QTest::qWait(60);
 
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("", "Numerous failures related to Qt::WA_UnderMouse, see QTBUGT-23685", Continue);
-#endif
-        QVERIFY(widget->testAttribute(Qt::WA_UnderMouse));
+        QTRY_VERIFY(widget->testAttribute(Qt::WA_UnderMouse));
 
         QImage image(frame.width(), frame.height(), QImage::Format_ARGB32);
         frame.render(&image);
 
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("", "Numerous failures related to Qt::WA_UnderMouse, see QTBUGT-23685", Continue);
-#endif
         QVERIFY2(testForColors(image, QColor(0xe8, 0xff, 0x66)),
                   (QString::fromLatin1(widget->metaObject()->className())
                   + " did not contain background color #e8ff66").toLocal8Bit().constData());
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("", "Numerous failures related to Qt::WA_UnderMouse, see QTBUGT-23685", Continue);
-#endif
         QVERIFY2(testForColors(image, QColor(0xff, 0x00, 0x84)),
                  (QString::fromLatin1(widget->metaObject()->className())
                   + " did not contain text color #ff0084").toLocal8Bit().constData());
@@ -865,9 +871,7 @@ void tst_QStyleSheetStyle::hoverColors()
 
         //move the mouse again inside the widget, it should be colored
         QTest::mouseMove (widget, QPoint(5,5));
-        QTest::qWait(60);
-
-        QVERIFY(widget->testAttribute(Qt::WA_UnderMouse));
+        QTRY_VERIFY(widget->testAttribute(Qt::WA_UnderMouse));
 
         frame.render(&image);
 
@@ -903,35 +907,47 @@ public:
 
 void tst_QStyleSheetStyle::background()
 {
-    const int number = 4;
-    QWidget* widgets[number];
+    typedef QSharedPointer<QWidget> WidgetPtr;
+
+    const QString styleSheet = QStringLiteral("* { background-color: #e8ff66; }");
+    QVector<WidgetPtr> widgets;
+    const QPoint topLeft = QGuiApplication::primaryScreen()->availableGeometry().topLeft();
     // Testing inheritance styling of QDialog.
-    widgets[0] = new SingleInheritanceDialog;
-    widgets[0]->setStyleSheet("* { background-color: #e8ff66; }");
-    widgets[1] = new DoubleInheritanceDialog;
-    widgets[1]->setStyleSheet("* { background-color: #e8ff66; }");
+    WidgetPtr toplevel(new SingleInheritanceDialog);
+    toplevel->resize(200, 200);
+    toplevel->move(topLeft + QPoint(20, 20));
+    toplevel->setStyleSheet(styleSheet);
+    widgets.append(toplevel);
+
+    toplevel = WidgetPtr(new DoubleInheritanceDialog);
+    toplevel->resize(200, 200);
+    toplevel->move(topLeft + QPoint(20, 320));
+    toplevel->setStyleSheet(styleSheet);
+    widgets.append(toplevel);
 
     // Testing gradients in QComboBox.
-    QLayout* layout;
-    QComboBox* cb;
     // First color
-    widgets[2] = new QDialog;
-    layout = new QGridLayout;
-    cb = new QComboBox;
+    toplevel = WidgetPtr(new QDialog);
+    toplevel->move(topLeft + QPoint(320, 20));
+    QGridLayout *layout = new QGridLayout(toplevel.data());
+    QComboBox* cb = new QComboBox;
+    cb->setMinimumWidth(160);
     cb->setStyleSheet("* { background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop:0 #e8ff66, stop:1 #000000); }");
-    layout->addWidget(cb);
-    widgets[2]->setLayout(layout);
+    layout->addWidget(cb, 0, 0);
+    widgets.append(toplevel);
     // Second color
-    widgets[3] = new QDialog;
-    layout = new QGridLayout;
+    toplevel = WidgetPtr(new QDialog);
+    toplevel->move(topLeft + QPoint(320, 320));
+    layout = new QGridLayout(toplevel.data());
     cb = new QComboBox;
+    cb->setMinimumWidth(160);
     cb->setStyleSheet("* { background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop:0 #e8ff66, stop:1 #000000); }");
-    layout->addWidget(cb);
-    widgets[3]->setLayout(layout);
+    layout->addWidget(cb, 0, 0);
+    widgets.append(toplevel);
 
-    for (int c = 0; c < number; ++c) {
-        QWidget* widget = widgets[c];
-
+    for (int c = 0; c < widgets.size(); ++c) {
+        QWidget *widget = widgets.at(c).data();
+        widget->setWindowTitle(QStringLiteral("background ") + QString::number(c));
         widget->show();
         QVERIFY(QTest::qWaitForWindowExposed(widget));
 
@@ -940,12 +956,15 @@ void tst_QStyleSheetStyle::background()
         if (image.depth() < 24)
             QSKIP("Test doesn't support color depth < 24");
 
+        if (c == 2 && !QApplication::style()->objectName().compare(QLatin1String("fusion"), Qt::CaseInsensitive))
+            QEXPECT_FAIL("", "QTBUG-21468", Abort);
+
         QVERIFY2(testForColors(image, QColor(0xe8, 0xff, 0x66)),
-                (QString::fromLatin1(widget->metaObject()->className())
+                (QString::number(c) + QLatin1Char(' ') + QString::fromLatin1(widget->metaObject()->className())
                 + " did not contain background image with color #e8ff66")
                 .toLocal8Bit().constData());
 
-        delete widget;
+        widget->hide();
     }
 }
 
@@ -955,6 +974,7 @@ void tst_QStyleSheetStyle::tabAlignement()
     QTabWidget tabWidget(&topLevel);
     tabWidget.addTab(new QLabel("tab1"),"tab1");
     tabWidget.resize(QSize(400,400));
+    centerOnScreen(&topLevel);
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
     QTabBar *bar = tabWidget.findChild<QTabBar*>();
@@ -1022,6 +1042,7 @@ void tst_QStyleSheetStyle::minmaxSizes()
 
     tabWidget.setStyleSheet("QTabBar::tab { min-width:100px; max-width:130px; }");
 
+    centerOnScreen(&tabWidget);
     tabWidget.show();
     QTest::qWait(50);
     //i allow 4px additional border from the native style (hence the -2, <=2)
@@ -1049,6 +1070,7 @@ void tst_QStyleSheetStyle::task206238_twice()
     tw->addTab(new QLabel("foo"), "test");
     w.setCentralWidget(tw);
     w.setStyleSheet("background: red;");
+    centerOnScreen(&w);
     w.show();
     QTest::qWait(20);
     QCOMPARE(BACKGROUND(w) , QColor("red"));
@@ -1218,6 +1240,8 @@ void tst_QStyleSheetStyle::proxyStyle()
     QString styleSheet("QPushButton {background-color: red; }");
 
     QWidget *w = new QWidget;
+    w->setMinimumWidth(160);
+    centerOnScreen(w);
     QVBoxLayout *layout = new QVBoxLayout(w);
 
     QPushButton *pb1 = new QPushButton(qApp->style()->objectName(), w);
@@ -1293,6 +1317,7 @@ void tst_QStyleSheetStyle::emptyStyleSheet()
     layout.addWidget(new QDateEdit(&w));
     layout.addWidget(new QGroupBox("some text", &w));
 
+    centerOnScreen(&w);
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
     //workaround the fact that the label sizehint is one pixel different the first time.
@@ -1314,13 +1339,30 @@ void tst_QStyleSheetStyle::emptyStyleSheet()
         img2.save("emptyStyleSheet_img2.png");
     }
 
+    QEXPECT_FAIL("", "QTBUG-21468", Abort);
     QCOMPARE(img1,img2);
 }
+
+class ApplicationStyleSetter
+{
+public:
+    explicit inline ApplicationStyleSetter(QStyle *s) : m_oldStyleName(QApplication::style()->objectName())
+     { QApplication::setStyle(s); }
+    inline ~ApplicationStyleSetter()
+     { QApplication::setStyle(QStyleFactory::create(m_oldStyleName)); }
+
+private:
+    const QString m_oldStyleName;
+};
 
 void tst_QStyleSheetStyle::toolTip()
 {
     qApp->setStyleSheet(QString());
     QWidget w;
+    // Use "Fusion" to prevent the Vista style from clobbering the tooltip palette in polish().
+    QStyle *fusionStyle = QStyleFactory::create(QLatin1String("Fusion"));
+    QVERIFY(fusionStyle);
+    ApplicationStyleSetter as(fusionStyle);
     QHBoxLayout layout(&w);
     w.setLayout(&layout);
 
@@ -1348,11 +1390,12 @@ void tst_QStyleSheetStyle::toolTip()
     wid4->setToolTip("this is wid4");
     wid4->setObjectName("wid4");
 
+    centerOnScreen(&w);
     w.show();
     qApp->setActiveWindow(&w);
     QVERIFY(QTest::qWaitForWindowActive(&w));
 
-    QColor normalToolTip = qApp->palette().toolTipBase().color();
+    const QColor normalToolTip = QToolTip::palette().color(QPalette::Inactive, QPalette::ToolTipBase);
     QList<QWidget *> widgets;
     QList<QColor> colors;
 
@@ -1371,12 +1414,13 @@ void tst_QStyleSheetStyle::toolTip()
 
         QWidget *tooltip = 0;
         foreach (QWidget *widget, QApplication::topLevelWidgets()) {
-            if (widget->inherits("QTipLabel") && widget->isVisible()) {
+            if (widget->inherits("QTipLabel")) {
                 tooltip = widget;
                 break;
             }
         }
         QVERIFY(tooltip);
+        QTRY_VERIFY(tooltip->isVisible()); // Wait until Roll-Effect is finished (Windows Vista)
         QCOMPARE(tooltip->palette().color(tooltip->backgroundRole()), col);
     }
 
@@ -1393,6 +1437,8 @@ void tst_QStyleSheetStyle::embeddedFonts()
 {
     //task 235622 and 210551
     QSpinBox spin;
+    spin.setMinimumWidth(160);
+    spin.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(20, 20));
     spin.show();
     spin.setStyleSheet("QSpinBox { font-size: 32px; }");
     QTest::qWait(20);
@@ -1410,6 +1456,8 @@ void tst_QStyleSheetStyle::embeddedFonts()
 
     //task 242556
     QComboBox box;
+    box.setMinimumWidth(160);
+    box.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(20, 120));
     box.setEditable(true);
     box.addItems(QStringList() << "First" << "Second" << "Third");
     box.setStyleSheet("QComboBox { font-size: 32px; }");
@@ -1482,6 +1530,7 @@ void tst_QStyleSheetStyle::complexWidgetFocus()
         layout->addWidget(widget);
     frame.setLayout(layout);
 
+    centerOnScreen(&frame);
     frame.show();
     QApplication::setActiveWindow(&frame);
     QVERIFY(QTest::qWaitForWindowActive(&frame));
@@ -1506,6 +1555,7 @@ void tst_QStyleSheetStyle::task188195_baseBackground()
 {
     QTreeView tree;
     tree.setStyleSheet( "QTreeView:disabled { background-color:#ab1251; }" );
+    tree.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(20, 100));
     tree.show();
     QTest::qWait(20);
     QImage image(tree.width(), tree.height(), QImage::Format_ARGB32);
@@ -1526,6 +1576,7 @@ void tst_QStyleSheetStyle::task188195_baseBackground()
     QTableWidget table(12, 12);
     table.setItem(0, 0, new QTableWidgetItem());
     table.setStyleSheet( "QTableView {background-color: #ff0000}" );
+    table.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(300, 100));
     table.show();
     QTest::qWait(20);
     image = QImage(table.width(), table.height(), QImage::Format_ARGB32);
@@ -1559,6 +1610,7 @@ void tst_QStyleSheetStyle::task232085_spinBoxLineEditBg()
     layout->addWidget(spinbox);
     frame.setLayout(layout);
 
+    centerOnScreen(&frame);
     frame.show();
     QApplication::setActiveWindow(&frame);
     spinbox->setFocus();
@@ -1618,6 +1670,7 @@ void tst_QStyleSheetStyle::QTBUG11658_cachecrash()
         Widget(QWidget *parent = 0)
         : QWidget(parent)
         {
+            setMinimumWidth(160);
             QVBoxLayout* pLayout = new QVBoxLayout(this);
             QCheckBox* pCheckBox = new QCheckBox(this);
             pLayout->addWidget(pCheckBox);
@@ -1632,6 +1685,7 @@ void tst_QStyleSheetStyle::QTBUG11658_cachecrash()
     Widget *w = new Widget();
     delete w;
     w = new Widget();
+    centerOnScreen(w);
     w->show();
 
     QVERIFY(QTest::qWaitForWindowExposed(w));
@@ -1652,10 +1706,69 @@ void tst_QStyleSheetStyle::QTBUG15910_crashNullWidget()
         }
     } w;
     w.setStyleSheet("* { background-color: white; color:black; border 3px solid yellow }");
+    w.setMinimumWidth(160);
+    centerOnScreen(&w);
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
 }
 
+void tst_QStyleSheetStyle::QTBUG36933_brokenPseudoClassLookup()
+{
+    const int rowCount = 10;
+    const int columnCount = 10;
+
+    QTableWidget widget(rowCount, columnCount);
+
+    for (int row = 0; row < rowCount; ++row) {
+        for (int column = 0; column < columnCount; ++column)
+            widget.setItem(row, column, new QTableWidgetItem(QStringLiteral("row %1 column %2").arg(row + 1).arg(column + 1)));
+
+        // put no visible text for the vertical headers, but still put some text or they will collapse
+        widget.setVerticalHeaderItem(row, new QTableWidgetItem(QStringLiteral("    ")));
+    }
+
+    // parsing of this stylesheet must not crash, and it must be correctly applied
+    widget.setStyleSheet(QStringLiteral("QHeaderView::section:vertical { background-color: #FF0000 }"));
+
+    centerOnScreen(&widget);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+    widget.activateWindow();
+    QApplication::setActiveWindow(&widget);
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    QHeaderView *verticalHeader = widget.verticalHeader();
+    QImage image(verticalHeader->size(), QImage::Format_ARGB32);
+    verticalHeader->render(&image);
+    if (!QApplication::style()->objectName().compare(QLatin1String("fusion"), Qt::CaseInsensitive))
+        QEXPECT_FAIL("", "QTBUG-21468", Abort);
+    QVERIFY(testForColors(image, QColor(0xFF, 0x00, 0x00)));
+}
+
+void tst_QStyleSheetStyle::styleSheetChangeBeforePolish()
+{
+    QWidget widget;
+    QVBoxLayout *vbox = new QVBoxLayout(&widget);
+    QFrame *frame = new QFrame(&widget);
+    frame->setFixedSize(200, 200);
+    frame->setStyleSheet("background-color: #FF0000;");
+    frame->setStyleSheet("background-color: #00FF00;");
+    vbox->addWidget(frame);
+    QFrame *frame2 = new QFrame(&widget);
+    frame2->setFixedSize(200, 200);
+    frame2->setStyleSheet("background-color: #FF0000;");
+    frame2->setStyleSheet("background-color: #00FF00;");
+    vbox->addWidget(frame);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    QImage image(frame->size(), QImage::Format_ARGB32);
+    frame->render(&image);
+    QVERIFY(testForColors(image, QColor(0x00, 0xFF, 0x00)));
+    QImage image2(frame2->size(), QImage::Format_ARGB32);
+    frame2->render(&image2);
+    QVERIFY(testForColors(image2, QColor(0x00, 0xFF, 0x00)));
+}
 
 QTEST_MAIN(tst_QStyleSheetStyle)
 #include "tst_qstylesheetstyle.moc"

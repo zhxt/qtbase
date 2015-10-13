@@ -1,39 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -62,6 +55,7 @@
 #include <qsharedpointer.h>
 
 #include <private/qorderedmutexlocker_p.h>
+#include <private/qhooks_p.h>
 
 #include <new>
 
@@ -137,6 +131,7 @@ static inline QMutex *signalSlotLock(const QObject *o)
         uint(quintptr(o)) % sizeof(_q_ObjectMutexPool)/sizeof(QBasicMutex)]);
 }
 
+// ### Qt >= 5.6, remove qt_add/removeObject
 extern "C" Q_CORE_EXPORT void qt_addObject(QObject *)
 {}
 
@@ -177,10 +172,12 @@ private:
 
 
 void (*QAbstractDeclarativeData::destroyed)(QAbstractDeclarativeData *, QObject *) = 0;
+void (*QAbstractDeclarativeData::destroyed_qml1)(QAbstractDeclarativeData *, QObject *) = 0;
 void (*QAbstractDeclarativeData::parentChanged)(QAbstractDeclarativeData *, QObject *, QObject *) = 0;
 void (*QAbstractDeclarativeData::signalEmitted)(QAbstractDeclarativeData *, QObject *, int, void **) = 0;
 int  (*QAbstractDeclarativeData::receivers)(QAbstractDeclarativeData *, const QObject *, int) = 0;
 bool (*QAbstractDeclarativeData::isSignalConnected)(QAbstractDeclarativeData *, const QObject *, int) = 0;
+void (*QAbstractDeclarativeData::setWidgetParent)(QObject *, QObject *) = 0;
 
 QObjectData::~QObjectData() {}
 
@@ -192,9 +189,15 @@ QMetaObject *QObjectData::dynamicMetaObject() const
 QObjectPrivate::QObjectPrivate(int version)
     : threadData(0), connectionLists(0), senders(0), currentSender(0), currentChildBeingDeleted(0)
 {
+#ifdef QT_BUILD_INTERNAL
+    // Don't check the version parameter in internal builds.
+    // This allows incompatible versions to be loaded, possibly for testing.
+    Q_UNUSED(version);
+#else
     if (version != QObjectPrivateVersion)
         qFatal("Cannot mix incompatible Qt library (version 0x%x) with this library (version 0x%x)",
                 version, QObjectPrivateVersion);
+#endif
 
     // QObjectData initialization
     q_ptr = 0;
@@ -215,13 +218,17 @@ QObjectPrivate::QObjectPrivate(int version)
 QObjectPrivate::~QObjectPrivate()
 {
     if (extraData && !extraData->runningTimers.isEmpty()) {
-        // unregister pending timers
-        if (threadData->eventDispatcher.load())
-            threadData->eventDispatcher.load()->unregisterTimers(q_ptr);
+        if (Q_LIKELY(threadData->thread == QThread::currentThread())) {
+            // unregister pending timers
+            if (threadData->eventDispatcher.load())
+                threadData->eventDispatcher.load()->unregisterTimers(q_ptr);
 
-        // release the timer ids back to the pool
-        for (int i = 0; i < extraData->runningTimers.size(); ++i)
-            QAbstractEventDispatcherPrivate::releaseTimerId(extraData->runningTimers.at(i));
+            // release the timer ids back to the pool
+            for (int i = 0; i < extraData->runningTimers.size(); ++i)
+                QAbstractEventDispatcherPrivate::releaseTimerId(extraData->runningTimers.at(i));
+        } else {
+            qWarning("QObject::~QObject: Timers cannot be stopped from another thread");
+        }
     }
 
     if (postedEvents)
@@ -483,6 +490,100 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
 }
 
 /*!
+    \class QSignalBlocker
+    \brief Exception-safe wrapper around QObject::blockSignals()
+    \since 5.3
+    \ingroup objectmodel
+
+    \reentrant
+
+    QSignalBlocker can be used whereever you would otherwise use a
+    pair of calls to blockSignals(). It blocks signals in its
+    constructor and in the destructor it resets the state to what
+    it was before the constructor ran.
+
+    \code
+    {
+    const QSignalBlocker blocker(someQObject);
+    // no signals here
+    }
+    \endcode
+    is thus equivalent to
+    \code
+    const bool wasBlocked = someQObject->blockSignals(true);
+    // no signals here
+    someQObject->blockSignals(wasBlocked);
+    \endcode
+
+    except the code using QSignalBlocker is safe in the face of
+    exceptions.
+
+    \sa QMutexLocker, QEventLoopLocker
+*/
+
+/*!
+    \fn QSignalBlocker::QSignalBlocker(QObject *object)
+
+    Constructor. Calls \a{object}->blockSignals(true).
+*/
+
+/*!
+    \fn QSignalBlocker::QSignalBlocker(QObject &object)
+    \overload
+
+    Calls \a{object}.blockSignals(true).
+*/
+
+/*!
+    \fn QSignalBlocker::QSignalBlocker(QSignalBlocker &&other)
+
+    Move-constructs a signal blocker from \a other. \a other will have
+    a no-op destructor, while repsonsibility for restoring the
+    QObject::signalsBlocked() state is transferred to the new object.
+*/
+
+/*!
+    \fn QSignalBlocker &QSignalBlocker::operator=(QSignalBlocker &&other)
+
+    Move-assigns this signal blocker from \a other. \a other will have
+    a no-op destructor, while repsonsibility for restoring the
+    QObject::signalsBlocked() state is transferred to this object.
+
+    The object's signals this signal blocker was blocking prior to
+    being moved to, if any, are unblocked \e except in the case where
+    both instances block the same object's signals and \c *this is
+    unblocked while \a other is not, at the time of the move.
+*/
+
+/*!
+    \fn QSignalBlocker::~QSignalBlocker()
+
+    Destructor. Restores the QObject::signalsBlocked() state to what it
+    was before the constructor ran, unless unblock() has been called
+    without a following reblock(), in which case it does nothing.
+*/
+
+/*!
+    \fn void QSignalBlocker::reblock()
+
+    Re-blocks signals after a previous unblock().
+
+    The numbers of reblock() and unblock() calls are not counted, so
+    every reblock() undoes any number of unblock() calls.
+*/
+
+/*!
+    \fn void QSignalBlocker::unblock()
+
+    Temporarily restores the QObject::signalsBlocked() state to what
+    it was before this QSignaBlocker's constructor ran. To undo, use
+    reblock().
+
+    The numbers of reblock() and unblock() calls are not counted, so
+    every unblock() undoes any number of reblock() calls.
+*/
+
+/*!
     \class QObject
     \inmodule QtCore
     \brief The QObject class is the base class of all Qt objects.
@@ -522,13 +623,6 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
     details. A convenience handler, childEvent(), can be reimplemented
     to catch child events.
 
-    Events are delivered in the thread in which the object was
-    created; see \l{Thread Support in Qt} and thread() for details.
-    Note that event processing is not done at all for QObjects with no
-    thread affinity (thread() returns zero). Use the moveToThread()
-    function to change the thread affinity for an object and its
-    children (the object cannot be moved if it has a parent).
-
     Last but not least, QObject provides the basic timer support in
     Qt; see QTimer for high-level support for timers.
 
@@ -549,8 +643,43 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
     Some QObject functions, e.g. children(), return a QObjectList.
     QObjectList is a typedef for QList<QObject *>.
 
+    \section1 Thread Affinity
+
+    A QObject instance is said to have a \e{thread affinity}, or that
+    it \e{lives} in a certain thread. When a QObject receives a
+    \l{Qt::QueuedConnection}{queued signal} or a \l{The Event
+    System#Sending Events}{posted event}, the slot or event handler
+    will run in the thread that the object lives in.
+
+    \note If a QObject has no thread affinity (that is, if thread()
+    returns zero), or if it lives in a thread that has no running event
+    loop, then it cannot receive queued signals or posted events.
+
+    By default, a QObject lives in the thread in which it is created.
+    An object's thread affinity can be queried using thread() and
+    changed using moveToThread().
+
+    All QObjects must live in the same thread as their parent. Consequently:
+
+    \list
+    \li setParent() will fail if the two QObjects involved live in
+        different threads.
+    \li When a QObject is moved to another thread, all its children
+        will be automatically moved too.
+    \li moveToThread() will fail if the QObject has a parent.
+    \li If QObjects are created within QThread::run(), they cannot
+        become children of the QThread object because the QThread does
+        not live in the thread that calls QThread::run().
+    \endlist
+
+    \note A QObject's member variables \e{do not} automatically become
+    its children. The parent-child relationship must be set by either
+    passing a pointer to the child's \l{QObject()}{constructor}, or by
+    calling setParent(). Without this step, the object's member variables
+    will remain in the old thread when moveToThread() is called.
+
     \target No copy constructor
-    \section1 No copy constructor or assignment operator
+    \section1 No Copy Constructor or Assignment Operator
 
     QObject has neither a copy constructor nor an assignment operator.
     This is by design. Actually, they are declared, but in a
@@ -595,7 +724,7 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
     and both standard Qt widgets and user-created forms can be given dynamic
     properties.
 
-    \section1 Internationalization (i18n)
+    \section1 Internationalization (I18n)
 
     All QObject subclasses support Qt's translation features, making it possible
     to translate an application's user interface into different languages.
@@ -690,6 +819,8 @@ QObject::QObject(QObject *parent)
         }
     }
     qt_addObject(this);
+    if (Q_UNLIKELY(qtHookData[QHooks::AddQObject]))
+        reinterpret_cast<QHooks::AddQObjectCallback>(qtHookData[QHooks::AddQObject])(this);
 }
 
 /*!
@@ -721,6 +852,8 @@ QObject::QObject(QObjectPrivate &dd, QObject *parent)
         }
     }
     qt_addObject(this);
+    if (Q_UNLIKELY(qtHookData[QHooks::AddQObject]))
+        reinterpret_cast<QHooks::AddQObjectCallback>(qtHookData[QHooks::AddQObject])(this);
 }
 
 /*!
@@ -767,18 +900,18 @@ QObject::~QObject()
     }
 
     if (!d->isWidget && d->isSignalConnected(0)) {
-        QT_TRY {
-            emit destroyed(this);
-        } QT_CATCH(...) {
-            // all the signal/slots connections are still in place - if we don't
-            // quit now, we will crash pretty soon.
-            qWarning("Detected an unexpected exception in ~QObject while emitting destroyed().");
-            QT_RETHROW;
-        }
+        emit destroyed(this);
     }
 
-    if (d->declarativeData)
-        QAbstractDeclarativeData::destroyed(d->declarativeData, this);
+    if (d->declarativeData) {
+        if (static_cast<QAbstractDeclarativeDataImpl*>(d->declarativeData)->ownedByQml1) {
+            if (QAbstractDeclarativeData::destroyed_qml1)
+                QAbstractDeclarativeData::destroyed_qml1(d->declarativeData, this);
+        } else {
+            if (QAbstractDeclarativeData::destroyed)
+                QAbstractDeclarativeData::destroyed(d->declarativeData, this);
+        }
+    }
 
     // set ref to zero to indicate that this object has been deleted
     if (d->currentSender != 0)
@@ -816,6 +949,14 @@ QObject::~QObject()
                         m->unlock();
 
                     connectionList.first = c->nextConnectionList;
+
+                    // The destroy operation must happen outside the lock
+                    if (c->isSlotObject) {
+                        c->isSlotObject = false;
+                        locker.unlock();
+                        c->slotObj->destroyIfLastRef();
+                        locker.relock();
+                    }
                     c->deref();
                 }
             }
@@ -828,15 +969,29 @@ QObject::~QObject()
             d->connectionLists = 0;
         }
 
-        // disconnect all senders
+        /* Disconnect all senders:
+         * This loop basically just does
+         *     for (node = d->senders; node; node = node->next) { ... }
+         *
+         * We need to temporarily unlock the receiver mutex to destroy the functors or to lock the
+         * sender's mutex. And when the mutex is released, node->next might be destroyed by another
+         * thread. That's why we set node->prev to &node, that way, if node is destroyed, node will
+         * be updated.
+         */
         QObjectPrivate::Connection *node = d->senders;
         while (node) {
             QObject *sender = node->sender;
+            // Send disconnectNotify before removing the connection from sender's connection list.
+            // This ensures any eventual destructor of sender will block on getting receiver's lock
+            // and not finish until we release it.
+            sender->disconnectNotify(QMetaObjectPrivate::signal(sender->metaObject(), node->signal_index));
             QMutex *m = signalSlotLock(sender);
             node->prev = &node;
             bool needToUnlock = QOrderedMutexLocker::relock(signalSlotMutex, m);
             //the node has maybe been removed while the mutex was unlocked in relock?
             if (!node || node->sender != sender) {
+                // We hold the wrong mutex
+                Q_ASSERT(needToUnlock);
                 m->unlock();
                 continue;
             }
@@ -845,11 +1000,23 @@ QObject::~QObject()
             if (senderLists)
                 senderLists->dirty = true;
 
-            int signal_index = node->signal_index;
+            QtPrivate::QSlotObjectBase *slotObj = Q_NULLPTR;
+            if (node->isSlotObject) {
+                slotObj = node->slotObj;
+                node->isSlotObject = false;
+            }
+
             node = node->next;
             if (needToUnlock)
                 m->unlock();
-            sender->disconnectNotify(QMetaObjectPrivate::signal(sender->metaObject(), signal_index));
+
+            if (slotObj) {
+                if (node)
+                    node->prev = &node;
+                locker.unlock();
+                slotObj->destroyIfLastRef();
+                locker.relock();
+            }
         }
     }
 
@@ -857,6 +1024,8 @@ QObject::~QObject()
         d->deleteChildren();
 
     qt_removeObject(this);
+    if (Q_UNLIKELY(qtHookData[QHooks::RemoveQObject]))
+        reinterpret_cast<QHooks::RemoveQObjectCallback>(qtHookData[QHooks::RemoveQObject])(this);
 
     if (d->parent)        // remove it from parent object
         d->setParent_helper(0);
@@ -955,9 +1124,9 @@ QObjectPrivate::Connection::~Connection()
 /*!
     \fn bool QObject::inherits(const char *className) const
 
-    Returns true if this object is an instance of a class that
+    Returns \c true if this object is an instance of a class that
     inherits \a className or a QObject subclass that inherits \a
-    className; otherwise returns false.
+    className; otherwise returns \c false.
 
     A class is considered to inherit itself.
 
@@ -1018,7 +1187,7 @@ void QObject::setObjectName(const QString &name)
 /*!
     \fn bool QObject::isWidgetType() const
 
-    Returns true if the object is a widget; otherwise returns false.
+    Returns \c true if the object is a widget; otherwise returns \c false.
 
     Calling this function is equivalent to calling
     \c{inherits("QWidget")}, except that it is much faster.
@@ -1027,7 +1196,7 @@ void QObject::setObjectName(const QString &name)
 /*!
     \fn bool QObject::isWindowType() const
 
-    Returns true if the object is a window; otherwise returns false.
+    Returns \c true if the object is a window; otherwise returns \c false.
 
     Calling this function is equivalent to calling
     \c{inherits("QWindow")}, except that it is much faster.
@@ -1122,7 +1291,7 @@ void QObject::timerEvent(QTimerEvent *)
     QEvent::ChildAdded and QEvent::ChildRemoved events are sent to
     objects when children are added or removed. In both cases you can
     only rely on the child being a QObject, or if isWidgetType()
-    returns true, a QWidget. (This is because, in the
+    returns \c true, a QWidget. (This is because, in the
     \l{QEvent::ChildAdded}{ChildAdded} case, the child is not yet
     fully constructed, and in the \l{QEvent::ChildRemoved}{ChildRemoved}
     case it might have been destructed already).
@@ -1199,7 +1368,7 @@ bool QObject::eventFilter(QObject * /* watched */, QEvent * /* event */)
 /*!
     \fn bool QObject::signalsBlocked() const
 
-    Returns true if signals are blocked; otherwise returns false.
+    Returns \c true if signals are blocked; otherwise returns \c false.
 
     Signals are not blocked by default.
 
@@ -1216,10 +1385,12 @@ bool QObject::eventFilter(QObject * /* watched */, QEvent * /* event */)
     Note that the destroyed() signal will be emitted even if the signals
     for this object have been blocked.
 
+    Signals emitted while being blocked are not buffered.
+
     \sa signalsBlocked()
 */
 
-bool QObject::blockSignals(bool block)
+bool QObject::blockSignals(bool block) Q_DECL_NOTHROW
 {
     Q_D(QObject);
     bool previous = d->blockSig;
@@ -1290,17 +1461,17 @@ void QObject::moveToThread(QThread *targetThread)
     }
 
     QThreadData *currentData = QThreadData::current();
-    QThreadData *targetData = targetThread ? QThreadData::get2(targetThread) : new QThreadData(0);
+    QThreadData *targetData = targetThread ? QThreadData::get2(targetThread) : Q_NULLPTR;
     if (d->threadData->thread == 0 && currentData == targetData) {
         // one exception to the rule: we allow moving objects with no thread affinity to the current thread
         currentData = d->threadData;
     } else if (d->threadData != currentData) {
         qWarning("QObject::moveToThread: Current thread (%p) is not the object's thread (%p).\n"
                  "Cannot move to target thread (%p)\n",
-                 currentData->thread, d->threadData->thread, targetData->thread);
+                 currentData->thread.load(), d->threadData->thread.load(), targetData ? targetData->thread.load() : Q_NULLPTR);
 
 #ifdef Q_OS_MAC
-        qWarning("On Mac OS X, you might be loading two sets of Qt binaries into the same process. "
+        qWarning("You might be loading two sets of Qt binaries into the same process. "
                  "Check that all plugins are compiled against the right Qt binaries. Export "
                  "DYLD_PRINT_LIBRARIES=1 and check that only one set of binaries are being loaded.");
 #endif
@@ -1310,6 +1481,9 @@ void QObject::moveToThread(QThread *targetThread)
 
     // prepare to move
     d->moveToThread_helper();
+
+    if (!targetData)
+        targetData = new QThreadData(0);
 
     QOrderedMutexLocker locker(&currentData->postEventList.mutex,
                                &targetData->postEventList.mutex);
@@ -1433,13 +1607,16 @@ int QObject::startTimer(int interval, Qt::TimerType timerType)
 {
     Q_D(QObject);
 
-    if (interval < 0) {
-        qWarning("QObject::startTimer: QTimer cannot have a negative interval");
+    if (Q_UNLIKELY(interval < 0)) {
+        qWarning("QObject::startTimer: Timers cannot have negative intervals");
         return 0;
     }
-
-    if (!d->threadData->eventDispatcher.load()) {
-        qWarning("QObject::startTimer: QTimer can only be used with threads started with QThread");
+    if (Q_UNLIKELY(!d->threadData->eventDispatcher.load())) {
+        qWarning("QObject::startTimer: Timers can only be used with threads started with QThread");
+        return 0;
+    }
+    if (Q_UNLIKELY(thread() != QThread::currentThread())) {
+        qWarning("QObject::startTimer: Timers cannot be started from another thread");
         return 0;
     }
     int timerId = d->threadData->eventDispatcher.load()->registerTimer(interval, timerType, this);
@@ -1461,13 +1638,18 @@ int QObject::startTimer(int interval, Qt::TimerType timerType)
 void QObject::killTimer(int id)
 {
     Q_D(QObject);
+    if (Q_UNLIKELY(thread() != QThread::currentThread())) {
+        qWarning("QObject::killTimer: Timers cannot be stopped from another thread");
+        return;
+    }
     if (id) {
         int at = d->extraData ? d->extraData->runningTimers.indexOf(id) : -1;
         if (at == -1) {
             // timer isn't owned by this object
-            qWarning("QObject::killTimer(): Error: timer id %d is not valid for object %p (%s), timer has not been killed",
+            qWarning("QObject::killTimer(): Error: timer id %d is not valid for object %p (%s, %s), timer has not been killed",
                      id,
                      this,
+                     metaObject()->className(),
                      qPrintable(objectName()));
             return;
         }
@@ -1808,7 +1990,7 @@ void QObjectPrivate::setParent_helper(QObject *o)
             }
         }
     }
-    if (!isDeletingChildren && declarativeData)
+    if (!wasDeleted && !isDeletingChildren && declarativeData && QAbstractDeclarativeData::parentChanged)
         QAbstractDeclarativeData::parentChanged(declarativeData, q, o);
 }
 
@@ -2007,14 +2189,11 @@ void QObject::deleteLater()
  *****************************************************************************/
 
 
-const int flagged_locations_count = 2;
-static const char* flagged_locations[flagged_locations_count] = {0};
-
 const char *qFlagLocation(const char *method)
 {
-    static int idx = 0;
-    flagged_locations[idx] = method;
-    idx = (idx+1) % flagged_locations_count;
+    QThreadData *currentThreadData = QThreadData::current(false);
+    if (currentThreadData != 0)
+        currentThreadData->flaggedSignatures.store(method);
     return method;
 }
 
@@ -2026,14 +2205,11 @@ static int extract_code(const char *member)
 
 static const char * extract_location(const char *member)
 {
-    for (int i = 0; i < flagged_locations_count; ++i) {
-        if (member == flagged_locations[i]) {
-            // signature includes location information after the first null-terminator
-            const char *location = member + qstrlen(member) + 1;
-            if (*location != '\0')
-                return location;
-            return 0;
-        }
+    if (QThreadData::current()->flaggedSignatures.contains(member)) {
+        // signature includes location information after the first null-terminator
+        const char *location = member + qstrlen(member) + 1;
+        if (*location != '\0')
+            return location;
     }
     return 0;
 }
@@ -2164,11 +2340,19 @@ QObject *QObject::sender() const
 int QObject::senderSignalIndex() const
 {
     Q_D(const QObject);
-    int signal_index = d->senderSignalIndex();
-    if (signal_index < 0)
-        return signal_index;
-    // Convert from signal range to method range
-    return QMetaObjectPrivate::signal(sender()->metaObject(), signal_index).methodIndex();
+
+    QMutexLocker locker(signalSlotLock(this));
+    if (!d->currentSender)
+        return -1;
+
+    for (QObjectPrivate::Connection *c = d->senders; c; c = c->next) {
+        if (c->sender == d->currentSender->sender) {
+            // Convert from signal range to method range
+            return QMetaObjectPrivate::signal(c->sender->metaObject(), d->currentSender->signal).methodIndex();
+        }
+    }
+
+    return -1;
 }
 
 /*!
@@ -2237,8 +2421,8 @@ int QObject::receivers(const char *signal) const
 
 /*!
     \since 5.0
-    Returns true if the \a signal is connected to at least one receiver,
-    otherwise returns false.
+    Returns \c true if the \a signal is connected to at least one receiver,
+    otherwise returns \c false.
 
     \a signal must be a signal member of this object, otherwise the behaviour
     is undefined.
@@ -2338,6 +2522,7 @@ void QMetaObjectPrivate::memberIndexes(const QObject *obj,
     }
 }
 
+#ifndef QT_NO_DEBUG
 static inline void check_and_warn_compat(const QMetaObject *sender, const QMetaMethod &signal,
                                          const QMetaObject *receiver, const QMetaMethod &method)
 {
@@ -2352,6 +2537,7 @@ static inline void check_and_warn_compat(const QMetaObject *sender, const QMetaM
                  receiver->className(), method.methodSignature().constData());
     }
 }
+#endif
 
 /*!
     \threadsafe
@@ -2471,8 +2657,8 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const char *sign
     const char *method_arg = method;
     ++method; // skip code
 
-    QByteArray methodName;
     QArgumentTypeArray methodTypes;
+    QByteArray methodName = QMetaObjectPrivate::decodeMethodSignature(method, methodTypes);
     const QMetaObject *rmeta = receiver->metaObject();
     int method_index_relative = -1;
     Q_ASSERT(QMetaObjectPrivate::get(rmeta)->revision >= 7);
@@ -2551,14 +2737,12 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const char *sign
     You can check if the QMetaObject::Connection is valid by casting it to a bool.
 
     This function works in the same way as
-    connect(const QObject *sender, const char *signal,
+    \c {connect(const QObject *sender, const char *signal,
             const QObject *receiver, const char *method,
-            Qt::ConnectionType type)
+            Qt::ConnectionType type)}
     but it uses QMetaMethod to specify signal and method.
 
-    \sa connect(const QObject *sender, const char *signal,
-                const QObject *receiver, const char *method,
-                Qt::ConnectionType type)
+    \sa connect(const QObject *sender, const char *signal, const QObject *receiver, const char *method, Qt::ConnectionType type)
  */
 QMetaObject::Connection QObject::connect(const QObject *sender, const QMetaMethod &signal,
                                      const QObject *receiver, const QMetaMethod &method,
@@ -2638,8 +2822,8 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const QMetaMetho
     \threadsafe
 
     Disconnects \a signal in object \a sender from \a method in object
-    \a receiver. Returns true if the connection is successfully broken;
-    otherwise returns false.
+    \a receiver. Returns \c true if the connection is successfully broken;
+    otherwise returns \c false.
 
     A signal-slot connection is removed when either of the objects
     involved are destroyed.
@@ -2804,11 +2988,11 @@ bool QObject::disconnect(const QObject *sender, const char *signal,
     \since 4.8
 
     Disconnects \a signal in object \a sender from \a method in object
-    \a receiver. Returns true if the connection is successfully broken;
-    otherwise returns false.
+    \a receiver. Returns \c true if the connection is successfully broken;
+    otherwise returns \c false.
 
     This function provides the same possibilities like
-    disconnect(const QObject *sender, const char *signal, const QObject *receiver, const char *method)
+    \c {disconnect(const QObject *sender, const char *signal, const QObject *receiver, const char *method) }
     but uses QMetaMethod to represent the signal and the method to be disconnected.
 
     Additionally this function returnsfalse and no signals and slots disconnected
@@ -2934,6 +3118,10 @@ bool QObject::disconnect(const QObject *sender, const QMetaMethod &signal,
     expensive initialization only if something is connected to a
     signal.
 
+    \warning This function is called from the thread which performs the
+    connection, which may be a different thread from the thread in
+    which this object lives.
+
     \sa connect(), disconnectNotify()
 */
 
@@ -2954,11 +3142,20 @@ void QObject::connectNotify(const QMetaMethod &signal)
     If all signals were disconnected from this object (e.g., the
     signal argument to disconnect() was 0), disconnectNotify()
     is only called once, and the \a signal will be an invalid
-    QMetaMethod (QMetaMethod::isValid() returns false).
+    QMetaMethod (QMetaMethod::isValid() returns \c false).
 
     \warning This function violates the object-oriented principle of
     modularity. However, it might be useful for optimizing access to
     expensive resources.
+
+    \warning This function is called from the thread which performs the
+    disconnection, which may be a different thread from the thread in
+    which this object lives. This function may also be called with a QObject
+    internal mutex locked. It is therefore not allowed to re-enter any
+    of any QObject functions from your reimplementation and if you lock
+    a mutex in your reimplementation, make sure that you don't call QObject
+    functions with that mutex held in other places or it will result in
+    a deadlock.
 
     \sa disconnect(), connectNotify()
 */
@@ -3044,7 +3241,7 @@ QObjectPrivate::Connection *QMetaObjectPrivate::connect(const QObject *sender,
             int method_index_absolute = method_index + method_offset;
 
             while (c2) {
-                if (c2->receiver == receiver && c2->method() == method_index_absolute)
+                if (!c2->isSlotObject && c2->receiver == receiver && c2->method() == method_index_absolute)
                     return 0;
                 c2 = c2->nextConnectionList;
             }
@@ -3115,11 +3312,11 @@ bool QMetaObjectPrivate::disconnectHelper(QObjectPrivate::Connection *c,
     while (c) {
         if (c->receiver
             && (receiver == 0 || (c->receiver == receiver
-                           && (method_index < 0 || c->method() == method_index)
+                           && (method_index < 0 || (!c->isSlotObject && c->method() == method_index))
                            && (slot == 0 || (c->isSlotObject && c->slotObj->compare(slot)))))) {
             bool needToUnlock = false;
             QMutex *receiverMutex = 0;
-            if (!receiver) {
+            if (c->receiver) {
                 receiverMutex = signalSlotLock(c->receiver);
                 // need to relock this receiver and sender in the correct order
                 needToUnlock = QOrderedMutexLocker::relock(senderMutex, receiverMutex);
@@ -3134,6 +3331,13 @@ bool QMetaObjectPrivate::disconnectHelper(QObjectPrivate::Connection *c,
                 receiverMutex->unlock();
 
             c->receiver = 0;
+
+            if (c->isSlotObject) {
+                c->isSlotObject = false;
+                senderMutex->unlock();
+                c->slotObj->destroyIfLastRef();
+                senderMutex->lock();
+            }
 
             success = true;
 
@@ -3160,8 +3364,7 @@ bool QMetaObjectPrivate::disconnect(const QObject *sender,
     QObject *s = const_cast<QObject *>(sender);
 
     QMutex *senderMutex = signalSlotLock(sender);
-    QMutex *receiverMutex = receiver ? signalSlotLock(receiver) : 0;
-    QOrderedMutexLocker locker(senderMutex, receiverMutex);
+    QMutexLocker locker(senderMutex);
 
     QObjectConnectionListVector *connectionLists = QObjectPrivate::get(s)->connectionLists;
     if (!connectionLists)
@@ -3312,7 +3515,8 @@ void QMetaObject::connectSlotsByName(QObject *o)
 
     \a signal must be in the signal index range (see QObjectPrivate::signalIndex()).
 */
-static void queued_activate(QObject *sender, int signal, QObjectPrivate::Connection *c, void **argv)
+static void queued_activate(QObject *sender, int signal, QObjectPrivate::Connection *c, void **argv,
+                            QMutexLocker &locker)
 {
     const int *argumentTypes = c->argumentTypes.load();
     if (!argumentTypes && argumentTypes != &DIRECT_CONNECTION_ONLY) {
@@ -3337,8 +3541,28 @@ static void queued_activate(QObject *sender, int signal, QObjectPrivate::Connect
     Q_CHECK_PTR(args);
     types[0] = 0; // return type
     args[0] = 0; // return value
-    for (int n = 1; n < nargs; ++n)
-        args[n] = QMetaType::create((types[n] = argumentTypes[n-1]), argv[n]);
+
+    if (nargs > 1) {
+        for (int n = 1; n < nargs; ++n)
+            types[n] = argumentTypes[n-1];
+
+        locker.unlock();
+        for (int n = 1; n < nargs; ++n)
+            args[n] = QMetaType::create(types[n], argv[n]);
+        locker.relock();
+
+        if (!c->receiver) {
+            locker.unlock();
+            // we have been disconnected while the mutex was unlocked
+            for (int n = 1; n < nargs; ++n)
+                QMetaType::destroy(types[n], args[n]);
+            free(types);
+            free(args);
+            locker.relock();
+            return;
+        }
+    }
+
     QMetaCallEvent *ev = c->isSlotObject ?
         new QMetaCallEvent(c->slotObj, sender, signal, nargs, types, args) :
         new QMetaCallEvent(c->method_offset, c->method_relative, c->callFunction, sender, signal, nargs, types, args);
@@ -3361,8 +3585,11 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
 {
     int signal_index = signalOffset + local_signal_index;
 
-    if (!sender->d_func()->isSignalConnected(signal_index))
+    if (!sender->d_func()->isSignalConnected(signal_index)
+        && !qt_signal_spy_callback_set.signal_begin_callback
+        && !qt_signal_spy_callback_set.signal_end_callback) {
         return; // nothing connected to these signals, and no spy
+    }
 
     if (sender->d_func()->blockSig)
         return;
@@ -3435,7 +3662,7 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
             // put into the event queue
             if ((c->connectionType == Qt::AutoConnection && !receiverInSameThread)
                 || (c->connectionType == Qt::QueuedConnection)) {
-                queued_activate(sender, signal_index, c, argv ? argv : empty_argv);
+                queued_activate(sender, signal_index, c, argv ? argv : empty_argv, locker);
                 continue;
 #ifndef QT_NO_THREAD
             } else if (c->connectionType == Qt::BlockingQueuedConnection) {
@@ -3466,20 +3693,27 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
             const int method_relative = c->method_relative;
             if (c->isSlotObject) {
                 c->slotObj->ref();
-                const QScopedPointer<QtPrivate::QSlotObjectBase, QSlotObjectBaseDeleter> obj(c->slotObj);
+                QScopedPointer<QtPrivate::QSlotObjectBase, QSlotObjectBaseDeleter> obj(c->slotObj);
                 locker.unlock();
                 obj->call(receiver, argv ? argv : empty_argv);
+
+                // Make sure the slot object gets destroyed before the mutex is locked again, as the
+                // destructor of the slot object might also lock a mutex from the signalSlotLock() mutex pool,
+                // and that would deadlock if the pool happens to return the same mutex.
+                obj.reset();
+
                 locker.relock();
             } else if (callFunction && c->method_offset <= receiver->metaObject()->methodOffset()) {
                 //we compare the vtable to make sure we are not in the destructor of the object.
                 locker.unlock();
+                const int methodIndex = c->method();
                 if (qt_signal_spy_callback_set.slot_begin_callback != 0)
-                    qt_signal_spy_callback_set.slot_begin_callback(receiver, c->method(), argv ? argv : empty_argv);
+                    qt_signal_spy_callback_set.slot_begin_callback(receiver, methodIndex, argv ? argv : empty_argv);
 
                 callFunction(receiver, QMetaObject::InvokeMetaMethod, method_relative, argv ? argv : empty_argv);
 
                 if (qt_signal_spy_callback_set.slot_end_callback != 0)
-                    qt_signal_spy_callback_set.slot_end_callback(receiver, c->method());
+                    qt_signal_spy_callback_set.slot_end_callback(receiver, methodIndex);
                 locker.relock();
             } else {
                 const int method = method_relative + c->method_offset;
@@ -3526,25 +3760,6 @@ void QMetaObject::activate(QObject *sender, int signal_index, void **argv)
     while (mo->methodOffset() > signal_index)
         mo = mo->superClass();
     activate(sender, mo, signal_index - mo->methodOffset(), argv);
-}
-
-/*!
-    \internal
-    Implementation of QObject::senderSignalIndex()
-*/
-int QObjectPrivate::senderSignalIndex() const
-{
-    Q_Q(const QObject);
-    QMutexLocker locker(signalSlotLock(q));
-    if (!currentSender)
-        return -1;
-
-    for (QObjectPrivate::Connection *c = senders; c; c = c->next) {
-        if (c->sender == currentSender->sender)
-            return currentSender->signal;
-    }
-
-    return -1;
 }
 
 /*!
@@ -3625,6 +3840,8 @@ bool QObject::setProperty(const char *name, const QVariant &value)
                 d->extraData->propertyNames.append(name);
                 d->extraData->propertyValues.append(value);
             } else {
+                if (value == d->extraData->propertyValues.at(idx))
+                    return false;
                 d->extraData->propertyValues[idx] = value;
             }
         }
@@ -3786,6 +4003,11 @@ void QObject::dumpObjectInfo()
                     c = c->nextConnectionList;
                     continue;
                 }
+                if (c->isSlotObject) {
+                    qDebug("          <functor or function pointer>");
+                    c = c->nextConnectionList;
+                    continue;
+                }
                 const QMetaObject *receiverMetaObject = c->receiver->metaObject();
                 const QMetaMethod method = receiverMetaObject->method(c->method());
                 qDebug("          --> %s::%s %s",
@@ -3804,11 +4026,15 @@ void QObject::dumpObjectInfo()
 
     if (d->senders) {
         for (QObjectPrivate::Connection *s = d->senders; s; s = s->next) {
-            const QMetaMethod slot = metaObject()->method(s->method());
-            qDebug("          <-- %s::%s  %s",
+            QByteArray slotName = QByteArrayLiteral("<unknown>");
+            if (!s->isSlotObject) {
+                const QMetaMethod slot = metaObject()->method(s->method());
+                slotName = slot.methodSignature();
+            }
+            qDebug("          <-- %s::%s %s",
                    s->sender->metaObject()->className(),
                    s->sender->objectName().isEmpty() ? "unnamed" : qPrintable(s->sender->objectName()),
-                   slot.methodSignature().constData());
+                   slotName.constData());
         }
     } else {
         qDebug("        <None>");
@@ -3864,14 +4090,16 @@ QObjectUserData* QObject::userData(uint id) const
 
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug dbg, const QObject *o) {
+QDebug operator<<(QDebug dbg, const QObject *o)
+{
+    QDebugStateSaver saver(dbg);
     if (!o)
-        return dbg << "QObject(0x0) ";
-    dbg.nospace() << o->metaObject()->className() << '(' << (void *)o;
+        return dbg << "QObject(0x0)";
+    dbg.nospace() << o->metaObject()->className() << '(' << (const void *)o;
     if (!o->objectName().isEmpty())
         dbg << ", name = " << o->objectName();
     dbg << ')';
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -3879,18 +4107,21 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     \macro Q_CLASSINFO(Name, Value)
     \relates QObject
 
-    This macro associates extra information to the class, which is
-    available using QObject::metaObject(). Except for the ActiveQt
-    extension, Qt doesn't use this information.
+    This macro associates extra information to the class, which is available
+    using QObject::metaObject(). Qt makes only limited use of this feature, in
+    the \l{Active Qt}, \l{Qt D-Bus} and \l{Qt QML module}{Qt QML}.
 
-    The extra information takes the form of a \a Name string and a \a
-    Value literal string.
+    The extra information takes the form of a \a Name string and a \a Value
+    literal string.
 
     Example:
 
     \snippet code/src_corelib_kernel_qobject.cpp 35
 
     \sa QMetaObject::classInfo()
+    \sa QAxFactory
+    \sa {Using Qt D-Bus Adaptors}
+    \sa {Extending QML}
 */
 
 /*!
@@ -3921,7 +4152,7 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     they have additional features accessible through the \l
     {Meta-Object System}.
 
-    \snippet code/src_corelib_kernel_qobject.cpp 36
+    \snippet code/doc_src_properties.cpp 0
 
     The property name and type and the \c READ function are required.
     The type can be any type supported by QVariant, or it can be a
@@ -3942,6 +4173,7 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
 /*!
     \macro Q_ENUMS(...)
     \relates QObject
+    \obsolete
 
     This macro registers one or several enum types to the meta-object
     system.
@@ -3955,34 +4187,86 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     defining it. In addition, the class \e defining the enum has to
     inherit QObject as well as declare the enum using Q_ENUMS().
 
+    In new code, you should prefer the use of the Q_ENUM() macro, which makes the
+    type available also to the meta type system.
+    For instance, QMetaEnum::fromType() will not work with types declared with Q_ENUMS().
+
     \sa {Qt's Property System}
 */
 
 /*!
     \macro Q_FLAGS(...)
     \relates QObject
+    \obsolete
 
-    This macro registers one or several \l{QFlags}{flags types} to the
+    This macro registers one or several \l{QFlags}{flags types} with the
     meta-object system. It is typically used in a class definition to declare
     that values of a given enum can be used as flags and combined using the
     bitwise OR operator.
-
-    For example, in QLibrary, the \l{QLibrary::LoadHints}{LoadHints} flag is
-    declared in the following way:
-
-    \snippet code/src_corelib_kernel_qobject.cpp 39a
-
-    The declaration of the flags themselves is performed in the public section
-    of the QLibrary class itself, using the \l Q_DECLARE_FLAGS() macro:
-
-    \snippet code/src_corelib_kernel_qobject.cpp 39b
 
     \note This macro takes care of registering individual flag values
     with the meta-object system, so it is unnecessary to use Q_ENUMS()
     in addition to this macro.
 
+    In new code, you should prefer the use of the Q_FLAG() macro, which makes the
+    type available also to the meta type system.
+
     \sa {Qt's Property System}
 */
+
+/*!
+    \macro Q_ENUM(...)
+    \relates QObject
+    \since 5.5
+
+    This macro registers an enum type with the meta-object system.
+    It must be placed after the enum declaration in a class that has the Q_OBJECT or the
+    Q_GADGET macro.
+
+    For example:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 38
+
+    Enumerations that are declared with Q_ENUM have their QMetaEnum registered in the
+    enclosing QMetaObject. You can also use QMetaEnum::fromType() to get the QMetaEnum.
+
+    Registered enumerations are automatically registered also to the Qt meta
+    type system, making them known to QMetaType without the need to use
+    Q_DECLARE_METATYPE(). This will enable useful features; for example, if used
+    in a QVariant, you can convert them to strings. Likewise, passing them to
+    QDebug will print out their names.
+
+    \sa {Qt's Property System}
+*/
+
+
+/*!
+    \macro Q_FLAG(...)
+    \relates QObject
+    \since 5.5
+
+    This macro registers a single \l{QFlags}{flags types} with the
+    meta-object system. It is typically used in a class definition to declare
+    that values of a given enum can be used as flags and combined using the
+    bitwise OR operator.
+
+    The macro must be placed after the enum declaration.
+
+    For example, in QLibrary, the \l{QLibrary::LoadHints}{LoadHints} flag is
+    declared in the following way:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 39
+
+    The declaration of the flags themselves is performed in the public section
+    of the QLibrary class itself, using the \l Q_DECLARE_FLAGS() macro.
+
+    \note The Q_FLAG macro takes care of registering individual flag values
+    with the meta-object system, so it is unnecessary to use Q_ENUM()
+    in addition to this macro.
+
+    \sa {Qt's Property System}
+*/
+
 
 /*!
     \macro Q_OBJECT
@@ -4001,13 +4285,26 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
 
     \note This macro requires the class to be a subclass of QObject. Use
     Q_GADGET instead of Q_OBJECT to enable the meta object system's support
-    for enums in a class that is not a QObject subclass. Q_GADGET makes a
-    class member, \c{staticMetaObject}, available.
-    \c{staticMetaObject} is of type QMetaObject and provides access to the
-    enums declared with Q_ENUMS.
-    Q_GADGET is provided only for C++.
+    for enums in a class that is not a QObject subclass.
 
     \sa {Meta-Object System}, {Signals and Slots}, {Qt's Property System}
+*/
+
+/*!
+    \macro Q_GADGET
+    \relates QObject
+
+    The Q_GADGET macro is a lighter version of the Q_OBJECT macro for classes
+    that do not inherit from QObject but still want to use some of the
+    reflection capabilities offered by QMetaObject. Just like the Q_OBJECT
+    macro, it must appear in the private section of a class definition.
+
+    Q_GADGETs can have Q_ENUM, Q_PROPERTY and Q_INVOKABLE, but they cannot have
+    signals or slots
+
+    Q_GADGET makes a class member, \c{staticMetaObject}, available.
+    \c{staticMetaObject} is of type QMetaObject and provides access to the
+    enums declared with Q_ENUMS.
 */
 
 /*!
@@ -4089,7 +4386,7 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     \macro Q_INVOKABLE
     \relates QObject
 
-    Apply this macro to definitions of member functions to allow them to
+    Apply this macro to declarations of member functions to allow them to
     be invoked via the meta-object system. The macro is written before
     the return type, as shown in the following example:
 
@@ -4106,7 +4403,7 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     \macro Q_REVISION
     \relates QObject
 
-    Apply this macro to definitions of member functions to tag them with a
+    Apply this macro to declarations of member functions to tag them with a
     revision number in the meta-object system. The macro is written before
     the return type, as shown in the following example:
 
@@ -4249,13 +4546,54 @@ void qDeleteInEventHandler(QObject *o)
     \snippet code/src_corelib_kernel_qobject.cpp 46
 
     The connection will automatically disconnect if the sender is destroyed.
+    However, you should take care that any objects used within the functor
+    are still alive when the signal is emitted.
 
     \note If the compiler does not support C++11 variadic templates, the number
     of arguments in the signal or slot are limited to 6, and the functor object
     must not have an overloaded or templated operator().
  */
 
-/**
+/*!
+    \fn QMetaObject::Connection QObject::connect(const QObject *sender, PointerToMemberFunction signal, const QObject *context, Functor functor, Qt::ConnectionType type)
+
+    \threadsafe
+    \overload connect()
+
+    \since 5.2
+
+    Creates a connection of a given \a type from \a signal in
+    \a sender object to \a functor to be placed in a specific event
+    loop of \a context, and returns a handle to the connection
+
+    The signal must be a function declared as a signal in the header.
+    The slot function can be any function or functor that can be connected
+    to the signal.
+    A function can be connected to a given signal if the signal as at
+    least as many argument as the slot. A functor can be connected to a signal
+    if they have exactly the same number of arguments. There must exist implicit
+    conversion between the types of the corresponding arguments in the
+    signal and the slot.
+
+    Example:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 50
+
+    If your compiler support C++11 lambda expressions, you can use them:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 51
+
+    The connection will automatically disconnect if the sender or the context
+    is destroyed.
+    However, you should take care that any objects used within the functor
+    are still alive when the signal is emitted.
+
+    \note If the compiler does not support C++11 variadic templates, the number
+    of arguments in the signal or slot are limited to 6, and the functor object
+    must not have an overloaded or templated operator().
+ */
+
+/*!
     \internal
 
     Implementation of the template version of connect
@@ -4280,12 +4618,13 @@ QMetaObject::Connection QObject::connectImpl(const QObject *sender, void **signa
                                              QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type,
                                              const int *types, const QMetaObject *senderMetaObject)
 {
-    if (!sender || !signal || !slotObj || !senderMetaObject) {
+    if (!signal) {
         qWarning("QObject::connect: invalid null parameter");
         if (slotObj)
             slotObj->destroyIfLastRef();
         return QMetaObject::Connection();
     }
+
     int signal_index = -1;
     void *args[] = { &signal_index, signal };
     for (; senderMetaObject && signal_index < 0; senderMetaObject = senderMetaObject->superClass()) {
@@ -4299,6 +4638,27 @@ QMetaObject::Connection QObject::connectImpl(const QObject *sender, void **signa
         return QMetaObject::Connection(0);
     }
     signal_index += QMetaObjectPrivate::signalOffset(senderMetaObject);
+    return QObjectPrivate::connectImpl(sender, signal_index, receiver, slot, slotObj, type, types, senderMetaObject);
+}
+
+/*!
+    \internal
+
+    Internal version of connect used by the template version of QObject::connect (called via connectImpl) and
+    also used by the QObjectPrivate::connect version used by QML. The signal_index is expected to be relative
+    to the number of signals.
+ */
+QMetaObject::Connection QObjectPrivate::connectImpl(const QObject *sender, int signal_index,
+                                             const QObject *receiver, void **slot,
+                                             QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type,
+                                             const int *types, const QMetaObject *senderMetaObject)
+{
+    if (!sender || !slotObj || !senderMetaObject) {
+        qWarning("QObject::connect: invalid null parameter");
+        if (slotObj)
+            slotObj->destroyIfLastRef();
+        return QMetaObject::Connection();
+    }
 
     QObject *s = const_cast<QObject *>(sender);
     QObject *r = const_cast<QObject *>(receiver);
@@ -4363,16 +4723,19 @@ bool QObject::disconnect(const QMetaObject::Connection &connection)
 
     QMutex *senderMutex = signalSlotLock(c->sender);
     QMutex *receiverMutex = signalSlotLock(c->receiver);
-    QOrderedMutexLocker locker(senderMutex, receiverMutex);
 
-    QObjectConnectionListVector *connectionLists = QObjectPrivate::get(c->sender)->connectionLists;
-    Q_ASSERT(connectionLists);
-    connectionLists->dirty = true;
+    {
+        QOrderedMutexLocker locker(senderMutex, receiverMutex);
 
-    *c->prev = c->next;
-    if (c->next)
-        c->next->prev = c->prev;
-    c->receiver = 0;
+        QObjectConnectionListVector *connectionLists = QObjectPrivate::get(c->sender)->connectionLists;
+        Q_ASSERT(connectionLists);
+        connectionLists->dirty = true;
+
+        *c->prev = c->next;
+        if (c->next)
+            c->next->prev = c->prev;
+        c->receiver = 0;
+    }
 
     // destroy the QSlotObject, if possible
     if (c->isSlotObject) {
@@ -4393,8 +4756,8 @@ bool QObject::disconnect(const QMetaObject::Connection &connection)
     \threadsafe
 
     Disconnects \a signal in object \a sender from \a method in object
-    \a receiver. Returns true if the connection is successfully broken;
-    otherwise returns false.
+    \a receiver. Returns \c true if the connection is successfully broken;
+    otherwise returns \c false.
 
     A signal-slot connection is removed when either of the objects
     involved are destroyed.
@@ -4458,15 +4821,53 @@ bool QObject::disconnectImpl(const QObject *sender, void **signal, const QObject
     int signal_index = -1;
     if (signal) {
         void *args[] = { &signal_index, signal };
-        senderMetaObject->static_metacall(QMetaObject::IndexOfMethod, 0, args);
-        if (signal_index < 0 || signal_index >= QMetaObjectPrivate::get(senderMetaObject)->signalCount) {
-            qWarning("QObject::disconnect: signal not found in %s", senderMetaObject->className());
-            return false;
+        for (; senderMetaObject && signal_index < 0; senderMetaObject = senderMetaObject->superClass()) {
+            senderMetaObject->static_metacall(QMetaObject::IndexOfMethod, 0, args);
+            if (signal_index >= 0 && signal_index < QMetaObjectPrivate::get(senderMetaObject)->signalCount)
+                break;
+        }
+        if (!senderMetaObject) {
+            qWarning("QObject::disconnect: signal not found in %s", sender->metaObject()->className());
+            return QMetaObject::Connection(0);
         }
         signal_index += QMetaObjectPrivate::signalOffset(senderMetaObject);
     }
 
     return QMetaObjectPrivate::disconnect(sender, signal_index, senderMetaObject, receiver, -1, slot);
+}
+
+/*!
+ \internal
+ Used by QML to connect a signal by index to a slot implemented in JavaScript (wrapped in a custom QSlotOBjectBase subclass).
+
+ The signal_index is an index relative to the number of methods.
+ */
+QMetaObject::Connection QObjectPrivate::connect(const QObject *sender, int signal_index, QtPrivate::QSlotObjectBase *slotObj, Qt::ConnectionType type)
+{
+    if (!sender) {
+        qWarning("QObject::connect: invalid null parameter");
+        if (slotObj)
+            slotObj->destroyIfLastRef();
+        return QMetaObject::Connection();
+    }
+    const QMetaObject *senderMetaObject = sender->metaObject();
+    signal_index = methodIndexToSignalIndex(&senderMetaObject, signal_index);
+
+    return QObjectPrivate::connectImpl(sender, signal_index, sender, /*slot*/0, slotObj, type, /*types*/0, senderMetaObject);
+}
+
+/*!
+ \internal
+ Used by QML to disconnect a signal by index that's connected to a slot implemented in JavaScript (wrapped in a custom QSlotObjectBase subclass)
+ In the QML case the slot is not a pointer to a pointer to the function to disconnect, but instead it is a pointer to an array of internal values
+ required for the disconnect.
+ */
+bool QObjectPrivate::disconnect(const QObject *sender, int signal_index, void **slot)
+{
+    const QMetaObject *senderMetaObject = sender->metaObject();
+    signal_index = methodIndexToSignalIndex(&senderMetaObject, signal_index);
+
+    return QMetaObjectPrivate::disconnect(sender, signal_index, senderMetaObject, sender, -1, slot);
 }
 
 /*! \class QMetaObject::Connection
@@ -4475,7 +4876,7 @@ bool QObject::disconnectImpl(const QObject *sender, void **signal, const QObject
      It can be used to disconnect that connection, or check if
      the connection was successful
 
-     \sa QObject::disconnect
+     \sa QObject::disconnect()
  */
 
 /*!
@@ -4499,18 +4900,35 @@ QMetaObject::Connection& QMetaObject::Connection::operator=(const QMetaObject::C
     return *this;
 }
 
+/*!
+    Creates a Connection instance.
+*/
+
 QMetaObject::Connection::Connection() : d_ptr(0) {}
 
+/*!
+    Destructor for QMetaObject::Connection.
+*/
 QMetaObject::Connection::~Connection()
 {
     if (d_ptr)
         static_cast<QObjectPrivate::Connection *>(d_ptr)->deref();
 }
 
+/*! \internal Returns true if the object is still connected */
+bool QMetaObject::Connection::isConnected_helper() const
+{
+    Q_ASSERT(d_ptr);    // we're only called from operator RestrictedBool() const
+    QObjectPrivate::Connection *c = static_cast<QObjectPrivate::Connection *>(d_ptr);
+
+    return c->receiver;
+}
+
+
 /*!
     \fn QMetaObject::Connection::operator bool() const
 
-    Returns true if the connection is valid.
+    Returns \c true if the connection is valid.
 
     The connection is valid if the call to QObject::connect succeeded.
     The connection is invalid if QObject::connect was not able to find

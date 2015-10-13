@@ -1,57 +1,45 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 /*!
-    \headerfile <QtConcurrentRun>
-    \title Asynchronous Run
-
-    \brief The <QtConcurrentRun> header provides a way to run a function in a
-    separate thread.
-
+    \page qtconcurrentrun.html
+    \title Concurrent Run
     \ingroup thread
-
-    This function is a part of the \l {Concurrent Programming}{Qt Concurrent} framework.
 
     The QtConcurrent::run() function runs a function in a separate thread.
     The return value of the function is made available through the QFuture API.
+
+    This function is a part of the \l {Qt Concurrent} framework.
 
     \section1 Running a Function in a Separate Thread
 
@@ -62,6 +50,11 @@
     This will run \e aFunction in a separate thread obtained from the default
     QThreadPool. You can use the QFuture and QFutureWatcher classes to monitor
     the status of the function.
+
+    To use a dedicated thread pool, you can pass the QThreadPool as
+    the first argument:
+
+    \snippet code/src_concurrent_qtconcurrentrun.cpp explicit-pool-0
 
     \section1 Passing Arguments to the Function
 
@@ -110,15 +103,12 @@
 
     \section2 Using Bound Function Arguments
 
-    Note that Qt does not provide support for bound functions. This is
-    provided by 3rd party libraries like
-    \l{http://www.boost.org/libs/bind/bind.html}{Boost} or
-    \l{http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2005/n1836.pdf}
-    {C++ TR1 Library Extensions}.
+    You can use std::bind() to \e bind a number of arguments to a function when
+    called. If C++11 support is not available, \l{http://www.boost.org/libs/bind/bind.html}
+    {boost::bind()} or \l{http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2005/n1836.pdf}
+    {std::tr1::bind()} are suitable replacements.
 
-    You can use boost::bind() or std::tr1::bind() to \e bind a number of
-    arguments to a function when called. There are number of reasons for doing
-    this:
+    There are number of reasons for binding:
 
     \list
     \li To call a function that takes more than 5 arguments.
@@ -136,11 +126,15 @@
 
 /*!
     \fn QFuture<T> QtConcurrent::run(Function function, ...);
-    \relates <QtConcurrentRun>
+
+    Equivalent to
+    \code
+    QtConcurrent::run(QThreadPool::globalInstance(), function, ...);
+    \endcode
 
     Runs \a function in a separate thread. The thread is taken from the global
-    QThreadPool. Note that the function may not run immediately; the function
-    will only be run when a thread is available.
+    QThreadPool. Note that \a function may not run immediately; \a function
+    will only be run once a thread becomes available.
 
     T is the same type as the return value of \a function. Non-void return
     values can be accessed via the QFuture::result() function.
@@ -149,4 +143,25 @@
     canceling, pausing, or progress reporting. The QFuture returned can only
     be used to query for the running/finished status and the return value of
     the function.
+
+    \sa {Concurrent Run}
+*/
+
+/*!
+    \since 5.4
+    \fn QFuture<T> QtConcurrent::run(QThreadPool *pool, Function function, ...);
+
+    Runs \a function in a separate thread. The thread is taken from the
+    QThreadPool \a pool. Note that \a function may not run immediately; \a function
+    will only be run once a thread becomes available.
+
+    T is the same type as the return value of \a function. Non-void return
+    values can be accessed via the QFuture::result() function.
+
+    Note that the QFuture returned by QtConcurrent::run() does not support
+    canceling, pausing, or progress reporting. The QFuture returned can only
+    be used to query for the running/finished status and the return value of
+    the function.
+
+    \sa {Concurrent Run}
 */

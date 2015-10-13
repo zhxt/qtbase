@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -62,7 +54,7 @@ QT_BEGIN_NAMESPACE
   */
 QString
 QSharedMemoryPrivate::makePlatformSafeKey(const QString &key,
-					  const QString &prefix)
+                                          const QString &prefix)
 {
     if (key.isEmpty())
         return QString();
@@ -77,6 +69,8 @@ QSharedMemoryPrivate::makePlatformSafeKey(const QString &key,
     result.append(QLatin1String(hex));
 #ifdef Q_OS_WIN
     return result;
+#elif defined(QT_POSIX_IPC)
+    return QLatin1Char('/') + result;
 #else
     return QDir::tempPath() + QLatin1Char('/') + result;
 #endif
@@ -125,11 +119,9 @@ QSharedMemoryPrivate::makePlatformSafeKey(const QString &key,
   or writing to the shared memory, and remember to release the lock
   with unlock() after you are done.
 
-  Unlike QtSharedMemory, QSharedMemory automatically destroys the
-  shared memory segment when the last instance of QSharedMemory is
-  detached from the segment, and no references to the segment
-  remain. Do not mix using QtSharedMemory and QSharedMemory. Port
-  everything to QSharedMemory.
+  QSharedMemory automatically destroys the shared memory segment when
+  the last instance of QSharedMemory is detached from the segment, and
+  no references to the segment remain.
 
   \warning QSharedMemory changes the key in a Qt-specific way, unless otherwise
   specified. Interoperation with non-Qt applications is achieved by first creating
@@ -350,7 +342,7 @@ bool QSharedMemory::create(int size, AccessMode mode)
     if (size <= 0) {
         d->error = QSharedMemory::InvalidSize;
         d->errorString =
-	    QSharedMemory::tr("%1: create size is less then 0").arg(function);
+            QSharedMemory::tr("%1: create size is less then 0").arg(function);
         return false;
     }
 
@@ -389,7 +381,7 @@ int QSharedMemory::size() const
   identified by the key that was passed to the constructor or to a
   call to setKey() or setNativeKey(). The access \a mode is \l {QSharedMemory::}
   {ReadWrite} by default. It can also be \l {QSharedMemory::}
-  {ReadOnly}. Returns true if the attach operation is successful. If
+  {ReadOnly}. Returns \c true if the attach operation is successful. If
   false is returned, call error() to determine which error occurred.
   After attaching the shared memory segment, a pointer to the shared
   memory can be obtained by calling data().
@@ -415,7 +407,7 @@ bool QSharedMemory::attach(AccessMode mode)
 }
 
 /*!
-  Returns true if this process is attached to the shared memory
+  Returns \c true if this process is attached to the shared memory
   segment.
 
   \sa attach(), detach()
@@ -430,8 +422,8 @@ bool QSharedMemory::isAttached() const
   Detaches the process from the shared memory segment. If this was the
   last process attached to the shared memory segment, then the shared
   memory segment is released by the system, i.e., the contents are
-  destroyed. The function returns true if it detaches the shared
-  memory segment. If it returns false, it usually means the segment
+  destroyed. The function returns \c true if it detaches the shared
+  memory segment. If it returns \c false, it usually means the segment
   either isn't attached, or it is locked by another process.
 
   \sa attach(), isAttached()
@@ -493,9 +485,9 @@ const void *QSharedMemory::data() const
 #ifndef QT_NO_SYSTEMSEMAPHORE
 /*!
   This is a semaphore that locks the shared memory segment for access
-  by this process and returns true. If another process has locked the
+  by this process and returns \c true. If another process has locked the
   segment, this function blocks until the lock is released. Then it
-  acquires the lock and returns true. If this function returns false,
+  acquires the lock and returns \c true. If this function returns \c false,
   it means that you have ignored a false return from create() or attach(),
   that you have set the key with setNativeKey() or that
   QSystemSemaphore::acquire() failed due to an unknown system error.
@@ -520,7 +512,7 @@ bool QSharedMemory::lock()
 }
 
 /*!
-  Releases the lock on the shared memory segment and returns true, if
+  Releases the lock on the shared memory segment and returns \c true, if
   the lock is currently held by this process. If the segment is not
   locked, or if the lock is held by another process, nothing happens
   and false is returned.

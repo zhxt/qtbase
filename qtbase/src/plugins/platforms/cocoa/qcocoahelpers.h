@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -68,15 +60,19 @@ void *qt_mac_QStringListToNSMutableArrayVoid(const QStringList &list);
 inline NSMutableArray *qt_mac_QStringListToNSMutableArray(const QStringList &qstrlist)
 { return reinterpret_cast<NSMutableArray *>(qt_mac_QStringListToNSMutableArrayVoid(qstrlist)); }
 
-CGImageRef qt_mac_image_to_cgimage(const QImage &image);
 NSImage *qt_mac_cgimage_to_nsimage(CGImageRef iamge);
 NSImage *qt_mac_create_nsimage(const QPixmap &pm);
+NSImage *qt_mac_create_nsimage(const QIcon &icon);
+CGImageRef qt_mac_toCGImage(const QImage &qImage);
+CGImageRef qt_mac_toCGImageMask(const QImage &qImage);
+QImage qt_mac_toQImage(CGImageRef image);
 
 NSSize qt_mac_toNSSize(const QSize &qtSize);
 NSRect qt_mac_toNSRect(const QRect &rect);
 QRect qt_mac_toQRect(const NSRect &rect);
 
 QColor qt_mac_toQColor(const NSColor *color);
+QColor qt_mac_toQColor(CGColorRef color);
 
 
 // Creates a mutable shape, it's the caller's responsibility to release.
@@ -100,22 +96,13 @@ CGColorSpaceRef qt_mac_displayColorSpace(const QWidget *widget);
 CGColorSpaceRef qt_mac_colorSpaceForDeviceType(const QPaintDevice *paintDevice);
 QString qt_mac_applicationName();
 
-inline int qt_mac_flipYCoordinate(int y)
-{ return QGuiApplication::primaryScreen()->geometry().height() - y; }
+int qt_mac_flipYCoordinate(int y);
+qreal qt_mac_flipYCoordinate(qreal y);
+QPointF qt_mac_flipPoint(const NSPoint &p);
+NSPoint qt_mac_flipPoint(const QPoint &p);
+NSPoint qt_mac_flipPoint(const QPointF &p);
 
-inline qreal qt_mac_flipYCoordinate(qreal y)
-{ return QGuiApplication::primaryScreen()->geometry().height() - y; }
-
-inline QPointF qt_mac_flipPoint(const NSPoint &p)
-{ return QPointF(p.x, qt_mac_flipYCoordinate(p.y)); }
-
-inline NSPoint qt_mac_flipPoint(const QPoint &p)
-{ return NSMakePoint(p.x(), qt_mac_flipYCoordinate(p.y())); }
-
-inline NSPoint qt_mac_flipPoint(const QPointF &p)
-{ return NSMakePoint(p.x(), qt_mac_flipYCoordinate(p.y())); }
-
-NSRect qt_mac_flipRect(const QRect &rect, QWindow *window);
+NSRect qt_mac_flipRect(const QRect &rect);
 
 Qt::MouseButton cocoaButton2QtButton(NSInteger buttonNum);
 
@@ -157,9 +144,40 @@ public:
 };
 
 CGContextRef qt_mac_cg_context(QPaintDevice *pdev);
-CGImageRef qt_mac_toCGImage(const QImage &qImage, bool isMask, uchar **dataCopy);
-QImage qt_mac_toQImage(CGImageRef image);
 
+template<typename T>
+T qt_mac_resolveOption(const T &fallback, const QByteArray &environment)
+{
+    // check for environment variable
+    if (!environment.isEmpty()) {
+        QByteArray env = qgetenv(environment);
+        if (!env.isEmpty())
+            return T(env.toInt()); // works when T is bool, int.
+    }
+
+    return fallback;
+}
+
+template<typename T>
+T qt_mac_resolveOption(const T &fallback, QWindow *window, const QByteArray &property, const QByteArray &environment)
+{
+    // check for environment variable
+    if (!environment.isEmpty()) {
+        QByteArray env = qgetenv(environment);
+        if (!env.isEmpty())
+            return T(env.toInt()); // works when T is bool, int.
+    }
+
+    // check for window property
+    if (window && !property.isNull()) {
+        QVariant windowProperty = window->property(property);
+        if (windowProperty.isValid())
+            return windowProperty.value<T>();
+    }
+
+    // return default value.
+    return fallback;
+}
 QT_END_NAMESPACE
 
 #endif //QCOCOAHELPERS_H

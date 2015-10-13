@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,8 +35,6 @@
 #include "qfontenginemultifontconfig_p.h"
 
 #include <QtCore/QList>
-#include <QtGui/private/qfont_p.h>
-
 #include <QtCore/QElapsedTimer>
 
 #include <qpa/qplatformnativeinterface.h>
@@ -53,28 +43,23 @@
 #include <qpa/qplatformservices.h>
 
 #include <QtGui/private/qfontengine_ft_p.h>
-#include <QtGui/private/qfontengine_p.h>
-#include <QtGui/private/qfontengine_qpa_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 
 #include <QtGui/qguiapplication.h>
 
-#include <ft2build.h>
-#include FT_TRUETYPE_TABLES_H
-
 #include <fontconfig/fontconfig.h>
-#include FT_FREETYPE_H
-
 #if FC_VERSION >= 20402
 #include <fontconfig/fcfreetype.h>
 #endif
 
-#define SimplifiedChineseCsbBit 18
-#define TraditionalChineseCsbBit 20
-#define JapaneseCsbBit 17
-#define KoreanCsbBit 21
-
 QT_BEGIN_NAMESPACE
+
+static const int maxWeight = 99;
+
+static inline int mapToQtWeightForRange(int fcweight, int fcLower, int fcUpper, int qtLower, int qtUpper)
+{
+    return qtLower + ((fcweight - fcLower) * (qtUpper - qtLower)) / (fcUpper - fcLower);
+}
 
 static inline bool requiresOpenType(int writingSystem)
 {
@@ -82,25 +67,52 @@ static inline bool requiresOpenType(int writingSystem)
             || writingSystem == QFontDatabase::Khmer || writingSystem == QFontDatabase::Nko);
 }
 
-static inline bool scriptRequiresOpenType(int script)
+static inline int weightFromFcWeight(int fcweight)
 {
-    return ((script >= QChar::Script_Syriac && script <= QChar::Script_Sinhala)
-            || script == QChar::Script_Khmer || script == QChar::Script_Nko);
+    // Font Config uses weights from 0 to 215 (the highest enum value) while QFont ranges from
+    // 0 to 99. The spacing between the values for the enums are uneven so a linear mapping from
+    // Font Config values to Qt would give surprising results.  So, we do a piecewise linear
+    // mapping.  This ensures that where there is a corresponding enum on both sides (for example
+    // FC_WEIGHT_DEMIBOLD and QFont::DemiBold) we map one to the other but other values map
+    // to intermediate Qt weights.
+
+    if (fcweight <= FC_WEIGHT_THIN)
+        return QFont::Thin;
+    if (fcweight <= FC_WEIGHT_ULTRALIGHT)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_THIN, FC_WEIGHT_ULTRALIGHT, QFont::Thin, QFont::ExtraLight);
+    if (fcweight <= FC_WEIGHT_LIGHT)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_ULTRALIGHT, FC_WEIGHT_LIGHT, QFont::ExtraLight, QFont::Light);
+    if (fcweight <= FC_WEIGHT_NORMAL)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_LIGHT, FC_WEIGHT_NORMAL, QFont::Light, QFont::Normal);
+    if (fcweight <= FC_WEIGHT_MEDIUM)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_NORMAL, FC_WEIGHT_MEDIUM, QFont::Normal, QFont::Medium);
+    if (fcweight <= FC_WEIGHT_DEMIBOLD)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_MEDIUM, FC_WEIGHT_DEMIBOLD, QFont::Medium, QFont::DemiBold);
+    if (fcweight <= FC_WEIGHT_BOLD)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_DEMIBOLD, FC_WEIGHT_BOLD, QFont::DemiBold, QFont::Bold);
+    if (fcweight <= FC_WEIGHT_ULTRABOLD)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_BOLD, FC_WEIGHT_ULTRABOLD, QFont::Bold, QFont::ExtraBold);
+    if (fcweight <= FC_WEIGHT_BLACK)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_ULTRABOLD, FC_WEIGHT_BLACK, QFont::ExtraBold, QFont::Black);
+    if (fcweight <= FC_WEIGHT_ULTRABLACK)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_BLACK, FC_WEIGHT_ULTRABLACK, QFont::Black, maxWeight);
+    return maxWeight;
 }
 
-static int getFCWeight(int fc_weight)
+static inline int stretchFromFcWidth(int fcwidth)
 {
-    int qtweight = QFont::Black;
-    if (fc_weight <= (FC_WEIGHT_LIGHT + FC_WEIGHT_REGULAR) / 2)
-        qtweight = QFont::Light;
-    else if (fc_weight <= (FC_WEIGHT_REGULAR + FC_WEIGHT_MEDIUM) / 2)
-        qtweight = QFont::Normal;
-    else if (fc_weight <= (FC_WEIGHT_MEDIUM + FC_WEIGHT_BOLD) / 2)
-        qtweight = QFont::DemiBold;
-    else if (fc_weight <= (FC_WEIGHT_BOLD + FC_WEIGHT_BLACK) / 2)
-        qtweight = QFont::Bold;
+    // Font Config enums for width match pretty closely with those used by Qt so just use
+    // Font Config values directly while enforcing the same limits imposed by QFont.
+    const int maxStretch = 4000;
+    int qtstretch;
+    if (fcwidth < 1)
+        qtstretch = 1;
+    else if (fcwidth > maxStretch)
+        qtstretch = maxStretch;
+    else
+        qtstretch = fcwidth;
 
-    return qtweight;
+    return qtstretch;
 }
 
 static const char *specialLanguages[] = {
@@ -206,9 +218,32 @@ static const char *specialLanguages[] = {
     "hmd", // Miao
     "sa", // Sharada
     "srb", // SoraSompeng
-    "doi"  // Takri
+    "doi", // Takri
+    "lez", // CaucasianAlbanian
+    "bsq", // BassaVah
+    "fr", // Duployan
+    "sq", // Elbasan
+    "sa", // Grantha
+    "hnj", // PahawhHmong
+    "sd", // Khojki
+    "lab", // LinearA
+    "hi", // Mahajani
+    "xmn", // Manichaean
+    "men", // MendeKikakui
+    "mr", // Modi
+    "mru", // Mro
+    "xna", // OldNorthArabian
+    "arc", // Nabataean
+    "arc", // Palmyrene
+    "ctd", // PauCinHau
+    "kv", // OldPermic
+    "pal", // PsalterPahlavi
+    "sa", // Siddham
+    "sd", // Khudawadi
+    "mai", // Tirhuta
+    "hoc"  // WarangCiti
 };
-enum { SpecialLanguageCount = sizeof(specialLanguages) / sizeof(const char *) };
+Q_STATIC_ASSERT(sizeof(specialLanguages) / sizeof(const char *) == QChar::ScriptCount);
 
 // this could become a list of all languages used for each writing
 // system, instead of using the single most common language.
@@ -248,48 +283,9 @@ static const char *languageForWritingSystem[] = {
     "non", // Runic
     "man" // N'Ko
 };
-enum { LanguageCount = sizeof(languageForWritingSystem) / sizeof(const char *) };
+Q_STATIC_ASSERT(sizeof(languageForWritingSystem) / sizeof(const char *) == QFontDatabase::WritingSystemsCount);
 
-// Unfortunately FontConfig doesn't know about some languages. We have to test these through the
-// charset. The lists below contain the systems where we need to do this.
-static const ushort sampleCharForWritingSystem[] = {
-    0,     // Any
-    0,  // Latin
-    0,  // Greek
-    0,  // Cyrillic
-    0,  // Armenian
-    0,  // Hebrew
-    0,  // Arabic
-    0, // Syriac
-    0, // Thaana
-    0,  // Devanagari
-    0,  // Bengali
-    0,  // Gurmukhi
-    0,  // Gujarati
-    0,  // Oriya
-    0,  // Tamil
-    0xc15,  // Telugu
-    0xc95,  // Kannada
-    0xd15,  // Malayalam
-    0xd9a,  // Sinhala
-    0,  // Thai
-    0,  // Lao
-    0,  // Tibetan
-    0x1000,  // Myanmar
-    0,  // Georgian
-    0,  // Khmer
-    0, // SimplifiedChinese
-    0, // TraditionalChinese
-    0,  // Japanese
-    0,  // Korean
-    0,  // Vietnamese
-    0, // Symbol
-    0x1681, // Ogham
-    0x16a0, // Runic
-    0x7ca // N'Ko
-};
-enum { SampleCharCount = sizeof(sampleCharForWritingSystem) / sizeof(ushort) };
-
+#if FC_VERSION >= 20297
 // Newer FontConfig let's us sort out fonts that contain certain glyphs, but no
 // open type tables for is directly. Do this so we don't pick some strange
 // pseudo unicode font
@@ -306,7 +302,7 @@ static const char *openType[] = {
     "deva",  // Devanagari
     "beng",  // Bengali
     "guru",  // Gurmukhi
-    "gurj",  // Gujarati
+    "gujr",  // Gujarati
     "orya",  // Oriya
     "taml",  // Tamil
     "telu",  // Telugu
@@ -329,6 +325,8 @@ static const char *openType[] = {
     0, // Runic
     "nko " // N'Ko
 };
+Q_STATIC_ASSERT(sizeof(openType) / sizeof(const char *) == QFontDatabase::WritingSystemsCount);
+#endif
 
 static const char *getFcFamilyForStyleHint(const QFont::StyleHint style)
 {
@@ -356,37 +354,14 @@ static const char *getFcFamilyForStyleHint(const QFont::StyleHint style)
     return stylehint;
 }
 
-static bool isSymbolFont(FontFile *fontFile)
+static void populateFromPattern(FcPattern *pattern)
 {
-    if (fontFile == 0 || fontFile->fileName.isEmpty())
-        return false;
-
-    QFontEngine::FaceId id;
-    id.filename = QFile::encodeName(fontFile->fileName);
-    id.index = fontFile->indexValue;
-
-    QFreetypeFace *f = QFreetypeFace::getFace(id);
-    if (f == 0) {
-        qWarning("isSymbolFont: Couldn't open face %s/%d", id.filename.data(), id.index);
-        return false;
-    }
-
-    bool hasSymbolMap = f->symbol_map;
-    f->release(id);
-    return hasSymbolMap;
-}
-
-Q_GUI_EXPORT void qt_registerAliasToFontFamily(const QString &familyName, const QString &alias);
-
-void QFontconfigDatabase::populateFontDatabase()
-{
-    FcFontSet  *fonts;
-
     QString familyName;
     FcChar8 *value = 0;
     int weight_value;
     int slant_value;
     int spacing_value;
+    int width_value;
     FcChar8 *file_value;
     int indexValue;
     FcChar8 *foundry_value;
@@ -394,13 +369,117 @@ void QFontconfigDatabase::populateFontDatabase()
     FcBool scalable;
     FcBool antialias;
 
+    if (FcPatternGetString(pattern, FC_FAMILY, 0, &value) != FcResultMatch)
+        return;
+
+    familyName = QString::fromUtf8((const char *)value);
+
+    slant_value = FC_SLANT_ROMAN;
+    weight_value = FC_WEIGHT_REGULAR;
+    spacing_value = FC_PROPORTIONAL;
+    file_value = 0;
+    indexValue = 0;
+    scalable = FcTrue;
+
+
+    if (FcPatternGetInteger(pattern, FC_SLANT, 0, &slant_value) != FcResultMatch)
+        slant_value = FC_SLANT_ROMAN;
+    if (FcPatternGetInteger(pattern, FC_WEIGHT, 0, &weight_value) != FcResultMatch)
+        weight_value = FC_WEIGHT_REGULAR;
+    if (FcPatternGetInteger(pattern, FC_WIDTH, 0, &width_value) != FcResultMatch)
+        width_value = FC_WIDTH_NORMAL;
+    if (FcPatternGetInteger(pattern, FC_SPACING, 0, &spacing_value) != FcResultMatch)
+        spacing_value = FC_PROPORTIONAL;
+    if (FcPatternGetString(pattern, FC_FILE, 0, &file_value) != FcResultMatch)
+        file_value = 0;
+    if (FcPatternGetInteger(pattern, FC_INDEX, 0, &indexValue) != FcResultMatch)
+        indexValue = 0;
+    if (FcPatternGetBool(pattern, FC_SCALABLE, 0, &scalable) != FcResultMatch)
+        scalable = FcTrue;
+    if (FcPatternGetString(pattern, FC_FOUNDRY, 0, &foundry_value) != FcResultMatch)
+        foundry_value = 0;
+    if (FcPatternGetString(pattern, FC_STYLE, 0, &style_value) != FcResultMatch)
+        style_value = 0;
+    if (FcPatternGetBool(pattern,FC_ANTIALIAS,0,&antialias) != FcResultMatch)
+        antialias = true;
+
+    QSupportedWritingSystems writingSystems;
+    FcLangSet *langset = 0;
+    FcResult res = FcPatternGetLangSet(pattern, FC_LANG, 0, &langset);
+    if (res == FcResultMatch) {
+        bool hasLang = false;
+        for (int j = 1; j < QFontDatabase::WritingSystemsCount; ++j) {
+            const FcChar8 *lang = (const FcChar8*) languageForWritingSystem[j];
+            if (lang) {
+                FcLangResult langRes = FcLangSetHasLang(langset, lang);
+                if (langRes != FcLangDifferentLang) {
+                    writingSystems.setSupported(QFontDatabase::WritingSystem(j));
+                    hasLang = true;
+                }
+            }
+        }
+        if (!hasLang)
+            // none of our known languages, add it to the other set
+            writingSystems.setSupported(QFontDatabase::Other);
+    } else {
+        // we set Other to supported for symbol fonts. It makes no
+        // sense to merge these with other ones, as they are
+        // special in a way.
+        writingSystems.setSupported(QFontDatabase::Other);
+    }
+
+#if FC_VERSION >= 20297
+    for (int j = 1; j < QFontDatabase::WritingSystemsCount; ++j) {
+        if (writingSystems.supported(QFontDatabase::WritingSystem(j))
+            && requiresOpenType(j) && openType[j]) {
+            FcChar8 *cap;
+            res = FcPatternGetString (pattern, FC_CAPABILITY, 0, &cap);
+            if (res != FcResultMatch || !strstr((const char *)cap, openType[j]))
+                writingSystems.setSupported(QFontDatabase::WritingSystem(j),false);
+        }
+    }
+#endif
+
+    FontFile *fontFile = new FontFile;
+    fontFile->fileName = QString::fromLocal8Bit((const char *)file_value);
+    fontFile->indexValue = indexValue;
+
+    QFont::Style style = (slant_value == FC_SLANT_ITALIC)
+                     ? QFont::StyleItalic
+                     : ((slant_value == FC_SLANT_OBLIQUE)
+                        ? QFont::StyleOblique
+                        : QFont::StyleNormal);
+    // Note: weight should really be an int but registerFont incorrectly uses an enum
+    QFont::Weight weight = QFont::Weight(weightFromFcWeight(weight_value));
+
+    double pixel_size = 0;
+    if (!scalable)
+        FcPatternGetDouble (pattern, FC_PIXEL_SIZE, 0, &pixel_size);
+
+    bool fixedPitch = spacing_value >= FC_MONO;
+    // Note: stretch should really be an int but registerFont incorrectly uses an enum
+    QFont::Stretch stretch = QFont::Stretch(stretchFromFcWidth(width_value));
+    QString styleName = style_value ? QString::fromUtf8((const char *) style_value) : QString();
+    QPlatformFontDatabase::registerFont(familyName,styleName,QLatin1String((const char *)foundry_value),weight,style,stretch,antialias,scalable,pixel_size,fixedPitch,writingSystems,fontFile);
+//        qDebug() << familyName << (const char *)foundry_value << weight << style << &writingSystems << scalable << true << pixel_size;
+
+    for (int k = 1; FcPatternGetString(pattern, FC_FAMILY, k, &value) == FcResultMatch; ++k)
+        QPlatformFontDatabase::registerAliasToFontFamily(familyName, QString::fromUtf8((const char *)value));
+
+}
+
+void QFontconfigDatabase::populateFontDatabase()
+{
+    FcInitReinitialize();
+    FcFontSet  *fonts;
+
     {
         FcObjectSet *os = FcObjectSetCreate();
         FcPattern *pattern = FcPatternCreate();
         const char *properties [] = {
             FC_FAMILY, FC_STYLE, FC_WEIGHT, FC_SLANT,
             FC_SPACING, FC_FILE, FC_INDEX,
-            FC_LANG, FC_CHARSET, FC_FOUNDRY, FC_SCALABLE, FC_PIXEL_SIZE, FC_WEIGHT,
+            FC_LANG, FC_CHARSET, FC_FOUNDRY, FC_SCALABLE, FC_PIXEL_SIZE,
             FC_WIDTH,
 #if FC_VERSION >= 20297
             FC_CAPABILITY,
@@ -417,126 +496,8 @@ void QFontconfigDatabase::populateFontDatabase()
         FcPatternDestroy(pattern);
     }
 
-    for (int i = 0; i < fonts->nfont; i++) {
-        if (FcPatternGetString(fonts->fonts[i], FC_FAMILY, 0, &value) != FcResultMatch)
-            continue;
-        //         capitalize(value);
-        familyName = QString::fromUtf8((const char *)value);
-        slant_value = FC_SLANT_ROMAN;
-        weight_value = FC_WEIGHT_REGULAR;
-        spacing_value = FC_PROPORTIONAL;
-        file_value = 0;
-        indexValue = 0;
-        scalable = FcTrue;
-
-
-        if (FcPatternGetInteger (fonts->fonts[i], FC_SLANT, 0, &slant_value) != FcResultMatch)
-            slant_value = FC_SLANT_ROMAN;
-        if (FcPatternGetInteger (fonts->fonts[i], FC_WEIGHT, 0, &weight_value) != FcResultMatch)
-            weight_value = FC_WEIGHT_REGULAR;
-        if (FcPatternGetInteger (fonts->fonts[i], FC_SPACING, 0, &spacing_value) != FcResultMatch)
-            spacing_value = FC_PROPORTIONAL;
-        if (FcPatternGetString (fonts->fonts[i], FC_FILE, 0, &file_value) != FcResultMatch)
-            file_value = 0;
-        if (FcPatternGetInteger (fonts->fonts[i], FC_INDEX, 0, &indexValue) != FcResultMatch)
-            indexValue = 0;
-        if (FcPatternGetBool(fonts->fonts[i], FC_SCALABLE, 0, &scalable) != FcResultMatch)
-            scalable = FcTrue;
-        if (FcPatternGetString(fonts->fonts[i], FC_FOUNDRY, 0, &foundry_value) != FcResultMatch)
-            foundry_value = 0;
-        if (FcPatternGetString(fonts->fonts[i], FC_STYLE, 0, &style_value) != FcResultMatch)
-            style_value = 0;
-        if(FcPatternGetBool(fonts->fonts[i],FC_ANTIALIAS,0,&antialias) != FcResultMatch)
-            antialias = true;
-
-        QSupportedWritingSystems writingSystems;
-        FcLangSet *langset = 0;
-        FcResult res = FcPatternGetLangSet(fonts->fonts[i], FC_LANG, 0, &langset);
-        if (res == FcResultMatch) {
-            for (int i = 1; i < LanguageCount; ++i) {
-                const FcChar8 *lang = (const FcChar8*) languageForWritingSystem[i];
-                if (lang) {
-                    FcLangResult langRes = FcLangSetHasLang(langset, lang);
-                    if (langRes != FcLangDifferentLang)
-                        writingSystems.setSupported(QFontDatabase::WritingSystem(i));
-                }
-            }
-        } else {
-            // we set Other to supported for symbol fonts. It makes no
-            // sense to merge these with other ones, as they are
-            // special in a way.
-            writingSystems.setSupported(QFontDatabase::Other);
-        }
-
-        FcCharSet *cs = 0;
-        res = FcPatternGetCharSet(fonts->fonts[i], FC_CHARSET, 0, &cs);
-        if (res == FcResultMatch) {
-            // some languages are not supported by FontConfig, we rather check the
-            // charset to detect these
-            for (int i = 1; i < SampleCharCount; ++i) {
-                if (!sampleCharForWritingSystem[i] || writingSystems.supported(QFontDatabase::WritingSystem(i)))
-                    continue;
-                if (FcCharSetHasChar(cs, sampleCharForWritingSystem[i]))
-                    writingSystems.setSupported(QFontDatabase::WritingSystem(i));
-            }
-        }
-
-#if FC_VERSION >= 20297
-        for (int j = 1; j < LanguageCount; ++j) {
-            if (writingSystems.supported(QFontDatabase::WritingSystem(j))
-                && requiresOpenType(j) && openType[j]) {
-                FcChar8 *cap;
-                res = FcPatternGetString (fonts->fonts[i], FC_CAPABILITY, 0, &cap);
-                if (res != FcResultMatch || !strstr((const char *)cap, openType[j]))
-                    writingSystems.setSupported(QFontDatabase::WritingSystem(j),false);
-            }
-        }
-#endif
-
-        FontFile *fontFile = new FontFile;
-        fontFile->fileName = QLatin1String((const char *)file_value);
-        fontFile->indexValue = indexValue;
-
-        if (!writingSystems.supported(QFontDatabase::Symbol)) {
-            // Symbol encoding used to encode various crap in the 32..255 character
-            // code range, which belongs to Latin character code range.
-            // Symbol fonts usually don't have any other code ranges support.
-            bool mightBeSymbolFont = true;
-            for (int j = 2; j < QFontDatabase::WritingSystemsCount; ++j) {
-                if (writingSystems.supported(QFontDatabase::WritingSystem(j))) {
-                    mightBeSymbolFont = false;
-                    break;
-                }
-            }
-            if (mightBeSymbolFont && isSymbolFont(fontFile)) {
-                writingSystems.setSupported(QFontDatabase::Latin, false);
-                writingSystems.setSupported(QFontDatabase::Symbol);
-            }
-        }
-
-        QFont::Style style = (slant_value == FC_SLANT_ITALIC)
-                         ? QFont::StyleItalic
-                         : ((slant_value == FC_SLANT_OBLIQUE)
-                            ? QFont::StyleOblique
-                            : QFont::StyleNormal);
-        QFont::Weight weight = QFont::Weight(getFCWeight(weight_value));
-
-        double pixel_size = 0;
-        if (!scalable) {
-            int width = 100;
-            FcPatternGetInteger (fonts->fonts[i], FC_WIDTH, 0, &width);
-            FcPatternGetDouble (fonts->fonts[i], FC_PIXEL_SIZE, 0, &pixel_size);
-        }
-
-        bool fixedPitch = spacing_value >= FC_MONO;
-        QFont::Stretch stretch = QFont::Unstretched;
-        QString styleName = style_value ? QString::fromUtf8((const char *) style_value) : QString();
-        QPlatformFontDatabase::registerFont(familyName,styleName,QLatin1String((const char *)foundry_value),weight,style,stretch,antialias,scalable,pixel_size,fixedPitch,writingSystems,fontFile);
-//        qDebug() << familyName << (const char *)foundry_value << weight << style << &writingSystems << scalable << true << pixel_size;
-
-        for (int k = 1; FcPatternGetString(fonts->fonts[i], FC_FAMILY, k, &value) == FcResultMatch; ++k)
-            qt_registerAliasToFontFamily(familyName, QString::fromUtf8((const char *)value));
-    }
+    for (int i = 0; i < fonts->nfont; i++)
+        populateFromPattern(fonts->fonts[i]);
 
     FcFontSetDestroy (fonts);
 
@@ -578,132 +539,119 @@ QFontEngineMulti *QFontconfigDatabase::fontEngineMulti(QFontEngine *fontEngine, 
     return new QFontEngineMultiFontConfig(fontEngine, script);
 }
 
-QFontEngine *QFontconfigDatabase::fontEngine(const QFontDef &f, QChar::Script script, void *usrPtr)
+namespace {
+QFontEngine::HintStyle defaultHintStyleFromMatch(QFont::HintingPreference hintingPreference, FcPattern *match, bool useXftConf)
+{
+    switch (hintingPreference) {
+    case QFont::PreferNoHinting:
+        return QFontEngine::HintNone;
+    case QFont::PreferVerticalHinting:
+        return QFontEngine::HintLight;
+    case QFont::PreferFullHinting:
+        return QFontEngine::HintFull;
+    case QFont::PreferDefaultHinting:
+        break;
+    }
+
+    if (QGuiApplication::platformNativeInterface()->nativeResourceForScreen("nofonthinting",
+                         QGuiApplication::primaryScreen())) {
+        return QFontEngine::HintNone;
+    }
+
+    int hint_style = 0;
+    if (FcPatternGetInteger (match, FC_HINT_STYLE, 0, &hint_style) == FcResultMatch) {
+        switch (hint_style) {
+        case FC_HINT_NONE:
+            return QFontEngine::HintNone;
+        case FC_HINT_SLIGHT:
+            return QFontEngine::HintLight;
+        case FC_HINT_MEDIUM:
+            return QFontEngine::HintMedium;
+        case FC_HINT_FULL:
+            return QFontEngine::HintFull;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
+    if (useXftConf) {
+        void *hintStyleResource =
+                QGuiApplication::platformNativeInterface()->nativeResourceForScreen("hintstyle",
+                                                                                    QGuiApplication::primaryScreen());
+        int hintStyle = int(reinterpret_cast<qintptr>(hintStyleResource));
+        if (hintStyle > 0)
+            return QFontEngine::HintStyle(hintStyle - 1);
+    }
+
+    return QFontEngine::HintFull;
+}
+
+QFontEngine::SubpixelAntialiasingType subpixelTypeFromMatch(FcPattern *match, bool useXftConf)
+{
+    int subpixel = FC_RGBA_UNKNOWN;
+    if (FcPatternGetInteger(match, FC_RGBA, 0, &subpixel) == FcResultMatch) {
+        switch (subpixel) {
+        case FC_RGBA_UNKNOWN:
+        case FC_RGBA_NONE:
+            return QFontEngine::Subpixel_None;
+        case FC_RGBA_RGB:
+            return QFontEngine::Subpixel_RGB;
+        case FC_RGBA_BGR:
+            return QFontEngine::Subpixel_BGR;
+        case FC_RGBA_VRGB:
+            return QFontEngine::Subpixel_VRGB;
+        case FC_RGBA_VBGR:
+            return QFontEngine::Subpixel_VBGR;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
+    if (useXftConf) {
+        void *subpixelTypeResource =
+                QGuiApplication::platformNativeInterface()->nativeResourceForScreen("subpixeltype",
+                                                                                    QGuiApplication::primaryScreen());
+        int subpixelType = int(reinterpret_cast<qintptr>(subpixelTypeResource));
+        if (subpixelType > 0)
+            return QFontEngine::SubpixelAntialiasingType(subpixelType - 1);
+    }
+
+    return QFontEngine::Subpixel_None;
+}
+} // namespace
+
+QFontEngine *QFontconfigDatabase::fontEngine(const QFontDef &f, void *usrPtr)
 {
     if (!usrPtr)
         return 0;
-    QFontDef fontDef = f;
 
-    QFontEngineFT *engine;
     FontFile *fontfile = static_cast<FontFile *> (usrPtr);
     QFontEngine::FaceId fid;
     fid.filename = QFile::encodeName(fontfile->fileName);
     fid.index = fontfile->indexValue;
 
-    bool antialias = !(fontDef.styleStrategy & QFont::NoAntialias);
-    engine = new QFontEngineFT(fontDef);
+    QFontEngineFT *engine = new QFontEngineFT(f);
+    engine->face_id = fid;
 
-    QFontEngineFT::GlyphFormat format;
-    // try and get the pattern
-    FcPattern *pattern = FcPatternCreate();
+    setupFontEngine(engine, f);
 
-    FcValue value;
-    value.type = FcTypeString;
-        QByteArray cs = fontDef.family.toUtf8();
-    value.u.s = (const FcChar8 *)cs.data();
-    FcPatternAdd(pattern,FC_FAMILY,value,true);
-
-    value.u.s = (const FcChar8 *)fid.filename.data();
-    FcPatternAdd(pattern,FC_FILE,value,true);
-
-    value.type = FcTypeInteger;
-    value.u.i = fid.index;
-    FcPatternAdd(pattern,FC_INDEX,value,true);
-
-    FcResult result;
-    FcPattern *match = FcFontMatch(0, pattern, &result);
-    if (match) {
-        QFontEngineFT::HintStyle default_hint_style;
-        if (f.hintingPreference != QFont::PreferDefaultHinting) {
-            switch (f.hintingPreference) {
-            case QFont::PreferNoHinting:
-                default_hint_style = QFontEngineFT::HintNone;
-                break;
-            case QFont::PreferVerticalHinting:
-                default_hint_style = QFontEngineFT::HintLight;
-                break;
-            case QFont::PreferFullHinting:
-            default:
-                default_hint_style = QFontEngineFT::HintFull;
-                break;
-            }
-        } else {
-            int hint_style = 0;
-            if (FcPatternGetInteger (match, FC_HINT_STYLE, 0, &hint_style) == FcResultNoMatch)
-                hint_style = QFontEngineFT::HintFull;
-            switch (hint_style) {
-            case FC_HINT_NONE:
-                default_hint_style = QFontEngineFT::HintNone;
-                break;
-            case FC_HINT_SLIGHT:
-                default_hint_style = QFontEngineFT::HintLight;
-                break;
-            case FC_HINT_MEDIUM:
-                default_hint_style = QFontEngineFT::HintMedium;
-                break;
-            default:
-                default_hint_style = QFontEngineFT::HintFull;
-                break;
-            }
-        }
-
-        if (f.hintingPreference == QFont::PreferDefaultHinting) {
-            const QPlatformServices *services = QGuiApplicationPrivate::platformIntegration()->services();
-            if (services && (services->desktopEnvironment() == "GNOME" || services->desktopEnvironment() == "UNITY")) {
-                void *hintStyleResource =
-                        QGuiApplication::platformNativeInterface()->nativeResourceForScreen("hintstyle",
-                                                                                            QGuiApplication::primaryScreen());
-                int hintStyle = int(reinterpret_cast<qintptr>(hintStyleResource));
-                if (hintStyle > 0)
-                    default_hint_style = QFontEngine::HintStyle(hintStyle - 1);
-            }
-        }
-
-        engine->setDefaultHintStyle(default_hint_style);
-
-        if (antialias) {
-            QFontEngineFT::SubpixelAntialiasingType subpixelType = QFontEngineFT::Subpixel_None;
-            int subpixel = FC_RGBA_NONE;
-
-            FcPatternGetInteger(match, FC_RGBA, 0, &subpixel);
-            if (subpixel == FC_RGBA_UNKNOWN)
-                subpixel = FC_RGBA_NONE;
-
-            switch (subpixel) {
-                case FC_RGBA_NONE: subpixelType = QFontEngineFT::Subpixel_None; break;
-                case FC_RGBA_RGB: subpixelType = QFontEngineFT::Subpixel_RGB; break;
-                case FC_RGBA_BGR: subpixelType = QFontEngineFT::Subpixel_BGR; break;
-                case FC_RGBA_VRGB: subpixelType = QFontEngineFT::Subpixel_VRGB; break;
-                case FC_RGBA_VBGR: subpixelType = QFontEngineFT::Subpixel_VBGR; break;
-                default: break;
-            }
-
-            format = subpixelType == QFontEngineFT::Subpixel_None
-                        ? QFontEngineFT::Format_A8 : QFontEngineFT::Format_A32;
-            engine->subpixelType = subpixelType;
-        } else
-            format = QFontEngineFT::Format_Mono;
-
-        FcPatternDestroy(match);
-    } else
-        format = antialias ? QFontEngineFT::Format_A8 : QFontEngineFT::Format_Mono;
-
-    FcPatternDestroy(pattern);
-
-    if (!engine->init(fid,antialias,format)) {
+    if (!engine->init(fid, engine->antialias, engine->defaultFormat) || engine->invalid()) {
         delete engine;
         engine = 0;
-        return engine;
     }
-    if (engine->invalid()) {
-        delete engine;
-        engine = 0;
-    } else if (scriptRequiresOpenType(script)) {
-        if (!engine->supportsScript(script)) {
-            delete engine;
-            engine = 0;
-        }
-    }
+
+    return engine;
+}
+
+QFontEngine *QFontconfigDatabase::fontEngine(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference)
+{
+    QFontEngineFT *engine = static_cast<QFontEngineFT*>(QBasicFontDatabase::fontEngine(fontData, pixelSize, hintingPreference));
+    if (engine == 0)
+        return 0;
+
+    setupFontEngine(engine, engine->fontDef);
 
     return engine;
 }
@@ -728,7 +676,7 @@ QStringList QFontconfigDatabase::fallbacksForFamily(const QString &family, QFont
         slant_value = FC_SLANT_OBLIQUE;
     FcPatternAddInteger(pattern, FC_SLANT, slant_value);
 
-    Q_ASSERT(uint(script) < SpecialLanguageCount);
+    Q_ASSERT(uint(script) < QChar::ScriptCount);
     if (*specialLanguages[script] != '\0') {
         FcLangSet *ls = FcLangSetCreate();
         FcLangSetAdd(ls, (const FcChar8*)specialLanguages[script]);
@@ -810,6 +758,7 @@ static FcPattern *queryFont(const FcChar8 *file, const QByteArray &data, int id,
 QStringList QFontconfigDatabase::addApplicationFont(const QByteArray &fontData, const QString &fileName)
 {
     QStringList families;
+
     FcFontSet *set = FcConfigGetFonts(0, FcSetApplication);
     if (!set) {
         FcConfigAppFontAddFile(0, (const FcChar8 *)":/non-existent");
@@ -822,34 +771,33 @@ QStringList QFontconfigDatabase::addApplicationFont(const QByteArray &fontData, 
     FcBlanks *blanks = FcConfigGetBlanks(0);
     int count = 0;
 
-    FcPattern *pattern = 0;
+    FcPattern *pattern;
     do {
         pattern = queryFont((const FcChar8 *)QFile::encodeName(fileName).constData(),
                             fontData, id, blanks, &count);
         if (!pattern)
             return families;
 
-        FcPatternDel(pattern, FC_FILE);
-        QByteArray cs = fileName.toUtf8();
-        FcPatternAddString(pattern, FC_FILE, (const FcChar8 *) cs.constData());
-
         FcChar8 *fam = 0;
         if (FcPatternGetString(pattern, FC_FAMILY, 0, &fam) == FcResultMatch) {
             QString family = QString::fromUtf8(reinterpret_cast<const char *>(fam));
             families << family;
         }
+        populateFromPattern(pattern);
 
-        if (!FcFontSetAdd(set, pattern))
-            return families;
+        FcFontSetAdd(set, pattern);
 
         ++id;
-    } while (pattern && id < count);
+    } while (id < count);
 
     return families;
 }
 
 QString QFontconfigDatabase::resolveFontFamilyAlias(const QString &family) const
 {
+    QString resolved = QBasicFontDatabase::resolveFontFamilyAlias(family);
+    if (!resolved.isEmpty() && resolved != family)
+        return resolved;
     FcPattern *pattern = FcPatternCreate();
     if (!pattern)
         return family;
@@ -863,7 +811,7 @@ QString QFontconfigDatabase::resolveFontFamilyAlias(const QString &family) const
 
     FcChar8 *familyAfterSubstitution = 0;
     FcPatternGetString(pattern, FC_FAMILY, 0, &familyAfterSubstitution);
-    QString resolved = QString::fromUtf8((const char *) familyAfterSubstitution);
+    resolved = QString::fromUtf8((const char *) familyAfterSubstitution);
     FcPatternDestroy(pattern);
 
     return resolved;
@@ -895,6 +843,94 @@ QFont QFontconfigDatabase::defaultFont() const
     FcPatternDestroy(dummy);
 
     return QFont(resolved);
+}
+
+void QFontconfigDatabase::setupFontEngine(QFontEngineFT *engine, const QFontDef &fontDef) const
+{
+    bool antialias = !(fontDef.styleStrategy & QFont::NoAntialias);
+    bool forcedAntialiasSetting = !antialias;
+
+    const QPlatformServices *services = QGuiApplicationPrivate::platformIntegration()->services();
+    bool useXftConf = (services && (services->desktopEnvironment() == "GNOME" || services->desktopEnvironment() == "UNITY"));
+    if (useXftConf) {
+        void *antialiasResource =
+                QGuiApplication::platformNativeInterface()->nativeResourceForScreen("antialiasingEnabled",
+                                                                                    QGuiApplication::primaryScreen());
+        int antialiasingEnabled = int(reinterpret_cast<qintptr>(antialiasResource));
+        if (antialiasingEnabled > 0)
+            antialias = antialiasingEnabled - 1;
+    }
+
+    QFontEngine::GlyphFormat format;
+    // try and get the pattern
+    FcPattern *pattern = FcPatternCreate();
+
+    FcValue value;
+    value.type = FcTypeString;
+    QByteArray cs = fontDef.family.toUtf8();
+    value.u.s = (const FcChar8 *)cs.data();
+    FcPatternAdd(pattern,FC_FAMILY,value,true);
+
+    QFontEngine::FaceId fid = engine->faceId();
+
+    if (!fid.filename.isEmpty()) {
+        value.u.s = (const FcChar8 *)fid.filename.data();
+        FcPatternAdd(pattern,FC_FILE,value,true);
+
+        value.type = FcTypeInteger;
+        value.u.i = fid.index;
+        FcPatternAdd(pattern,FC_INDEX,value,true);
+    }
+
+    if (fontDef.pixelSize > 0.1)
+        FcPatternAddDouble(pattern, FC_PIXEL_SIZE, fontDef.pixelSize);
+
+    FcResult result;
+
+    FcConfigSubstitute(0, pattern, FcMatchPattern);
+    FcDefaultSubstitute(pattern);
+
+    FcPattern *match = FcFontMatch(0, pattern, &result);
+    if (match) {
+        engine->setDefaultHintStyle(defaultHintStyleFromMatch((QFont::HintingPreference)fontDef.hintingPreference, match, useXftConf));
+
+        FcBool fc_autohint;
+        if (FcPatternGetBool(match, FC_AUTOHINT,0, &fc_autohint) == FcResultMatch)
+            engine->forceAutoHint = fc_autohint;
+
+#if defined(FT_LCD_FILTER_H)
+        int lcdFilter;
+        if (FcPatternGetInteger(match, FC_LCD_FILTER, 0, &lcdFilter) == FcResultMatch)
+            engine->lcdFilterType = lcdFilter;
+#endif
+
+        if (!forcedAntialiasSetting) {
+            FcBool fc_antialias;
+            if (FcPatternGetBool(match, FC_ANTIALIAS,0, &fc_antialias) == FcResultMatch)
+                antialias = fc_antialias;
+        }
+
+        if (antialias) {
+            QFontEngine::SubpixelAntialiasingType subpixelType = QFontEngine::Subpixel_None;
+            if (!(fontDef.styleStrategy & QFont::NoSubpixelAntialias))
+                subpixelType = subpixelTypeFromMatch(match, useXftConf);
+            engine->subpixelType = subpixelType;
+
+            format = (subpixelType == QFontEngine::Subpixel_None)
+                    ? QFontEngine::Format_A8
+                    : QFontEngine::Format_A32;
+        } else
+            format = QFontEngine::Format_Mono;
+
+        FcPatternDestroy(match);
+    } else
+        format = antialias ? QFontEngine::Format_A8 : QFontEngine::Format_Mono;
+
+    FcPatternDestroy(pattern);
+
+    engine->antialias = antialias;
+    engine->defaultFormat = format;
+    engine->glyphFormat = format;
 }
 
 QT_END_NAMESPACE

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -202,6 +194,14 @@ MyRecord record(int row) const
     Assigns \a other to this cache and returns a reference to this cache.
 */
 
+/*!
+    \fn QContiguousCache<T> &QContiguousCache::operator=(QContiguousCache<T> &&other)
+
+    Move-assigns \a other to this QContiguousCache instance.
+
+    \since 5.2
+*/
+
 /*! \fn void QContiguousCache::swap(QContiguousCache<T> &other)
     \since 4.8
 
@@ -211,7 +211,7 @@ MyRecord record(int row) const
 
 /*! \fn bool QContiguousCache::operator==(const QContiguousCache<T> &other) const
 
-    Returns true if \a other is equal to this cache; otherwise returns false.
+    Returns \c true if \a other is equal to this cache; otherwise returns \c false.
 
     Two caches are considered equal if they contain the same values at the same
     indexes.  This function requires the value type to implement the \c operator==().
@@ -221,8 +221,8 @@ MyRecord record(int row) const
 
 /*! \fn bool QContiguousCache::operator!=(const QContiguousCache<T> &other) const
 
-    Returns true if \a other is not equal to this cache; otherwise
-    returns false.
+    Returns \c true if \a other is not equal to this cache; otherwise
+    returns \c false.
 
     Two caches are considered equal if they contain the same values at the same
     indexes.  This function requires the value type to implement the \c operator==().
@@ -253,14 +253,14 @@ MyRecord record(int row) const
 
 /*! \fn bool QContiguousCache::isEmpty() const
 
-    Returns true if no items are stored within the cache.
+    Returns \c true if no items are stored within the cache.
 
     \sa size(), capacity()
 */
 
 /*! \fn bool QContiguousCache::isFull() const
 
-    Returns true if the number of items stored within the cache is equal
+    Returns \c true if the number of items stored within the cache is equal
     to the capacity of the cache.
 
     \sa size(), capacity()
@@ -365,7 +365,7 @@ MyRecord record(int row) const
 
 /*! \fn bool QContiguousCache::containsIndex(int i) const
 
-    Returns true if the cache's index range includes the given index \a i.
+    Returns \c true if the cache's index range includes the given index \a i.
 
     \sa firstIndex(), lastIndex()
 */
@@ -474,7 +474,7 @@ MyRecord record(int row) const
     INT_MAX or prepended before the index position 0.  This is only expected
     to occur in very long lived circular buffer style usage of the
     contiguous cache.  Indexes can be made valid again by calling
-    normalizeIndexs().
+    normalizeIndexes().
 
     \sa normalizeIndexes(), append(), prepend()
 */

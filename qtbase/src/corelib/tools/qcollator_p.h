@@ -1,39 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2013 Aleix Pol Gonzalez <aleixpol@kde.org>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,78 +35,107 @@
 #ifndef QCOLLATOR_P_H
 #define QCOLLATOR_P_H
 
-#include <QtCore/qstring.h>
-#include <QtCore/qlocale.h>
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
+#include "qcollator.h"
+#include <QVector>
+#ifdef QT_USE_ICU
+#include <unicode/ucol.h>
+#elif defined(Q_OS_OSX)
+#include <CoreServices/CoreServices.h>
+#elif defined(Q_OS_WIN)
+#include <qt_windows.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
-class QCollatorPrivate;
+#ifdef QT_USE_ICU
+typedef UCollator *CollatorType;
+typedef QByteArray CollatorKeyType;
 
-class Q_CORE_EXPORT QCollator
+#elif defined(Q_OS_OSX)
+typedef CollatorRef CollatorType;
+typedef QVector<UCCollationValue> CollatorKeyType;
+
+#elif defined(Q_OS_WIN)
+typedef QString CollatorKeyType;
+typedef int CollatorType;
+#  ifdef Q_OS_WINRT
+#    define USE_COMPARESTRINGEX
+#  endif
+
+#else //posix
+typedef QVector<wchar_t> CollatorKeyType;
+typedef int CollatorType;
+#endif
+
+class Q_CORE_EXPORT QCollatorPrivate
 {
 public:
-    enum Collation {
-        Default,
-        Big5Han,
-        Dictionary,
-        Direct,
-        GB2312Han,
-        PhoneBook,
-        Pinyin,
-        Phonetic,
-        Reformed,
-        Standard,
-        Stroke,
-        Traditional,
-        UniHan
-    };
+    QAtomicInt ref;
+    QLocale locale;
+#if defined(Q_OS_WIN) && !defined(QT_USE_ICU)
+#ifdef USE_COMPARESTRINGEX
+    QString localeName;
+#else
+    LCID localeID;
+#endif
+#endif
+    Qt::CaseSensitivity caseSensitivity;
+    bool numericMode;
+    bool ignorePunctuation;
+    bool dirty;
 
-    QCollator(const QLocale &locale = QLocale(), QCollator::Collation collation = QCollator::Default);
-    QCollator(const QCollator &);
-    ~QCollator();
-    QCollator &operator=(const QCollator &);
+    CollatorType collator;
 
-    void setLocale(const QLocale &locale);
-    QLocale locale() const;
+    void clear() {
+        cleanup();
+        collator = 0;
+    }
 
-    void setCollation(Collation collation);
-    Collation collation() const;
+    void init();
+    void cleanup();
 
-    QString identifier() const;
-    static QCollator fromIdentifier(const QString &identifier);
+    QCollatorPrivate()
+        : ref(1),
+          caseSensitivity(Qt::CaseSensitive),
+          numericMode(false),
+          ignorePunctuation(false),
+          dirty(true),
+          collator(0)
+    { cleanup(); }
 
-    enum CasePreference {
-        CasePreferenceOff = 0x0,
-        CasePreferenceUpper  = 0x1,
-        CasePreferenceLower  = 0x2
-    };
-
-    CasePreference casePreference() const;
-    void setCasePreference(CasePreference c);
-
-    void setNumericMode(bool on);
-    bool numericMode() const;
-
-    void setIgnorePunctuation(bool on);
-    bool ignorePunctuation() const;
-
-    int compare(const QString &s1, const QString &s2) const;
-    int compare(const QStringRef &s1, const QStringRef &s2) const;
-    int compare(const QChar *s1, int len1, const QChar *s2, int len2) const;
-
-    bool operator()(const QString &s1, const QString &s2) const
-    { return compare(s1, s2) < 0; }
-
-    QByteArray sortKey(const QString &string) const;
-
-    QStringList indexCharacters() const;
+    ~QCollatorPrivate() { cleanup(); }
 
 private:
-    QCollatorPrivate *d;
-
-    void detach();
-    void init();
+    Q_DISABLE_COPY(QCollatorPrivate)
 };
+
+class Q_CORE_EXPORT QCollatorSortKeyPrivate : public QSharedData
+{
+    friend class QCollator;
+public:
+    QCollatorSortKeyPrivate(const CollatorKeyType &key)
+        : QSharedData()
+        , m_key(key)
+    {
+    }
+
+    CollatorKeyType m_key;
+
+private:
+    Q_DISABLE_COPY(QCollatorSortKeyPrivate)
+};
+
 
 QT_END_NAMESPACE
 

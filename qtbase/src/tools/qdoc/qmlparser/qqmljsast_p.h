@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtQml module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -207,18 +199,20 @@ public:
 
         Kind_UiArrayBinding,
         Kind_UiImport,
-        Kind_UiImportList,
         Kind_UiObjectBinding,
         Kind_UiObjectDefinition,
         Kind_UiObjectInitializer,
         Kind_UiObjectMemberList,
         Kind_UiArrayMemberList,
+        Kind_UiPragma,
         Kind_UiProgram,
         Kind_UiParameterList,
         Kind_UiPublicMember,
         Kind_UiQualifiedId,
+        Kind_UiQualifiedPragmaId,
         Kind_UiScriptBinding,
-        Kind_UiSourceElement
+        Kind_UiSourceElement,
+        Kind_UiHeaderItemList
     };
 
     inline Node()
@@ -601,6 +595,8 @@ public:
     virtual SourceLocation lastSourceLocation() const
     { return propertyNameToken; }
 
+    virtual QString asString() const = 0;
+
 // attributes
     SourceLocation propertyNameToken;
 };
@@ -608,7 +604,11 @@ public:
 class QML_PARSER_EXPORT PropertyAssignment: public Node
 {
 public:
-    PropertyAssignment() {}
+    PropertyAssignment(PropertyName *n)
+        : name(n)
+    {}
+// attributes
+    PropertyName *name;
 };
 
 class QML_PARSER_EXPORT PropertyAssignmentList: public Node
@@ -656,7 +656,7 @@ public:
     QQMLJS_DECLARE_AST_NODE(PropertyNameAndValue)
 
     PropertyNameAndValue(PropertyName *n, ExpressionNode *v)
-        : name(n), value(v)
+        : PropertyAssignment(n), value(v)
     { kind = K; }
 
     virtual void accept0(Visitor *visitor);
@@ -668,7 +668,6 @@ public:
     { return value->lastSourceLocation(); }
 
 // attributes
-    PropertyName *name;
     SourceLocation colonToken;
     ExpressionNode *value;
     SourceLocation commaToken;
@@ -685,11 +684,11 @@ public:
     };
 
     PropertyGetterSetter(PropertyName *n, FunctionBody *b)
-        : type(Getter), name(n), formals(0), functionBody (b)
+        : PropertyAssignment(n), type(Getter), formals(0), functionBody (b)
     { kind = K; }
 
     PropertyGetterSetter(PropertyName *n, FormalParameterList *f, FunctionBody *b)
-        : type(Setter), name(n), formals(f), functionBody (b)
+        : PropertyAssignment(n), type(Setter), formals(f), functionBody (b)
     { kind = K; }
 
     virtual void accept0(Visitor *visitor);
@@ -703,7 +702,6 @@ public:
 // attributes
     Type type;
     SourceLocation getSetToken;
-    PropertyName *name;
     SourceLocation lparenToken;
     FormalParameterList *formals;
     SourceLocation rparenToken;
@@ -722,6 +720,8 @@ public:
 
     virtual void accept0(Visitor *visitor);
 
+    virtual QString asString() const { return id.toString(); }
+
 // attributes
     QStringRef id;
 };
@@ -736,6 +736,8 @@ public:
 
     virtual void accept0(Visitor *visitor);
 
+    virtual QString asString() const { return id.toString(); }
+
 // attributes
     QStringRef id;
 };
@@ -749,6 +751,8 @@ public:
         id (n) { kind = K; }
 
     virtual void accept0(Visitor *visitor);
+
+    virtual QString asString() const { return QString::number(id, 'g', 16); }
 
 // attributes
     double id;
@@ -2271,44 +2275,6 @@ public:
     SourceLocation semicolonToken;
 };
 
-class QML_PARSER_EXPORT UiImportList: public Node
-{
-public:
-    QQMLJS_DECLARE_AST_NODE(UiImportList)
-
-    UiImportList(UiImport *import)
-        : import(import),
-          next(this)
-    { kind = K; }
-
-    UiImportList(UiImportList *previous, UiImport *import)
-        : import(import)
-    {
-        kind = K;
-        next = previous->next;
-        previous->next = this;
-    }
-
-    UiImportList *finish()
-    {
-        UiImportList *head = next;
-        next = 0;
-        return head;
-    }
-
-    virtual void accept0(Visitor *visitor);
-
-    virtual SourceLocation firstSourceLocation() const
-    { return import->firstSourceLocation(); }
-
-    virtual SourceLocation lastSourceLocation() const
-    { return next ? next->lastSourceLocation() : import->lastSourceLocation(); }
-
-// attributes
-    UiImport *import;
-    UiImportList *next;
-};
-
 class QML_PARSER_EXPORT UiObjectMember: public Node
 {
 public:
@@ -2355,21 +2321,131 @@ public:
     UiObjectMember *member;
 };
 
+class QML_PARSER_EXPORT UiQualifiedPragmaId: public Node
+{
+public:
+    QQMLJS_DECLARE_AST_NODE(UiQualifiedPragmaId)
+
+    UiQualifiedPragmaId(const QStringRef &name)
+        : next(this), name(name)
+    { kind = K; }
+
+    UiQualifiedPragmaId(UiQualifiedPragmaId *previous, const QStringRef &name)
+        : name(name)
+    {
+        kind = K;
+        next = previous->next;
+        previous->next = this;
+    }
+
+    UiQualifiedPragmaId *finish()
+    {
+        UiQualifiedPragmaId *head = next;
+        next = 0;
+        return head;
+    }
+
+    virtual void accept0(Visitor *visitor);
+
+    virtual SourceLocation firstSourceLocation() const
+    { return identifierToken; }
+
+    virtual SourceLocation lastSourceLocation() const
+    { return next ? next->lastSourceLocation() : identifierToken; }
+
+// attributes
+    UiQualifiedPragmaId *next;
+    QStringRef name;
+    SourceLocation identifierToken;
+};
+
+class QML_PARSER_EXPORT UiPragma: public Node
+{
+public:
+    QQMLJS_DECLARE_AST_NODE(UiPragma)
+
+    UiPragma(UiQualifiedPragmaId *type)
+        : pragmaType(type)
+    { kind = K; }
+
+    virtual void accept0(Visitor *visitor);
+
+    virtual SourceLocation firstSourceLocation() const
+    { return pragmaToken; }
+
+    virtual SourceLocation lastSourceLocation() const
+    { return semicolonToken; }
+
+// attributes
+    UiQualifiedPragmaId *pragmaType;
+    SourceLocation pragmaToken;
+    SourceLocation semicolonToken;
+};
+
+class QML_PARSER_EXPORT UiHeaderItemList: public Node
+{
+public:
+    QQMLJS_DECLARE_AST_NODE(UiHeaderItemList)
+
+    UiHeaderItemList(UiImport *import)
+        : headerItem(import), next(this)
+    { kind = K; }
+
+    UiHeaderItemList(UiPragma *pragma)
+        : headerItem(pragma), next(this)
+    { kind = K; }
+
+    UiHeaderItemList(UiHeaderItemList *previous, UiImport *import)
+        : headerItem(import)
+    {
+        kind = K;
+        next = previous->next;
+        previous->next = this;
+    }
+
+    UiHeaderItemList(UiHeaderItemList *previous, UiPragma *pragma)
+        : headerItem(pragma)
+    {
+        kind = K;
+        next = previous->next;
+        previous->next = this;
+    }
+
+    UiHeaderItemList *finish()
+    {
+        UiHeaderItemList *head = next;
+        next = 0;
+        return head;
+    }
+
+    virtual void accept0(Visitor *visitor);
+
+    virtual SourceLocation firstSourceLocation() const
+    { return headerItem->firstSourceLocation(); }
+
+    virtual SourceLocation lastSourceLocation() const
+    { return next ? next->lastSourceLocation() : headerItem->lastSourceLocation(); }
+
+// attributes
+    Node *headerItem;
+    UiHeaderItemList *next;
+};
+
 class QML_PARSER_EXPORT UiProgram: public Node
 {
 public:
     QQMLJS_DECLARE_AST_NODE(UiProgram)
 
-    UiProgram(UiImportList *imports, UiObjectMemberList *members)
-        : imports(imports), members(members)
+    UiProgram(UiHeaderItemList *headers, UiObjectMemberList *members)
+        : headers(headers), members(members)
     { kind = K; }
 
     virtual void accept0(Visitor *visitor);
 
     virtual SourceLocation firstSourceLocation() const
     {
-        if (imports)
-            return imports->firstSourceLocation();
+        if (headers)
+            return headers->firstSourceLocation();
         else if (members)
             return members->firstSourceLocation();
         return SourceLocation();
@@ -2379,13 +2455,13 @@ public:
     {
         if (members)
             return members->lastSourceLocation();
-        else if (imports)
-            return imports->lastSourceLocation();
+        else if (headers)
+            return headers->lastSourceLocation();
         return SourceLocation();
     }
 
 // attributes
-    UiImportList *imports;
+    UiHeaderItemList *headers;
     UiObjectMemberList *members;
 };
 

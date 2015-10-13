@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,9 +37,6 @@
 
 #include "qfont_p.h"
 #include "qfontengine_p.h"
-
-#include <math.h>
-
 
 QT_BEGIN_NAMESPACE
 
@@ -213,6 +202,19 @@ QFontMetrics &QFontMetrics::operator=(const QFontMetrics &fm)
 }
 
 /*!
+    \fn QFontMetrics &QFontMetrics::operator=(QFontMetrics &&other)
+
+    Move-assigns \a other to this QFontMetrics instance.
+
+    \since 5.2
+*/
+/*!
+    \fn QFontMetricsF &QFontMetricsF::operator=(QFontMetricsF &&other)
+
+    Move-assigns \a other to this QFontMetricsF instance.
+*/
+
+/*!
     \fn void QFontMetrics::swap(QFontMetrics &other)
     \since 5.0
 
@@ -221,8 +223,8 @@ QFontMetrics &QFontMetrics::operator=(const QFontMetrics &fm)
 */
 
 /*!
-    Returns true if \a other is equal to this object; otherwise
-    returns false.
+    Returns \c true if \a other is equal to this object; otherwise
+    returns \c false.
 
     Two font metrics are considered equal if they were constructed
     from the same QFont and the paint devices they were constructed
@@ -238,7 +240,7 @@ bool QFontMetrics::operator ==(const QFontMetrics &other) const
 /*!
     \fn bool QFontMetrics::operator !=(const QFontMetrics &other) const
 
-    Returns true if \a other is not equal to this object; otherwise returns false.
+    Returns \c true if \a other is not equal to this object; otherwise returns \c false.
 
     Two font metrics are considered equal if they were constructed
     from the same QFont and the paint devices they were constructed
@@ -287,8 +289,7 @@ int QFontMetrics::descent() const
 /*!
     Returns the height of the font.
 
-    This is always equal to ascent()+descent()+1 (the 1 is for the
-    base line).
+    This is always equal to ascent()+descent().
 
     \sa leading(), lineSpacing()
 */
@@ -397,22 +398,17 @@ int QFontMetrics::averageCharWidth() const
 }
 
 /*!
-    Returns true if character \a ch is a valid character in the font;
-    otherwise returns false.
+    Returns \c true if character \a ch is a valid character in the font;
+    otherwise returns \c false.
 */
 bool QFontMetrics::inFont(QChar ch) const
 {
-    const int script = ch.script();
-    QFontEngine *engine = d->engineForScript(script);
-    Q_ASSERT(engine != 0);
-    if (engine->type() == QFontEngine::Box)
-        return false;
-    return engine->canRender(&ch, 1);
+    return inFontUcs4(ch.unicode());
 }
 
 /*!
-   Returns true if the character \a ucs4 encoded in UCS-4/UTF-32 is a valid
-   character in the font; otherwise returns false.
+   Returns \c true if the character \a ucs4 encoded in UCS-4/UTF-32 is a valid
+   character in the font; otherwise returns \c false.
 */
 bool QFontMetrics::inFontUcs4(uint ucs4) const
 {
@@ -450,12 +446,10 @@ int QFontMetrics::leftBearing(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<10> glyphs;
-    int nglyphs = 9;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, QFontEngine::GlyphIndicesOnly);
-    // ### can nglyphs != 1 happen at all? Not currently I think
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+
     qreal lb;
-    engine->getGlyphBearings(glyphs.glyphs[0], &lb);
+    engine->getGlyphBearings(glyph, &lb);
     return qRound(lb);
 }
 
@@ -485,12 +479,10 @@ int QFontMetrics::rightBearing(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<10> glyphs;
-    int nglyphs = 9;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, QFontEngine::GlyphIndicesOnly);
-    // ### can nglyphs != 1 happen at all? Not currently I think
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+
     qreal rb;
-    engine->getGlyphBearings(glyphs.glyphs[0], 0, &rb);
+    engine->getGlyphBearings(glyph, 0, &rb);
     return qRound(rb);
 }
 
@@ -530,15 +522,12 @@ int QFontMetrics::width(const QString &text, int len, int flags) const
         int numGlyphs = len;
         QVarLengthGlyphLayoutArray glyphs(numGlyphs);
         QFontEngine *engine = d->engineForScript(QChar::Script_Common);
-        if (!engine->stringToCMap(text.data(), len, &glyphs, &numGlyphs, 0)) {
-            glyphs.resize(numGlyphs);
-            if (!engine->stringToCMap(text.data(), len, &glyphs, &numGlyphs, 0))
-                Q_ASSERT_X(false, Q_FUNC_INFO, "stringToCMap shouldn't fail twice");
-        }
+        if (!engine->stringToCMap(text.data(), len, &glyphs, &numGlyphs, 0))
+            Q_UNREACHABLE();
 
         QFixed width;
         for (int i = 0; i < numGlyphs; ++i)
-            width += glyphs.advances_x[i];
+            width += glyphs.advances[i];
         return qRound(width);
     }
 
@@ -586,12 +575,19 @@ int QFontMetrics::width(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<8> glyphs;
-    int nglyphs = 7;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, 0);
-    return qRound(glyphs.advances_x[0]);
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+    QFixed advance;
+
+    QGlyphLayout glyphs;
+    glyphs.numGlyphs = 1;
+    glyphs.glyphs = &glyph;
+    glyphs.advances = &advance;
+    engine->recalcAdvances(&glyphs, 0);
+
+    return qRound(advance);
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 /*! \obsolete
 
     Returns the width of the character at position \a pos in the
@@ -631,13 +627,20 @@ int QFontMetrics::charWidth(const QString &text, int pos) const
 
         d->alterCharForCapitalization(ch);
 
-        QGlyphLayoutArray<8> glyphs;
-        int nglyphs = 7;
-        engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, 0);
-        width = qRound(glyphs.advances_x[0]);
+        glyph_t glyph = engine->glyphIndex(ch.unicode());
+        QFixed advance;
+
+        QGlyphLayout glyphs;
+        glyphs.numGlyphs = 1;
+        glyphs.glyphs = &glyph;
+        glyphs.advances = &advance;
+        engine->recalcAdvances(&glyphs, 0);
+
+        width = qRound(advance);
     }
     return width;
 }
+#endif
 
 /*!
     Returns the bounding rectangle of the characters in the string
@@ -648,7 +651,7 @@ int QFontMetrics::charWidth(const QString &text, int pos) const
     e.g. for italicized fonts, and that the width of the returned
     rectangle might be different than what the width() method returns.
 
-    If you want to know the advance width of the string (to layout
+    If you want to know the advance width of the string (to lay out
     a set of strings next to each other), use width() instead.
 
     Newline characters are processed as normal characters, \e not as
@@ -700,10 +703,9 @@ QRect QFontMetrics::boundingRect(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<10> glyphs;
-    int nglyphs = 9;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, QFontEngine::GlyphIndicesOnly);
-    glyph_metrics_t gm = engine->boundingBox(glyphs.glyphs[0]);
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+
+    glyph_metrics_t gm = engine->boundingBox(glyph);
     return QRect(qRound(gm.x), qRound(gm.y), qRound(gm.width), qRound(gm.height));
 }
 
@@ -819,7 +821,7 @@ QSize QFontMetrics::size(int flags, const QString &text, int tabStops, int *tabA
     e.g. for italicized fonts, and that the width of the returned
     rectangle might be different than what the width() method returns.
 
-    If you want to know the advance width of the string (to layout
+    If you want to know the advance width of the string (to lay out
     a set of strings next to each other), use width() instead.
 
     Newline characters are processed as normal characters, \e not as
@@ -1089,8 +1091,8 @@ QFontMetricsF &QFontMetricsF::operator=(const QFontMetricsF &fm)
 }
 
 /*!
-  Returns true if the font metrics are equal to the \a other font
-  metrics; otherwise returns false.
+  Returns \c true if the font metrics are equal to the \a other font
+  metrics; otherwise returns \c false.
 
   Two font metrics are considered equal if they were constructed from the
   same QFont and the paint devices they were constructed for are
@@ -1105,8 +1107,8 @@ bool QFontMetricsF::operator ==(const QFontMetricsF &other) const
     \fn bool QFontMetricsF::operator !=(const QFontMetricsF &other) const
     \overload
 
-    Returns true if the font metrics are not equal to the \a other font
-    metrics; otherwise returns false.
+    Returns \c true if the font metrics are not equal to the \a other font
+    metrics; otherwise returns \c false.
 
     \sa operator==()
 */
@@ -1152,8 +1154,7 @@ qreal QFontMetricsF::descent() const
 /*!
     Returns the height of the font.
 
-    This is always equal to ascent()+descent()+1 (the 1 is for the
-    base line).
+    This is always equal to ascent()+descent().
 
     \sa leading(), lineSpacing()
 */
@@ -1263,24 +1264,19 @@ qreal QFontMetricsF::averageCharWidth() const
 }
 
 /*!
-    Returns true if character \a ch is a valid character in the font;
-    otherwise returns false.
+    Returns \c true if character \a ch is a valid character in the font;
+    otherwise returns \c false.
 */
 bool QFontMetricsF::inFont(QChar ch) const
 {
-    const int script = ch.script();
-    QFontEngine *engine = d->engineForScript(script);
-    Q_ASSERT(engine != 0);
-    if (engine->type() == QFontEngine::Box)
-        return false;
-    return engine->canRender(&ch, 1);
+    return inFontUcs4(ch.unicode());
 }
 
 /*!
     \fn bool QFontMetricsF::inFontUcs4(uint ch) const
 
-    Returns true if the character given by \a ch, encoded in UCS-4/UTF-32,
-    is a valid character in the font; otherwise returns false.
+    Returns \c true if the character given by \a ch, encoded in UCS-4/UTF-32,
+    is a valid character in the font; otherwise returns \c false.
 */
 bool QFontMetricsF::inFontUcs4(uint ucs4) const
 {
@@ -1318,12 +1314,10 @@ qreal QFontMetricsF::leftBearing(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<10> glyphs;
-    int nglyphs = 9;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, QFontEngine::GlyphIndicesOnly);
-    // ### can nglyphs != 1 happen at all? Not currently I think
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+
     qreal lb;
-    engine->getGlyphBearings(glyphs.glyphs[0], &lb);
+    engine->getGlyphBearings(glyph, &lb);
     return lb;
 }
 
@@ -1353,12 +1347,10 @@ qreal QFontMetricsF::rightBearing(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<10> glyphs;
-    int nglyphs = 9;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, QFontEngine::GlyphIndicesOnly);
-    // ### can nglyphs != 1 happen at all? Not currently I think
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+
     qreal rb;
-    engine->getGlyphBearings(glyphs.glyphs[0], 0, &rb);
+    engine->getGlyphBearings(glyph, 0, &rb);
     return rb;
 
 }
@@ -1423,10 +1415,16 @@ qreal QFontMetricsF::width(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<8> glyphs;
-    int nglyphs = 7;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, 0);
-    return glyphs.advances_x[0].toReal();
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+    QFixed advance;
+
+    QGlyphLayout glyphs;
+    glyphs.numGlyphs = 1;
+    glyphs.glyphs = &glyph;
+    glyphs.advances = &advance;
+    engine->recalcAdvances(&glyphs, 0);
+
+    return advance.toReal();
 }
 
 /*!
@@ -1438,7 +1436,7 @@ qreal QFontMetricsF::width(QChar ch) const
     e.g. for italicized fonts, and that the width of the returned
     rectangle might be different than what the width() method returns.
 
-    If you want to know the advance width of the string (to layout
+    If you want to know the advance width of the string (to lay out
     a set of strings next to each other), use width() instead.
 
     Newline characters are processed as normal characters, \e not as
@@ -1488,10 +1486,9 @@ QRectF QFontMetricsF::boundingRect(QChar ch) const
 
     d->alterCharForCapitalization(ch);
 
-    QGlyphLayoutArray<10> glyphs;
-    int nglyphs = 9;
-    engine->stringToCMap(&ch, 1, &glyphs, &nglyphs, QFontEngine::GlyphIndicesOnly);
-    glyph_metrics_t gm = engine->boundingBox(glyphs.glyphs[0]);
+    glyph_t glyph = engine->glyphIndex(ch.unicode());
+
+    glyph_metrics_t gm = engine->boundingBox(glyph);
     return QRectF(gm.x.toReal(), gm.y.toReal(), gm.width.toReal(), gm.height.toReal());
 }
 
@@ -1579,7 +1576,7 @@ QRectF QFontMetricsF::boundingRect(const QRectF &rect, int flags, const QString&
     \li Qt::TextWordBreak breaks the text to fit the rectangle.
     \endlist
 
-    These flags are defined in \l{Qt::TextFlags}.
+    These flags are defined in the \l{Qt::TextFlag} enum.
 
     If Qt::TextExpandTabs is set in \a flags, the following behavior is
     used to interpret tab characters in the text:
@@ -1613,7 +1610,7 @@ QSizeF QFontMetricsF::size(int flags, const QString &text, int tabStops, int *ta
     e.g. for italicized fonts, and that the width of the returned
     rectangle might be different than what the width() method returns.
 
-    If you want to know the advance width of the string (to layout
+    If you want to know the advance width of the string (to lay out
     a set of strings next to each other), use width() instead.
 
     Newline characters are processed as normal characters, \e not as

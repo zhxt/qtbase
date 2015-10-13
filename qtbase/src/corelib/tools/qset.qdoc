@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -127,10 +127,24 @@
 */
 
 /*!
+    \fn QSet::QSet(QSet && other)
+
+    Move-constructs a QSet instance, making it point to the same object that
+    \a other was pointing to.
+*/
+
+
+/*!
     \fn QSet<T> &QSet::operator=(const QSet<T> &other)
 
     Assigns the \a other set to this set and returns a reference to
     this set.
+*/
+
+/*!
+    \fn QSet<T> &QSet::operator=(QSet<T> &&other)
+
+    Move-assigns the \a other set to this set.
 */
 
 /*!
@@ -143,8 +157,8 @@
 /*!
     \fn bool QSet::operator==(const QSet<T> &other) const
 
-    Returns true if the \a other set is equal to this set; otherwise
-    returns false.
+    Returns \c true if the \a other set is equal to this set; otherwise
+    returns \c false.
 
     Two sets are considered equal if they contain the same elements.
 
@@ -156,8 +170,8 @@
 /*!
     \fn bool QSet::operator!=(const QSet<T> &other) const
 
-    Returns true if the \a other set is not equal to this set; otherwise
-    returns false.
+    Returns \c true if the \a other set is not equal to this set; otherwise
+    returns \c false.
 
     Two sets are considered equal if they contain the same elements.
 
@@ -177,7 +191,7 @@
 /*!
     \fn bool QSet::isEmpty() const
 
-    Returns true if the set contains no elements; otherwise returns
+    Returns \c true if the set contains no elements; otherwise returns
     false.
 
     \sa size()
@@ -248,8 +262,8 @@
 
     \internal
 
-    Returns true if the set's internal data isn't shared with any
-    other set object; otherwise returns false.
+    Returns \c true if the set's internal data isn't shared with any
+    other set object; otherwise returns \c false.
 
     \sa detach()
 */
@@ -271,7 +285,7 @@
     \fn bool QSet::remove(const T &value)
 
     Removes any occurrence of item \a value from the set. Returns
-    true if an item was actually removed; otherwise returns false.
+    true if an item was actually removed; otherwise returns \c false.
 
     \sa contains(), insert()
 */
@@ -322,7 +336,7 @@
 /*!
     \fn bool QSet::contains(const T &value) const
 
-    Returns true if the set contains item \a value; otherwise returns
+    Returns \c true if the set contains item \a value; otherwise returns
     false.
 
     \sa insert(), remove(), find()
@@ -332,8 +346,8 @@
     \fn bool QSet::contains(const QSet<T> &other) const
     \since 4.6
 
-    Returns true if the set contains all items from the \a other set;
-    otherwise returns false.
+    Returns \c true if the set contains all items from the \a other set;
+    otherwise returns \c false.
 
     \sa insert(), remove(), find()
 */
@@ -505,7 +519,7 @@
 /*!
     \fn bool QSet::empty() const
 
-    Returns true if the set is empty. This function is provided
+    Returns \c true if the set is empty. This function is provided
     for STL compatibility. It is equivalent to isEmpty().
 */
 
@@ -621,9 +635,6 @@
     unless you need to change the QSet through the iterator. Const
     iterators are slightly faster, and can improve code readability.
 
-    QSet\<T\>::iterator allows you to iterate over a QSet\<T\> and
-    modify it as you go (using QSet::erase()). However,
-
     The default QSet::iterator constructor creates an uninitialized
     iterator. You must initialize it using a function like
     QSet::begin(), QSet::end(), or QSet::insert() before you can
@@ -643,8 +654,12 @@
 
     \snippet code/doc_src_qset.cpp 10
 
-    Multiple iterators can be used on the same set. However, you may
-    not attempt to modify the container while iterating on it.
+    Multiple iterators can be used on the same set.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
 
     \sa QSet::const_iterator, QMutableSetIterator
 */
@@ -682,8 +697,10 @@
 
     \snippet code/doc_src_qset.cpp 12
 
-    Multiple iterators can be used on the same set. However, you may
-    not attempt to modify the container while iterating on it.
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
 
     \sa QSet::iterator, QSetIterator
 */
@@ -788,8 +805,8 @@
     \fn bool QSet::iterator::operator==(const iterator &other) const
     \fn bool QSet::const_iterator::operator==(const const_iterator &other) const
 
-    Returns true if \a other points to the same item as this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
 
     \sa operator!=()
 */
@@ -805,8 +822,8 @@
     \fn bool QSet::iterator::operator!=(const iterator &other) const
     \fn bool QSet::const_iterator::operator!=(const const_iterator &other) const
 
-    Returns true if \a other points to a different item than this
-    iterator; otherwise returns false.
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
 
     \sa operator==()
 */
@@ -964,4 +981,15 @@
     This function requires the value type to implement \c operator>>().
 
     \sa{Serializing Qt Data Types}{Format of the QDataStream operators}
+*/
+
+/*!
+    \fn uint qHash(const QSet<T> &key, uint seed = 0)
+    \relates QHash
+    \since 5.5
+
+    Returns the hash value for the \a key, using \a seed to seed the calculation.
+
+    The hash value is independent of the order of elements in \a key, that is, sets
+    that contain the same elements hash to the same value.
 */

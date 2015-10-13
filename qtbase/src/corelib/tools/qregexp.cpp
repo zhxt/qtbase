@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -53,9 +45,9 @@
 #include "qstringlist.h"
 #include "qstringmatcher.h"
 #include "qvector.h"
-#include "private/qfunctions_p.h"
 
 #include <limits.h>
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -123,6 +115,10 @@ int qFindString(const QChar *haystack, int haystackLen, int from,
     A good text on regexps is \e {Mastering Regular Expressions}
     (Third Edition) by Jeffrey E. F.  Friedl, ISBN 0-596-52812-4.
 
+    \note In Qt 5, the new QRegularExpression class provides a Perl
+    compatible implementation of regular expressions and is recommended
+    in place of QRegExp.
+
     \tableofcontents
 
     \section1 Introduction
@@ -132,8 +128,8 @@ int qFindString(const QChar *haystack, int haystackLen, int from,
     or \b{5}. An expression can also be a set of characters
     enclosed in square brackets. \b{[ABCD]} will match an \b{A}
     or a \b{B} or a \b{C} or a \b{D}. We can write this same
-    expression as \b{[A-D]}, and an experession to match any
-    captital letter in the English alphabet is written as
+    expression as \b{[A-D]}, and an expression to match any
+    capital letter in the English alphabet is written as
     \b{[A-Z]}.
 
     A quantifier specifies the number of occurrences of an expression
@@ -284,7 +280,7 @@ int qFindString(const QChar *haystack, int haystackLen, int from,
     \row \li \b{\\W}
          \li Matches a non-word character.
     \row \li \b{\\\e{n}}
-         \li The \e{n}-th \l backreference, e.g. \\1, \\2, etc.
+         \li The \e{n}-th backreference, e.g. \\1, \\2, etc.
     \endtable
 
     \b{Note:} The C++ compiler transforms backslashes in strings.
@@ -387,7 +383,7 @@ int qFindString(const QChar *haystack, int haystackLen, int from,
     Note: Quantifiers are normally "greedy". They always match as much
     text as they can. For example, \b{0+} matches the first zero it
     finds and all the consecutive zeros after the first zero. Applied
-    to '20005', it matches'2\underline{000}5'. Quantifiers can be made
+    to '20005', it matches '2\underline{000}5'. Quantifiers can be made
     non-greedy, see setMinimal().
 
     \target capturing parentheses
@@ -677,7 +673,7 @@ int qFindString(const QChar *haystack, int haystackLen, int from,
     QRegExp can match case insensitively using setCaseSensitivity(),
     and can use non-greedy matching, see setMinimal(). By
     default QRegExp uses full regexps but this can be changed with
-    setWildcard(). Searching can be forward with indexIn() or backward
+    setPatternSyntax(). Searching can be done forward with indexIn() or backward
     with lastIndexIn(). Captured text can be accessed using
     capturedTexts() which returns a string list of all captured
     strings, or using cap() which returns the captured string for the
@@ -884,7 +880,7 @@ struct QRegExpEngineKey
     }
 };
 
-Q_STATIC_GLOBAL_OPERATOR bool operator==(const QRegExpEngineKey &key1, const QRegExpEngineKey &key2)
+static bool operator==(const QRegExpEngineKey &key1, const QRegExpEngineKey &key2)
 {
     return key1.pattern == key2.pattern && key1.patternSyntax == key2.patternSyntax
            && key1.cs == key2.cs;
@@ -1044,12 +1040,12 @@ public:
 #endif
 
 private:
-    uint c; // character classes
     QVector<QRegExpCharClassRange> r; // character ranges
-    bool n; // negative?
 #ifndef QT_NO_REGEXP_OPTIM
     QVector<int> occ1; // first-occurrence array
 #endif
+    uint c; // character classes
+    bool n; // negative?
 };
 #else
 struct QRegExpCharClass
@@ -1537,7 +1533,7 @@ void QRegExpEngine::addPlusTransitions(const QVector<int> &from, const QVector<i
             for (int j = 0; j < to.size(); j++) {
                 // ### st.reenter.contains(to.at(j)) check looks suspicious
                 if (!st.reenter.contains(to.at(j)) &&
-                     qBinaryFind(oldOuts.constBegin(), oldOuts.constEnd(), to.at(j)) == oldOuts.end())
+                     !std::binary_search(oldOuts.constBegin(), oldOuts.constEnd(), to.at(j)))
                     st.reenter.insert(to.at(j), atom);
             }
         }
@@ -1793,7 +1789,7 @@ static bool isBetterCapture(int ncap, const int *begin1, const int *end1, const 
 #endif
 
 /*
-  Returns true if anchor a matches at position pos + i in the input
+  Returns \c true if anchor a matches at position pos + i in the input
   string, otherwise false.
 */
 bool QRegExpMatchState::testAnchor(int i, int a, const int *capBegin)
@@ -2882,6 +2878,8 @@ static const struct CategoriesRangeMapEntry {
     { "YijingHexagramSymbols",                0x4DC0, 0x4DFF }
 };
 
+inline bool operator<(const CategoriesRangeMapEntry &entry1, const CategoriesRangeMapEntry &entry2)
+{ return qstrcmp(entry1.name, entry2.name) < 0; }
 inline bool operator<(const char *name, const CategoriesRangeMapEntry &entry)
 { return qstrcmp(name, entry.name) < 0; }
 inline bool operator<(const CategoriesRangeMapEntry &entry, const char *name)
@@ -3245,8 +3243,9 @@ int QRegExpEngine::getEscape()
                 }
             } else if (catlen > 2 && category.at(0) == 'I' && category.at(1) == 's') {
                 static const int N = sizeof(categoriesRangeMap) / sizeof(categoriesRangeMap[0]);
-                const CategoriesRangeMapEntry *r = qBinaryFind(categoriesRangeMap, categoriesRangeMap + N, category.constData() + 2);
-                if (r != categoriesRangeMap + N)
+                const char * const categoryFamily = category.constData() + 2;
+                const CategoriesRangeMapEntry *r = std::lower_bound(categoriesRangeMap, categoriesRangeMap + N, categoryFamily);
+                if (r != categoriesRangeMap + N && qstrcmp(r->name, categoryFamily) == 0)
                     yyCharClass->addRange(r->first, r->second);
                 else
                     error(RXERR_CATEGORY);
@@ -4009,6 +4008,14 @@ QRegExp &QRegExp::operator=(const QRegExp &rx)
 }
 
 /*!
+    \fn QRegExp &QRegExp::operator=(QRegExp &&other)
+
+    Move-assigns \a other to this QRegExp instance.
+
+    \since 5.2
+*/
+
+/*!
     \fn void QRegExp::swap(QRegExp &other)
     \since 4.8
 
@@ -4017,8 +4024,8 @@ QRegExp &QRegExp::operator=(const QRegExp &rx)
 */
 
 /*!
-    Returns true if this regular expression is equal to \a rx;
-    otherwise returns false.
+    Returns \c true if this regular expression is equal to \a rx;
+    otherwise returns \c false.
 
     Two QRegExp objects are equal if they have the same pattern
     strings and the same settings for case sensitivity, wildcard and
@@ -4032,18 +4039,18 @@ bool QRegExp::operator==(const QRegExp &rx) const
 /*!
     \fn bool QRegExp::operator!=(const QRegExp &rx) const
 
-    Returns true if this regular expression is not equal to \a rx;
-    otherwise returns false.
+    Returns \c true if this regular expression is not equal to \a rx;
+    otherwise returns \c false.
 
     \sa operator==()
 */
 
 /*!
-    Returns true if the pattern string is empty; otherwise returns
+    Returns \c true if the pattern string is empty; otherwise returns
     false.
 
     If you call exactMatch() with an empty pattern on an empty string
-    it will return true; otherwise it returns false since it operates
+    it will return true; otherwise it returns \c false since it operates
     over the whole string. If you call indexIn() with an empty pattern
     on \e any string it will return the start offset (0 by default)
     because the empty pattern matches the 'emptiness' at the start of
@@ -4059,7 +4066,7 @@ bool QRegExp::isEmpty() const
 }
 
 /*!
-    Returns true if the regular expression is valid; otherwise returns
+    Returns \c true if the regular expression is valid; otherwise returns
     false. An invalid regular expression never matches.
 
     The pattern \b{[a-z} is an example of an invalid pattern, since
@@ -4169,8 +4176,8 @@ void QRegExp::setPatternSyntax(PatternSyntax syntax)
 }
 
 /*!
-    Returns true if minimal (non-greedy) matching is enabled;
-    otherwise returns false.
+    Returns \c true if minimal (non-greedy) matching is enabled;
+    otherwise returns \c false.
 
     \sa caseSensitivity(), setMinimal()
 */
@@ -4203,8 +4210,8 @@ void QRegExp::setMinimal(bool minimal)
 
 // ### Qt 5: make non-const
 /*!
-    Returns true if \a str is matched exactly by this regular
-    expression; otherwise returns false. You can determine how much of
+    Returns \c true if \a str is matched exactly by this regular
+    expression; otherwise returns \c false. You can determine how much of
     the string was matched by calling matchedLength().
 
     For a given regexp string R, exactMatch("R") is the equivalent of
@@ -4213,8 +4220,8 @@ void QRegExp::setMinimal(bool minimal)
     sets matchedLength() differently.
 
     For example, if the regular expression is \b{blue}, then
-    exactMatch() returns true only for input \c blue. For inputs \c
-    bluebell, \c blutak and \c lightblue, exactMatch() returns false
+    exactMatch() returns \c true only for input \c blue. For inputs \c
+    bluebell, \c blutak and \c lightblue, exactMatch() returns \c false
     and matchedLength() will return 4, 3 and 0 respectively.
 
     Although const, this function sets matchedLength(),
@@ -4574,9 +4581,10 @@ QDataStream &operator>>(QDataStream &in, QRegExp &regExp)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QRegExp &r)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QRegExp(patternSyntax=" << r.patternSyntax()
                   << ", pattern='"<< r.pattern() << "')";
-    return dbg.space();
+    return dbg;
 }
 #endif
 

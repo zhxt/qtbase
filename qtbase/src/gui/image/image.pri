@@ -32,6 +32,7 @@ HEADERS += \
 SOURCES += \
         image/qbitmap.cpp \
         image/qimage.cpp \
+        image/qimage_conversions.cpp \
         image/qimageiohandler.cpp \
         image/qimagereader.cpp \
         image/qimagewriter.cpp \
@@ -52,7 +53,10 @@ SOURCES += \
         image/qiconengineplugin.cpp \
 
 
-win32: SOURCES += image/qpixmap_win.cpp
+win32:!winrt: SOURCES += image/qpixmap_win.cpp
+
+NO_PCH_SOURCES += image/qimage_compat.cpp
+false: SOURCES += $$NO_PCH_SOURCES # Hack for QtCreator
 
 # Built-in image format support
 HEADERS += \
@@ -74,7 +78,10 @@ contains(QT_CONFIG, jpeg):include($$PWD/qjpeghandler.pri)
 contains(QT_CONFIG, gif):include($$PWD/qgifhandler.pri)
 
 # SIMD
-NEON_SOURCES += image/qimage_neon.cpp
 SSE2_SOURCES += image/qimage_sse2.cpp
 SSSE3_SOURCES += image/qimage_ssse3.cpp
-AVX_SOURCES += image/qimage_avx.cpp
+SSE4_1_SOURCES += image/qimage_sse4.cpp
+AVX2_SOURCES += image/qimage_avx2.cpp
+NEON_SOURCES += image/qimage_neon.cpp
+MIPS_DSPR2_SOURCES += image/qimage_mips_dspr2.cpp
+MIPS_DSPR2_ASM += image/qimage_mips_dspr2_asm.S

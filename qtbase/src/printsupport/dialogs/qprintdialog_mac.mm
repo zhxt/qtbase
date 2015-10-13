@@ -1,45 +1,35 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-#ifndef QT_NO_PRINTDIALOG
 
 #include <Cocoa/Cocoa.h>
 
@@ -51,8 +41,13 @@
 #include <QtWidgets/private/qapplication_p.h>
 #include <QtPrintSupport/qprinter.h>
 #include <QtPrintSupport/qprintengine.h>
+#include <qpa/qplatformprintdevice.h>
+
+#ifndef QT_NO_PRINTDIALOG
 
 QT_BEGIN_NAMESPACE
+
+extern qreal qt_pointMultiplier(QPageLayout::Unit unit);
 
 class QPrintDialogPrivate : public QAbstractPrintDialogPrivate
 {
@@ -126,27 +121,71 @@ QT_USE_NAMESPACE
             if (dialog->maxPage() < dialog->toPage())
                 dialog->setFromTo(dialog->fromPage(), dialog->maxPage());
         }
-        // Keep us in sync with file output
-        PMDestinationType dest;
 
-        // If the user selected print to file, the session has been
-        // changed behind our back and our d->ep->session object is a
-        // dangling pointer. Update it based on the "current" session
+        // Keep us in sync with chosen destination
+        PMDestinationType dest;
         PMSessionGetDestinationType(session, settings, &dest);
         if (dest == kPMDestinationFile) {
+            // QTBUG-38820
+            // If user selected Print to File, leave OSX to generate the PDF,
+            // otherwise setting PdfFormat would prevent us showing dialog again.
+            // TODO Restore this when QTBUG-36112 is fixed.
+            /*
             QCFType<CFURLRef> file;
             PMSessionCopyDestinationLocation(session, settings, &file);
             UInt8 localFile[2048];  // Assuming there's a POSIX file system here.
             CFURLGetFileSystemRepresentation(file, true, localFile, sizeof(localFile));
             printer->setOutputFileName(QString::fromUtf8(reinterpret_cast<const char *>(localFile)));
+            */
         } else {
-            // Keep output format.
-            QPrinter::OutputFormat format;
-            format = printer->outputFormat();
-            printer->setOutputFileName(QString());
-            printer->setOutputFormat(format);
+            PMPrinter macPrinter;
+            PMSessionGetCurrentPrinter(session, &macPrinter);
+            QString printerId = QString::fromCFString(PMPrinterGetID(macPrinter));
+            if (printer->printerName() != printerId)
+                printer->setPrinterName(printerId);
         }
     }
+
+    // Note this code should be in QCocoaPrintDevice, but that implementation is in the plugin,
+    // we need to move the dialog implementation into the plugin first to be able to access it.
+    // Need to tell QPrinter/QPageLayout if the page size or orientation has been changed
+    PMPageFormat pageFormat = static_cast<PMPageFormat>([printInfo PMPageFormat]);
+    PMPaper paper;
+    PMGetPageFormatPaper(pageFormat, &paper);
+    PMOrientation orientation;
+    PMGetOrientation(pageFormat, &orientation);
+    QPageSize pageSize;
+    CFStringRef key;
+    double width = 0;
+    double height = 0;
+    // If the PPD name is empty then is custom, for some reason PMPaperIsCustom doesn't work here
+    PMPaperGetPPDPaperName(paper, &key);
+    if (PMPaperGetWidth(paper, &width) == noErr && PMPaperGetHeight(paper, &height) == noErr) {
+        QString ppdKey = QString::fromCFString(key);
+        if (ppdKey.isEmpty()) {
+            // Is using a custom page size as defined in the Print Dialog custom settings using mm or inches.
+            // We can't ask PMPaper what those units actually are, we can only get the point size which may return
+            // slightly wrong results due to rounding.
+            // Testing shows if using metric/mm then is rounded mm, if imperial/inch is rounded to 2 decimal places
+            // Even if we pass in our own custom size in mm with decimal places, the dialog will still round it!
+            // Suspect internal storage is in rounded mm?
+            if (QLocale().measurementSystem() == QLocale::MetricSystem) {
+                QSizeF sizef = QSizeF(width, height) / qt_pointMultiplier(QPageLayout::Millimeter);
+                // Round to 0 decimal places
+                pageSize = QPageSize(sizef.toSize(), QPageSize::Millimeter);
+            } else {
+                qreal multiplier = qt_pointMultiplier(QPageLayout::Inch);
+                const int w = qRound(width * 100 / multiplier);
+                const int h = qRound(height * 100 / multiplier);
+                pageSize = QPageSize(QSizeF(w / 100.0, h / 100.0), QPageSize::Inch);
+            }
+        } else {
+            pageSize = QPlatformPrintDevice::createPageSize(ppdKey, QSize(width, height), QString());
+        }
+    }
+    if (pageSize.isValid() && !pageSize.isEquivalentTo(printer->pageLayout().pageSize()))
+        printer->setPageSize(pageSize);
+    printer->setOrientation(orientation == kPMLandscape ? QPrinter::Landscape : QPrinter::Portrait);
 
     dialog->done((returnCode == NSOKButton) ? QDialog::Accepted : QDialog::Rejected);
 }
@@ -195,10 +234,12 @@ void QPrintDialogPrivate::openCocoaPrintPanel(Qt::WindowModality modality)
     // Call processEvents in case the event dispatcher has been interrupted, and needs to do
     // cleanup of modal sessions. Do this before showing the native dialog, otherwise it will
     // close down during the cleanup (QTBUG-17913):
-    qApp->processEvents(QEventLoop::ExcludeUserInputEvents, QEventLoop::ExcludeSocketNotifiers);
+    qApp->processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);
 
-    QT_MANGLE_NAMESPACE(QCocoaPrintPanelDelegate) *delegate = [[QT_MANGLE_NAMESPACE(QCocoaPrintPanelDelegate) alloc] init];
-    if (modality == Qt::ApplicationModal) {
+    QT_MANGLE_NAMESPACE(QCocoaPrintPanelDelegate) *delegate = [[QT_MANGLE_NAMESPACE(QCocoaPrintPanelDelegate) alloc] initWithNSPrintInfo:printInfo];
+    if (modality == Qt::ApplicationModal || !q->parentWidget()) {
+        if (modality == Qt::NonModal)
+            qWarning("QPrintDialog is required to be modal on OS X");
         int rval = [printPanel runModalWithPrintInfo:printInfo];
         [delegate printPanelDidEnd:printPanel returnCode:rval contextInfo:q];
     } else {

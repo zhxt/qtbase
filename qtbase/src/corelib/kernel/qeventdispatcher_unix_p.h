@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -94,6 +86,12 @@ public:
 
 class QEventDispatcherUNIXPrivate;
 
+#ifdef Q_OS_QNX
+#  define FINAL_EXCEPT_BLACKBERRY
+#else
+#  define FINAL_EXCEPT_BLACKBERRY Q_DECL_FINAL
+#endif
+
 class Q_CORE_EXPORT QEventDispatcherUNIX : public QAbstractEventDispatcher
 {
     Q_OBJECT
@@ -103,22 +101,22 @@ public:
     explicit QEventDispatcherUNIX(QObject *parent = 0);
     ~QEventDispatcherUNIX();
 
-    bool processEvents(QEventLoop::ProcessEventsFlags flags);
-    bool hasPendingEvents();
+    bool processEvents(QEventLoop::ProcessEventsFlags flags) Q_DECL_OVERRIDE;
+    bool hasPendingEvents() Q_DECL_OVERRIDE;
 
-    void registerSocketNotifier(QSocketNotifier *notifier);
-    void unregisterSocketNotifier(QSocketNotifier *notifier);
+    void registerSocketNotifier(QSocketNotifier *notifier) FINAL_EXCEPT_BLACKBERRY;
+    void unregisterSocketNotifier(QSocketNotifier *notifier) FINAL_EXCEPT_BLACKBERRY;
 
-    void registerTimer(int timerId, int interval, Qt::TimerType timerType, QObject *object);
-    bool unregisterTimer(int timerId);
-    bool unregisterTimers(QObject *object);
-    QList<TimerInfo> registeredTimers(QObject *object) const;
+    void registerTimer(int timerId, int interval, Qt::TimerType timerType, QObject *object) Q_DECL_FINAL;
+    bool unregisterTimer(int timerId) Q_DECL_FINAL;
+    bool unregisterTimers(QObject *object) Q_DECL_FINAL;
+    QList<TimerInfo> registeredTimers(QObject *object) const Q_DECL_FINAL;
 
-    int remainingTime(int timerId);
+    int remainingTime(int timerId) Q_DECL_FINAL;
 
-    void wakeUp();
-    void interrupt();
-    void flush();
+    void wakeUp() FINAL_EXCEPT_BLACKBERRY;
+    void interrupt() Q_DECL_FINAL;
+    void flush() Q_DECL_OVERRIDE;
 
 protected:
     QEventDispatcherUNIX(QEventDispatcherUNIXPrivate &dd, QObject *parent = 0);
@@ -142,8 +140,8 @@ public:
     ~QEventDispatcherUNIXPrivate();
 
     int doSelect(QEventLoop::ProcessEventsFlags flags, timespec *timeout);
-    virtual int initThreadWakeUp();
-    virtual int processThreadWakeUp(int nsel);
+    virtual int initThreadWakeUp() FINAL_EXCEPT_BLACKBERRY;
+    virtual int processThreadWakeUp(int nsel) FINAL_EXCEPT_BLACKBERRY;
 
     bool mainThread;
 
@@ -164,6 +162,8 @@ public:
     QAtomicInt wakeUps;
     QAtomicInt interrupt; // bool
 };
+
+#undef FINAL_EXCEPT_BLACKBERRY
 
 QT_END_NAMESPACE
 

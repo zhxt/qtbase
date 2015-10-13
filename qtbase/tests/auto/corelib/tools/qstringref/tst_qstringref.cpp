@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -68,6 +60,8 @@ private slots:
     void isEmpty();
     void compare_data();
     void compare();
+    void compare2_data();
+    void compare2();
     void operator_eqeq_nullstring();
     void toNum();
     void toDouble_data();
@@ -88,6 +82,11 @@ private slots:
     void integer_conversion_data();
     void integer_conversion();
     void trimmed();
+    void left();
+    void right();
+    void mid();
+    void split_data();
+    void split();
 };
 
 static QStringRef emptyRef()
@@ -789,11 +788,17 @@ void tst_QStringRef::compare_data()
     QTest::newRow("data3") << QString("abc") << QString("abc") << 0 << 0;
     QTest::newRow("data4") << QString("abC") << QString("abc") << -1 << 0;
     QTest::newRow("data5") << QString("abc") << QString("abC") << 1 << 0;
+    QTest::newRow("data10") << QString("abcdefgh") << QString("abcdefgh") << 0 << 0;
+    QTest::newRow("data11") << QString("abcdefgh") << QString("abCdefgh") << 1 << 0;
+    QTest::newRow("data12") << QString("0123456789012345") << QString("0123456789012345") << 0 << 0;
+    QTest::newRow("data13") << QString("0123556789012345") << QString("0123456789012345") << 1 << 1;
 
     // different length
     QTest::newRow("data6") << QString("abcdef") << QString("abc") << 1 << 1;
     QTest::newRow("data7") << QString("abCdef") << QString("abc") << -1 << 1;
     QTest::newRow("data8") << QString("abc") << QString("abcdef") << -1 << -1;
+    QTest::newRow("data14") << QString("abcdefgh") << QString("abcdefghi") << -1 << -1;
+    QTest::newRow("data15") << QString("01234567890123456") << QString("0123456789012345") << 1 << 1;
 
     QString upper;
     upper += QChar(QChar::highSurrogate(0x10400));
@@ -856,6 +861,46 @@ void tst_QStringRef::compare()
     if (isLatin(s1)) {
         QCOMPARE(sign(QString::compare(QLatin1String(s1.toLatin1()), s2)), csr);
         QCOMPARE(sign(QString::compare(QLatin1String(s1.toLatin1()), s2, Qt::CaseInsensitive)), cir);
+    }
+}
+
+void tst_QStringRef::compare2_data()
+{
+    compare_data();
+}
+
+void tst_QStringRef::compare2()
+{
+    QFETCH(QString, s1);
+    QFETCH(QString, s2);
+    QFETCH(int, csr);
+    QFETCH(int, cir);
+
+    // prepend and append data
+    // we only use Latin1 here so isLatin1 still results true
+    s1.prepend("xyz").append("zyx");
+    s2.prepend("foobar").append("raboof");
+
+    QStringRef r1(&s1, 3, s1.length() - 6);
+    QStringRef r2(&s2, 6, s2.length() - 12);
+
+    QCOMPARE(sign(QStringRef::compare(r1, r2)), csr);
+    QCOMPARE(sign(r1.compare(r2)), csr);
+
+    QCOMPARE(sign(r1.compare(r2, Qt::CaseSensitive)), csr);
+    QCOMPARE(sign(r1.compare(r2, Qt::CaseInsensitive)), cir);
+
+    QCOMPARE(sign(QStringRef::compare(r1, r2, Qt::CaseSensitive)), csr);
+    QCOMPARE(sign(QStringRef::compare(r1, r2, Qt::CaseInsensitive)), cir);
+
+    if (isLatin(s2)) {
+        QCOMPARE(sign(QStringRef::compare(r1, QLatin1String(r2.toLatin1()))), csr);
+        QCOMPARE(sign(QStringRef::compare(r1, QLatin1String(r2.toLatin1()), Qt::CaseInsensitive)), cir);
+    }
+
+    if (isLatin(s1)) {
+        QCOMPARE(sign(QStringRef::compare(r2, QLatin1String(r1.toLatin1()))), -csr);
+        QCOMPARE(sign(QStringRef::compare(r2, QLatin1String(r1.toLatin1()), Qt::CaseInsensitive)), -cir);
     }
 }
 
@@ -1792,6 +1837,218 @@ void tst_QStringRef::trimmed()
     b = a.midRef(4);
     QCOMPARE(b.compare(QStringLiteral(" a   ")), 0);
     QCOMPARE(b.trimmed().compare(QStringLiteral("a")), 0);
+}
+
+void tst_QStringRef::left()
+{
+    QString originalString = "OrginalString~";
+    QStringRef ref = originalString.leftRef(originalString.size() - 1);
+    QCOMPARE(ref.toString(), QStringLiteral("OrginalString"));
+
+    QVERIFY(ref.left(0).toString().isEmpty());
+    QCOMPARE(ref.left(ref.size()).toString(), QStringLiteral("OrginalString"));
+
+    QStringRef nullRef;
+    QVERIFY(nullRef.isNull());
+    QVERIFY(nullRef.left(3).toString().isEmpty());
+    QVERIFY(nullRef.left(0).toString().isEmpty());
+    QVERIFY(nullRef.left(-1).toString().isEmpty());
+
+    QStringRef emptyRef(&originalString, 0, 0);
+    QVERIFY(emptyRef.isEmpty());
+    QVERIFY(emptyRef.left(3).toString().isEmpty());
+    QVERIFY(emptyRef.left(0).toString().isEmpty());
+    QVERIFY(emptyRef.left(-1).toString().isEmpty());
+
+    QCOMPARE(ref.left(-1), ref);
+    QCOMPARE(ref.left(100), ref);
+}
+
+void tst_QStringRef::right()
+{
+    QString originalString = "~OrginalString";
+    QStringRef ref = originalString.rightRef(originalString.size() - 1);
+    QCOMPARE(ref.toString(), QLatin1String("OrginalString"));
+
+    QCOMPARE(ref.right(6).toString(), QLatin1String("String"));
+    QCOMPARE(ref.right(ref.size()).toString(), QLatin1String("OrginalString"));
+    QCOMPARE(ref.right(0).toString(), QLatin1String(""));
+
+    QStringRef nullRef;
+    QVERIFY(nullRef.isNull());
+    QVERIFY(nullRef.right(3).toString().isEmpty());
+    QVERIFY(nullRef.right(0).toString().isEmpty());
+    QVERIFY(nullRef.right(-1).toString().isEmpty());
+
+    QStringRef emptyRef(&originalString, 0, 0);
+    QVERIFY(emptyRef.isEmpty());
+    QVERIFY(emptyRef.right(3).toString().isEmpty());
+    QVERIFY(emptyRef.right(0).toString().isEmpty());
+    QVERIFY(emptyRef.right(-1).toString().isEmpty());
+
+    QCOMPARE(ref.right(-1), ref);
+    QCOMPARE(ref.right(100), ref);
+}
+
+void tst_QStringRef::mid()
+{
+    QString orig = QStringLiteral("~ABCDEFGHIEfGEFG~"); // 15 + 2 chars
+    QStringRef a = orig.midRef(1, 15);
+    QCOMPARE(a.size(), orig.size() - 2);
+
+    QCOMPARE(a.mid(3,3).toString(),(QString)"DEF");
+    QCOMPARE(a.mid(0,0).toString(),(QString)"");
+    QVERIFY(!a.mid(15,0).toString().isNull());
+    QVERIFY(a.mid(15,0).toString().isEmpty());
+    QVERIFY(!a.mid(15,1).toString().isNull());
+    QVERIFY(a.mid(15,1).toString().isEmpty());
+    QVERIFY(a.mid(9999).toString().isEmpty());
+    QVERIFY(a.mid(9999,1).toString().isEmpty());
+
+    QCOMPARE(a.mid(-1, 6), a.mid(0, 5));
+    QVERIFY(a.mid(-100, 6).isEmpty());
+    QVERIFY(a.mid(INT_MIN, 0).isEmpty());
+    QCOMPARE(a.mid(INT_MIN, -1), a);
+    QVERIFY(a.mid(INT_MIN, INT_MAX).isNull());
+    QVERIFY(a.mid(INT_MIN + 1, INT_MAX).isEmpty());
+    QCOMPARE(a.mid(INT_MIN + 2, INT_MAX), a.left(1));
+    QCOMPARE(a.mid(INT_MIN + a.size() + 1, INT_MAX), a);
+    QVERIFY(a.mid(INT_MAX).isNull());
+    QVERIFY(a.mid(INT_MAX, INT_MAX).isNull());
+    QCOMPARE(a.mid(-5, INT_MAX), a);
+    QCOMPARE(a.mid(-1, INT_MAX), a);
+    QCOMPARE(a.mid(0, INT_MAX), a);
+    QCOMPARE(a.mid(1, INT_MAX).toString(), QString("BCDEFGHIEfGEFG"));
+    QCOMPARE(a.mid(5, INT_MAX).toString(), QString("FGHIEfGEFG"));
+    QVERIFY(a.mid(20, INT_MAX).isNull());
+    QCOMPARE(a.mid(-1, -1), a);
+
+    QStringRef nullRef;
+    QVERIFY(nullRef.mid(3,3).toString().isEmpty());
+    QVERIFY(nullRef.mid(0,0).toString().isEmpty());
+    QVERIFY(nullRef.mid(9999,0).toString().isEmpty());
+    QVERIFY(nullRef.mid(9999,1).toString().isEmpty());
+
+    QVERIFY(nullRef.mid(-1, 6).isNull());
+    QVERIFY(nullRef.mid(-100, 6).isNull());
+    QVERIFY(nullRef.mid(INT_MIN, 0).isNull());
+    QVERIFY(nullRef.mid(INT_MIN, -1).isNull());
+    QVERIFY(nullRef.mid(INT_MIN, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(INT_MIN + 1, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(INT_MIN + 2, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(INT_MIN + nullRef.size() + 1, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(INT_MAX).isNull());
+    QVERIFY(nullRef.mid(INT_MAX, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(-5, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(-1, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(0, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(1, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(5, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(20, INT_MAX).isNull());
+    QVERIFY(nullRef.mid(-1, -1).isNull());
+
+    QString ninePineapples = "~Nine pineapples~";
+    QStringRef x = ninePineapples.midRef(1, ninePineapples.size() - 1);
+    QCOMPARE(x.mid(5, 4).toString(), QString("pine"));
+    QCOMPARE(x.mid(5).toString(), QString("pineapples~"));
+
+    QCOMPARE(x.mid(-1, 6), x.mid(0, 5));
+    QVERIFY(x.mid(-100, 6).isEmpty());
+    QVERIFY(x.mid(INT_MIN, 0).isEmpty());
+    QCOMPARE(x.mid(INT_MIN, -1).toString(), x.toString());
+    QVERIFY(x.mid(INT_MIN, INT_MAX).isNull());
+    QVERIFY(x.mid(INT_MIN + 1, INT_MAX).isEmpty());
+    QCOMPARE(x.mid(INT_MIN + 2, INT_MAX), x.left(1));
+    QCOMPARE(x.mid(INT_MIN + x.size() + 1, INT_MAX).toString(), x.toString());
+    QVERIFY(x.mid(INT_MAX).isNull());
+    QVERIFY(x.mid(INT_MAX, INT_MAX).isNull());
+    QCOMPARE(x.mid(-5, INT_MAX).toString(), x.toString());
+    QCOMPARE(x.mid(-1, INT_MAX).toString(), x.toString());
+    QCOMPARE(x.mid(0, INT_MAX), x);
+    QCOMPARE(x.mid(1, INT_MAX).toString(), QString("ine pineapples~"));
+    QCOMPARE(x.mid(5, INT_MAX).toString(), QString("pineapples~"));
+    QVERIFY(x.mid(20, INT_MAX).isNull());
+    QCOMPARE(x.mid(-1, -1), x);
+
+    QStringRef emptyRef(&ninePineapples, 0, 0);
+    QVERIFY(emptyRef.mid(1).isEmpty());
+    QVERIFY(emptyRef.mid(-1).isEmpty());
+    QVERIFY(emptyRef.mid(0).isEmpty());
+    QVERIFY(emptyRef.mid(0, 3).isEmpty());
+    QVERIFY(emptyRef.mid(-10, 3).isEmpty());
+}
+
+static bool operator ==(const QStringList &left, const QVector<QStringRef> &right)
+{
+    if (left.size() != right.size())
+        return false;
+
+    QStringList::const_iterator iLeft = left.constBegin();
+    QVector<QStringRef>::const_iterator iRight = right.constBegin();
+    for (; iLeft != left.end(); ++iLeft, ++iRight) {
+        if (*iLeft != *iRight)
+            return false;
+    }
+    return true;
+}
+static inline bool operator ==(const QVector<QStringRef> &left, const QStringList &right) { return right == left; }
+
+void tst_QStringRef::split_data()
+{
+    QTest::addColumn<QString>("str");
+    QTest::addColumn<QString>("sep");
+    QTest::addColumn<QStringList>("result");
+
+    QTest::newRow("a,b,c") << "a,b,c" << "," << (QStringList() << "a" << "b" << "c");
+    QTest::newRow("a,b,c,a,b,c") << "a,b,c,a,b,c" << "," << (QStringList() << "a" << "b" << "c" << "a" << "b" << "c");
+    QTest::newRow("a,b,c,,a,b,c") << "a,b,c,,a,b,c" << "," << (QStringList() << "a" << "b" << "c" << "" << "a" << "b" << "c");
+    QTest::newRow("2") << QString("-rw-r--r--  1 0  0  519240 Jul  9  2002 bigfile")
+                       << " "
+                       << (QStringList() << "-rw-r--r--" << "" << "1" << "0" << "" << "0" << ""
+                           << "519240" << "Jul" << "" << "9" << "" << "2002" << "bigfile");
+    QTest::newRow("one-empty") << "" << " " << (QStringList() << "");
+    QTest::newRow("two-empty") << " " << " " << (QStringList() << "" << "");
+    QTest::newRow("three-empty") << "  " << " " << (QStringList() << "" << "" << "");
+
+    QTest::newRow("all-empty") << "" << "" << (QStringList() << "" << "");
+    QTest::newRow("all-null") << QString() << QString() << (QStringList() << QString() << QString());
+    QTest::newRow("sep-empty") << "abc" << "" << (QStringList() << "" << "a" << "b" << "c" << "");
+}
+
+void tst_QStringRef::split()
+{
+    QFETCH(QString, str);
+    QFETCH(QString, sep);
+    QFETCH(QStringList, result);
+
+    QVector<QStringRef> list;
+    // we construct a bigger valid string to check
+    // if ref.split is using the right size
+    QString source = str + str + str;
+    QStringRef ref = source.midRef(str.size(), str.size());
+    QCOMPARE(ref.size(), str.size());
+
+    list = ref.split(sep);
+    QVERIFY(list == result);
+    if (sep.size() == 1) {
+        list = ref.split(sep.at(0));
+        QVERIFY(list == result);
+    }
+
+    list = ref.split(sep, QString::KeepEmptyParts);
+    QVERIFY(list == result);
+    if (sep.size() == 1) {
+        list = ref.split(sep.at(0), QString::KeepEmptyParts);
+        QVERIFY(list == result);
+    }
+
+    result.removeAll("");
+    list = ref.split(sep, QString::SkipEmptyParts);
+    QVERIFY(list == result);
+    if (sep.size() == 1) {
+        list = ref.split(sep.at(0), QString::SkipEmptyParts);
+        QVERIFY(list == result);
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_QStringRef)

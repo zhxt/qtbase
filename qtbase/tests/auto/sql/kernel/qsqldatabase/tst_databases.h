@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -49,19 +41,25 @@
 #include <QSqlQuery>
 #include <QRegExp>
 #include <QDir>
+#include <QScopedPointer>
 #include <QVariant>
 #include <QDebug>
 #include <QSqlTableModel>
 #include <QtSql/private/qsqldriver_p.h>
 #include <QtTest/QtTest>
 
-#if defined (Q_OS_WIN) || defined (Q_OS_WIN32)
+#if defined(Q_OS_WIN)
 #  include <qt_windows.h>
-#  if defined (Q_OS_WINCE)
+#  if defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
 #    include <winsock2.h>
 #  endif
 #else
 #include <unistd.h>
+#endif
+#if defined(Q_OS_WINRT)
+   static inline int qgethostname(char *name, int) { qstrcpy(name, "localhost"); return 9; }
+#else
+#  define qgethostname gethostname
 #endif
 
 #define CHECK_DATABASE( db ) \
@@ -83,7 +81,7 @@ static QString qGetHostName()
 
     char hn[257];
 
-    if ( gethostname( hn, 255 ) == 0 ) {
+    if ( qgethostname( hn, 255 ) == 0 ) {
         hn[256] = '\0';
         hostname = QString::fromLatin1( hn );
         hostname.replace( QLatin1Char( '.' ), QLatin1Char( '_' ) );
@@ -101,7 +99,7 @@ inline QString fixupTableName(const QString &tableName, QSqlDatabase db)
     QString tbName = tableName;
     // On Oracle we are limited to 30 character tablenames
     QSqlDriverPrivate *d = static_cast<QSqlDriverPrivate *>(QObjectPrivate::get(db.driver()));
-    if (d && d->dbmsType == QSqlDriverPrivate::Oracle)
+    if (d && d->dbmsType == QSqlDriver::Oracle)
         tbName.truncate(30);
     return tbName;
 }
@@ -245,13 +243,13 @@ public:
         dbNames.append( cName );
     }
 
-    void addDbs()
+    bool addDbs()
     {
         //addDb("QOCI", "localhost", "system", "penandy");
-//         addDb( "QOCI8", "//horsehead.nokia.troll.no:1521/pony.troll.no", "scott", "tiger" ); // Oracle 9i on horsehead
-//         addDb( "QOCI8", "//horsehead.nokia.troll.no:1521/ustest.troll.no", "scott", "tiger", "" ); // Oracle 9i on horsehead
-//         addDb( "QOCI8", "//iceblink.nokia.troll.no:1521/ice.troll.no", "scott", "tiger", "" ); // Oracle 8 on iceblink (not currently working)
-//         addDb( "QOCI", "//silence.nokia.troll.no:1521/testdb", "scott", "tiger" ); // Oracle 10g on silence
+//         addDb( "QOCI8", "//horsehead.qt-project.org:1521/pony.troll.no", "scott", "tiger" ); // Oracle 9i on horsehead
+//         addDb( "QOCI8", "//horsehead.qt-project.org:1521/ustest.troll.no", "scott", "tiger", "" ); // Oracle 9i on horsehead
+//         addDb( "QOCI8", "//iceblink.qt-project.org:1521/ice.troll.no", "scott", "tiger", "" ); // Oracle 8 on iceblink (not currently working)
+//         addDb( "QOCI", "//silence.qt-project.org:1521/testdb", "scott", "tiger" ); // Oracle 10g on silence
 //         addDb( "QOCI", "//bq-oracle10g.qt-project.org:1521/XE", "scott", "tiger" ); // Oracle 10gexpress
 
 //      This requires a local ODBC data source to be configured( pointing to a MySql database )
@@ -261,22 +259,22 @@ public:
 //         addDb( "QODBC", "silencetestdb", "troll", "trond", "silence" );
 //         addDb( "QODBC", "horseheadtestdb", "troll", "trondk", "horsehead" );
 
-//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.nokia.troll.no" );
-//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.nokia.troll.no", 3307 );
-//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.nokia.troll.no", 3308, "CLIENT_COMPRESS=1;CLIENT_SSL=1" ); // MySQL 4.1.1
-//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.nokia.troll.no", 3309, "CLIENT_COMPRESS=1;CLIENT_SSL=1" ); // MySQL 5.0.18 Linux
-//         addDb( "QMYSQL3", "testdb", "troll", "trond", "silence.nokia.troll.no" ); // MySQL 5.1.36 Windows
+//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.qt-project.org" );
+//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.qt-project.org", 3307 );
+//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.qt-project.org", 3308, "CLIENT_COMPRESS=1;CLIENT_SSL=1" ); // MySQL 4.1.1
+//         addDb( "QMYSQL3", "testdb", "troll", "trond", "horsehead.qt-project.org", 3309, "CLIENT_COMPRESS=1;CLIENT_SSL=1" ); // MySQL 5.0.18 Linux
+//         addDb( "QMYSQL3", "testdb", "troll", "trond", "silence.qt-project.org" ); // MySQL 5.1.36 Windows
 
 //         addDb( "QMYSQL3", "testdb", "testuser", "Ee4Gabf6_", "bq-mysql41.qt-project.org" ); // MySQL 4.1.22-2.el4  linux
 //         addDb( "QMYSQL3", "testdb", "testuser", "Ee4Gabf6_", "bq-mysql50.qt-project.org" ); // MySQL 5.0.45-7.el5 linux
 //         addDb( "QMYSQL3", "testdb", "testuser", "Ee4Gabf6_", "bq-mysql51.qt-project.org" ); // MySQL 5.1.36-6.7.2.i586 linux
 
-//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.nokia.troll.no" ); // V7.2 NOT SUPPORTED!
-//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.nokia.troll.no", 5434 ); // V7.2 NOT SUPPORTED! Multi-byte
-//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.nokia.troll.no", 5435 ); // V7.3
-//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.nokia.troll.no", 5436 ); // V7.4
-//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.nokia.troll.no", 5437 ); // V8.0.3
-//         addDb( "QPSQL7", "testdb", "troll", "trond", "silence.nokia.troll.no" );         // V8.2.1, UTF-8
+//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.qt-project.org" ); // V7.2 NOT SUPPORTED!
+//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.qt-project.org", 5434 ); // V7.2 NOT SUPPORTED! Multi-byte
+//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.qt-project.org", 5435 ); // V7.3
+//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.qt-project.org", 5436 ); // V7.4
+//         addDb( "QPSQL7", "testdb", "troll", "trond", "horsehead.qt-project.org", 5437 ); // V8.0.3
+//         addDb( "QPSQL7", "testdb", "troll", "trond", "silence.qt-project.org" );         // V8.2.1, UTF-8
 
 //         addDb( "QPSQL7", "testdb", "testuser", "Ee4Gabf6_", "bq-postgres74.qt-project.org" );         // Version 7.4.19-1.el4_6.1
 //         addDb( "QPSQL7", "testdb", "testuser", "Ee4Gabf6_", "bq-pgsql81.qt-project.org" );         // Version 8.1.11-1.el5_1.1
@@ -284,11 +282,11 @@ public:
 //         addDb( "QPSQL7", "testdb", "testuser", "Ee4Gabf6_", "bq-pgsql90.qt-project.org" );         // Version 9.0.0
 
 
-//         addDb( "QDB2", "testdb", "troll", "trond", "silence.nokia.troll.no" ); // DB2 v9.1 on silence
+//         addDb( "QDB2", "testdb", "troll", "trond", "silence.qt-project.org" ); // DB2 v9.1 on silence
 //         addDb( "QDB2", "testdb", "testuser", "Ee4Gabf6_", "bq-db2-972.qt-project.org" ); // DB2
 
 //      yes - interbase really wants the physical path on the host machine.
-//         addDb( "QIBASE", "/opt/interbase/qttest.gdb", "SYSDBA", "masterkey", "horsehead.nokia.troll.no" );
+//         addDb( "QIBASE", "/opt/interbase/qttest.gdb", "SYSDBA", "masterkey", "horsehead.qt-project.org" );
 //         addDb( "QIBASE", "silence.troll.no:c:\\ibase\\testdb", "SYSDBA", "masterkey", "" ); // InterBase 7.5 on silence
 //         addDb( "QIBASE", "silence.troll.no:c:\\ibase\\testdb_ascii", "SYSDBA", "masterkey", "" ); // InterBase 7.5 on silence
 //         addDb( "QIBASE", "/opt/firebird/databases/testdb.fdb", "testuser", "Ee4Gabf6_", "firebird1-nokia.trolltech.com.au" ); // Firebird 1.5.5
@@ -299,15 +297,18 @@ public:
 
 //      use in-memory database to prevent local files
 //         addDb("QSQLITE", ":memory:");
-         addDb( "QSQLITE", QDir::toNativeSeparators(QDir::tempPath()+"/foo.db") );
-//         addDb( "QSQLITE2", QDir::toNativeSeparators(QDir::tempPath()+"/foo2.db") );
-//         addDb( "QODBC3", "DRIVER={SQL SERVER};SERVER=iceblink.nokia.troll.no\\ICEBLINK", "troll", "trond", "" );
-//         addDb( "QODBC3", "DRIVER={SQL Native Client};SERVER=silence.nokia.troll.no\\SQLEXPRESS", "troll", "trond", "" );
+        QTemporaryDir *sqLiteDir = dbDir();
+        if (!sqLiteDir)
+            return false;
+        addDb( QStringLiteral("QSQLITE"), QDir::toNativeSeparators(sqLiteDir->path() + QStringLiteral("/foo.db")) );
+//         addDb( "QSQLITE2", QDir::toNativeSeparators(dbDir.path() + "/foo2.db") );
+//         addDb( "QODBC3", "DRIVER={SQL SERVER};SERVER=iceblink.qt-project.org\\ICEBLINK", "troll", "trond", "" );
+//         addDb( "QODBC3", "DRIVER={SQL Native Client};SERVER=silence.qt-project.org\\SQLEXPRESS", "troll", "trond", "" );
 
 //         addDb( "QODBC", "DRIVER={MySQL ODBC 5.1 Driver};SERVER=bq-mysql50.qt-project.org;DATABASE=testdb", "testuser", "Ee4Gabf6_", "" );
 //         addDb( "QODBC", "DRIVER={MySQL ODBC 5.1 Driver};SERVER=bq-mysql51.qt-project.org;DATABASE=testdb", "testuser", "Ee4Gabf6_", "" );
-//         addDb( "QODBC", "DRIVER={FreeTDS};SERVER=horsehead.nokia.troll.no;DATABASE=testdb;PORT=4101;UID=troll;PWD=trondk", "troll", "trondk", "" );
-//         addDb( "QODBC", "DRIVER={FreeTDS};SERVER=silence.nokia.troll.no;DATABASE=testdb;PORT=2392;UID=troll;PWD=trond", "troll", "trond", "" );
+//         addDb( "QODBC", "DRIVER={FreeTDS};SERVER=horsehead.qt-project.org;DATABASE=testdb;PORT=4101;UID=troll;PWD=trondk", "troll", "trondk", "" );
+//         addDb( "QODBC", "DRIVER={FreeTDS};SERVER=silence.qt-project.org;DATABASE=testdb;PORT=2392;UID=troll;PWD=trond", "troll", "trond", "" );
 //         addDb( "QODBC", "DRIVER={FreeTDS};SERVER=bq-winserv2003-x86-01.qt-project.org;DATABASE=testdb;PORT=1433;UID=testuser;PWD=Ee4Gabf6_;TDS_Version=8.0", "", "", "" );
 //         addDb( "QODBC", "DRIVER={FreeTDS};SERVER=bq-winserv2008-x86-01.qt-project.org;DATABASE=testdb;PORT=1433;UID=testuser;PWD=Ee4Gabf6_;TDS_Version=8.0", "", "", "" );
 //         addDb( "QTDS7", "testdb", "testuser", "Ee4Gabf6_", "bq-winserv2003" );
@@ -316,11 +317,14 @@ public:
 //         addDb( "QODBC3", "DRIVER={SQL SERVER};SERVER=bq-winserv2008-x86-01.qt-project.org;DATABASE=testdb;PORT=1433", "testuser", "Ee4Gabf6_", "" );
 //         addDb( "QODBC", "DRIVER={Microsoft Access Driver (*.mdb)};DBQ=c:\\dbs\\access\\testdb.mdb", "", "", "" );
 //         addDb( "QODBC", "DRIVER={Postgresql};SERVER=bq-pgsql84.qt-project.org;DATABASE=testdb", "testuser", "Ee4Gabf6_", "" );
+         return true;
     }
 
-    void open()
+    // 'false' return indicates a system error, for example failure to create a temporary directory.
+    bool open()
     {
-        addDbs();
+        if (!addDbs())
+            return false;
 
         QStringList::Iterator it = dbNames.begin();
 
@@ -338,6 +342,7 @@ public:
                 }
             }
         }
+        return true;
     }
 
     void close()
@@ -380,7 +385,7 @@ public:
         bool wasDropped;
         QSqlQuery q( db );
         QStringList dbtables=db.tables();
-        QSqlDriverPrivate::DBMSType dbType = getDatabaseType(db);
+        QSqlDriver::DbmsType dbType = getDatabaseType(db);
         foreach(const QString &tableName, tableNames)
         {
             wasDropped = true;
@@ -392,7 +397,7 @@ public:
                 foreach(const QString &table2, dbtables.filter(table, Qt::CaseInsensitive)) {
                     if(table2.compare(table.section('.', -1, -1), Qt::CaseInsensitive) == 0) {
                         table=db.driver()->escapeIdentifier(table2, QSqlDriver::TableName);
-                        if (dbType == QSqlDriverPrivate::PostgreSQL)
+                        if (dbType == QSqlDriver::PostgreSQL)
                             wasDropped = q.exec( "drop table " + table + " cascade");
                         else
                             wasDropped = q.exec( "drop table " + table);
@@ -457,26 +462,26 @@ public:
     // blobSize is only used if the db doesn't have a generic blob type
     static QString blobTypeName( QSqlDatabase db, int blobSize = 10000 )
     {
-        const QSqlDriverPrivate::DBMSType dbType = getDatabaseType(db);
-        if (dbType == QSqlDriverPrivate::MySqlServer)
+        const QSqlDriver::DbmsType dbType = getDatabaseType(db);
+        if (dbType == QSqlDriver::MySqlServer)
             return "longblob";
 
-        if (dbType == QSqlDriverPrivate::PostgreSQL)
+        if (dbType == QSqlDriver::PostgreSQL)
             return "bytea";
 
-        if (dbType == QSqlDriverPrivate::Sybase
-                || dbType == QSqlDriverPrivate::MSSqlServer
+        if (dbType == QSqlDriver::Sybase
+                || dbType == QSqlDriver::MSSqlServer
                 || isMSAccess( db ) )
             return "image";
 
-        if (dbType == QSqlDriverPrivate::DB2)
+        if (dbType == QSqlDriver::DB2)
             return QString( "blob(%1)" ).arg( blobSize );
 
-        if (dbType == QSqlDriverPrivate::Interbase)
+        if (dbType == QSqlDriver::Interbase)
             return QString( "blob sub_type 0 segment size 4096" );
 
-        if (dbType == QSqlDriverPrivate::Oracle
-                || dbType == QSqlDriverPrivate::SQLite)
+        if (dbType == QSqlDriver::Oracle
+                || dbType == QSqlDriver::SQLite)
             return "blob";
 
         qDebug() <<  "tst_Databases::blobTypeName: Don't know the blob type for" << dbToString( db );
@@ -486,24 +491,24 @@ public:
 
     static QString dateTimeTypeName(QSqlDatabase db)
     {
-        const QSqlDriverPrivate::DBMSType dbType = tst_Databases::getDatabaseType(db);
-        if (dbType == QSqlDriverPrivate::PostgreSQL)
-            return QLatin1String("timestamp");
-        if (dbType == QSqlDriverPrivate::Oracle && getOraVersion(db) >= 9)
+        const QSqlDriver::DbmsType dbType = tst_Databases::getDatabaseType(db);
+        if (dbType == QSqlDriver::PostgreSQL)
+            return QLatin1String("timestamptz");
+        if (dbType == QSqlDriver::Oracle && getOraVersion(db) >= 9)
             return QLatin1String("timestamp(0)");
         return QLatin1String("datetime");
     }
 
     static QString autoFieldName( QSqlDatabase db )
     {
-        const QSqlDriverPrivate::DBMSType dbType = tst_Databases::getDatabaseType(db);
-        if (dbType == QSqlDriverPrivate::MySqlServer)
+        const QSqlDriver::DbmsType dbType = tst_Databases::getDatabaseType(db);
+        if (dbType == QSqlDriver::MySqlServer)
             return "AUTO_INCREMENT";
-        if (dbType == QSqlDriverPrivate::Sybase || dbType == QSqlDriverPrivate::MSSqlServer)
+        if (dbType == QSqlDriver::Sybase || dbType == QSqlDriver::MSSqlServer)
             return "IDENTITY";
-/*        if (dbType == QSqlDriverPrivate::PostgreSQL)
+/*        if (dbType == QSqlDriver::PostgreSQL)
             return "SERIAL";*/
-//        if (dbType == QSqlDriverPrivate::DB2)
+//        if (dbType == QSqlDriver::DB2)
 //            return "GENERATED BY DEFAULT AS IDENTITY";
 
         return QString();
@@ -512,8 +517,8 @@ public:
     static QByteArray printError( const QSqlError& err )
     {
         QString result;
-        if(err.number() > 0)
-            result += '(' + QString::number(err.number()) + ") ";
+        if (!err.nativeErrorCode().isEmpty())
+            result += '(' + err.nativeErrorCode() + ") ";
         result += '\'';
         if(!err.driverText().isEmpty())
             result += err.driverText() + "' || '";
@@ -524,8 +529,8 @@ public:
     static QByteArray printError( const QSqlError& err, const QSqlDatabase& db )
     {
         QString result(dbToString(db) + ": ");
-        if(err.number() > 0)
-            result += '(' + QString::number(err.number()) + ") ";
+        if (!err.nativeErrorCode().isEmpty())
+            result += '(' + err.nativeErrorCode() + ") ";
         result += '\'';
         if(!err.driverText().isEmpty())
             result += err.driverText() + "' || '";
@@ -533,7 +538,7 @@ public:
         return result.toLocal8Bit();
     }
 
-    static QSqlDriverPrivate::DBMSType getDatabaseType(QSqlDatabase db)
+    static QSqlDriver::DbmsType getDatabaseType(QSqlDatabase db)
     {
         QSqlDriverPrivate *d = static_cast<QSqlDriverPrivate *>(QObjectPrivate::get(db.driver()));
         return d->dbmsType;
@@ -586,6 +591,21 @@ public:
 
     QStringList     dbNames;
     int      counter;
+
+private:
+    QTemporaryDir *dbDir()
+    {
+        if (m_dbDir.isNull()) {
+            m_dbDir.reset(new QTemporaryDir);
+            if (!m_dbDir->isValid()) {
+                qWarning() << Q_FUNC_INFO << "Unable to create a temporary directory: " << QDir::toNativeSeparators(m_dbDir->path());
+                m_dbDir.reset();
+            }
+        }
+        return m_dbDir.data();
+    }
+
+    QScopedPointer<QTemporaryDir> m_dbDir;
 };
 
 #endif

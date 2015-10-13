@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -85,19 +77,19 @@ class QTextEditControl : public QWidgetTextControl
 public:
     inline QTextEditControl(QObject *parent) : QWidgetTextControl(parent) {}
 
-    virtual QMimeData *createMimeDataFromSelection() const {
+    virtual QMimeData *createMimeDataFromSelection() const Q_DECL_OVERRIDE {
         QTextEdit *ed = qobject_cast<QTextEdit *>(parent());
         if (!ed)
             return QWidgetTextControl::createMimeDataFromSelection();
         return ed->createMimeDataFromSelection();
     }
-    virtual bool canInsertFromMimeData(const QMimeData *source) const {
+    virtual bool canInsertFromMimeData(const QMimeData *source) const Q_DECL_OVERRIDE {
         QTextEdit *ed = qobject_cast<QTextEdit *>(parent());
         if (!ed)
             return QWidgetTextControl::canInsertFromMimeData(source);
         return ed->canInsertFromMimeData(source);
     }
-    virtual void insertFromMimeData(const QMimeData *source) {
+    virtual void insertFromMimeData(const QMimeData *source) Q_DECL_OVERRIDE {
         QTextEdit *ed = qobject_cast<QTextEdit *>(parent());
         if (!ed)
             QWidgetTextControl::insertFromMimeData(source);
@@ -186,7 +178,7 @@ void QTextEditPrivate::init(const QString &html)
 #ifndef QT_NO_CURSOR
     viewport->setCursor(Qt::IBeamCursor);
 #endif
-#ifdef Q_WS_WIN
+#ifdef Q_DEAD_CODE_FROM_QT4_WIN
     setSingleFingerPanEnabled(true);
 #endif
 }
@@ -664,7 +656,7 @@ int QTextEdit::fontWeight() const
 }
 
 /*!
-    Returns true if the font of the current format is underlined; otherwise returns
+    Returns \c true if the font of the current format is underlined; otherwise returns
     false.
 
     \sa setFontUnderline()
@@ -676,7 +668,7 @@ bool QTextEdit::fontUnderline() const
 }
 
 /*!
-    Returns true if the font of the current format is italic; otherwise returns
+    Returns \c true if the font of the current format is italic; otherwise returns
     false.
 
     \sa setFontItalic()
@@ -755,8 +747,8 @@ Qt::Alignment QTextEdit::alignment() const
 
     \note The editor \e{does not take ownership of the document} unless it
     is the document's parent object. The parent object of the provided document
-    remains the owner of the object. The editor does not delete any previously
-    assigned document, even if it is a child of the editor.
+    remains the owner of the object. If the previously assigned document is a
+    child of the editor then it will be deleted.
 */
 void QTextEdit::setDocument(QTextDocument *document)
 {
@@ -770,6 +762,35 @@ QTextDocument *QTextEdit::document() const
 {
     Q_D(const QTextEdit);
     return d->control->document();
+}
+
+/*!
+    \since 5.2
+
+    \property QTextEdit::placeholderText
+    \brief the editor placeholder text
+
+    Setting this property makes the editor display a grayed-out
+    placeholder text as long as the document() is empty.
+
+    By default, this property contains an empty string.
+
+    \sa document()
+*/
+QString QTextEdit::placeholderText() const
+{
+    Q_D(const QTextEdit);
+    return d->placeholderText;
+}
+
+void QTextEdit::setPlaceholderText(const QString &placeholderText)
+{
+    Q_D(QTextEdit);
+    if (d->placeholderText != placeholderText) {
+        d->placeholderText = placeholderText;
+        if (d->control->document()->isEmpty())
+            d->viewport->update();
+    }
 }
 
 /*!
@@ -1484,6 +1505,14 @@ void QTextEditPrivate::paint(QPainter *p, QPaintEvent *e)
 
     if (layout)
         layout->setViewport(QRect());
+
+    if (!placeholderText.isEmpty() && doc->isEmpty()) {
+        QColor col = control->palette().text().color();
+        col.setAlpha(128);
+        p->setPen(col);
+        const int margin = int(doc->documentMargin());
+        p->drawText(viewport->rect().adjusted(margin, margin, -margin, -margin), Qt::AlignTop | Qt::TextWordWrap, placeholderText);
+    }
 }
 
 /*! \fn void QTextEdit::paintEvent(QPaintEvent *event)
@@ -1545,11 +1574,13 @@ void QTextEdit::mouseMoveEvent(QMouseEvent *e)
     d->sendControlEvent(e);
     if (!(e->buttons() & Qt::LeftButton))
         return;
-    QRect visible = d->viewport->rect();
-    if (visible.contains(pos))
-        d->autoScrollTimer.stop();
-    else if (!d->autoScrollTimer.isActive())
-        d->autoScrollTimer.start(100, this);
+    if (e->source() == Qt::MouseEventNotSynthesized) {
+        const QRect visible = d->viewport->rect();
+        if (visible.contains(pos))
+            d->autoScrollTimer.stop();
+        else if (!d->autoScrollTimer.isActive())
+            d->autoScrollTimer.start(100, this);
+    }
 }
 
 /*! \reimp
@@ -1558,7 +1589,7 @@ void QTextEdit::mouseReleaseEvent(QMouseEvent *e)
 {
     Q_D(QTextEdit);
     d->sendControlEvent(e);
-    if (d->autoScrollTimer.isActive()) {
+    if (e->source() == Qt::MouseEventNotSynthesized && d->autoScrollTimer.isActive()) {
         d->autoScrollTimer.stop();
         ensureCursorVisible();
     }
@@ -1680,14 +1711,21 @@ void QTextEdit::scrollContentsBy(int dx, int dy)
 */
 QVariant QTextEdit::inputMethodQuery(Qt::InputMethodQuery property) const
 {
+    return inputMethodQuery(property, QVariant());
+}
+
+/*!\internal
+ */
+QVariant QTextEdit::inputMethodQuery(Qt::InputMethodQuery query, QVariant argument) const
+{
     Q_D(const QTextEdit);
     QVariant v;
-    switch (property) {
+    switch (query) {
     case Qt::ImHints:
-        v = QWidget::inputMethodQuery(property);
+        v = QWidget::inputMethodQuery(query);
         break;
     default:
-        v = d->control->inputMethodQuery(property);
+        v = d->control->inputMethodQuery(query, argument);
         const QPoint offset(-d->horizontalOffset(), -d->verticalOffset());
         if (v.type() == QVariant::RectF)
             v = v.toRectF().toRect().translated(offset);
@@ -1769,11 +1807,8 @@ void QTextEdit::wheelEvent(QWheelEvent *e)
     Q_D(QTextEdit);
     if (!(d->control->textInteractionFlags() & Qt::TextEditable)) {
         if (e->modifiers() & Qt::ControlModifier) {
-            const int delta = e->delta();
-            if (delta < 0)
-                zoomOut();
-            else if (delta > 0)
-                zoomIn();
+            float delta = e->angleDelta().y() / 120.f;
+            zoomInF(delta);
             return;
         }
     }
@@ -1803,7 +1838,7 @@ QMenu *QTextEdit::createStandardContextMenu()
   This function creates the standard context menu which is shown
   when the user clicks on the text edit with the right mouse
   button. It is called from the default contextMenuEvent() handler
-  and it takes the \a position of where the mouse click was.
+  and it takes the \a position in document coordinates where the mouse click was.
   This can enable actions that are sensitive to the position where the user clicked.
   The popup menu's ownership is transferred to the caller.
 */
@@ -1870,11 +1905,11 @@ QString QTextEdit::anchorAt(const QPoint& pos) const
    As with many text editors, the text editor widget can be configured
    to insert or overwrite existing text with new text entered by the user.
 
-   If this property is true, existing text is overwritten, character-for-character
+   If this property is \c true, existing text is overwritten, character-for-character
    by new text; otherwise, text is inserted at the cursor position, displacing
    existing text.
 
-   By default, this property is false (new text does not overwrite existing text).
+   By default, this property is \c false (new text does not overwrite existing text).
 */
 
 bool QTextEdit::overwriteMode() const
@@ -2005,7 +2040,7 @@ QList<QTextEdit::ExtraSelection> QTextEdit::extraSelections() const
     This function returns a new MIME data object to represent the contents
     of the text edit's current selection. It is called when the selection needs
     to be encapsulated into a new QMimeData object; for example, when a drag
-    and drop operation is started, or when data is copyied to the clipboard.
+    and drop operation is started, or when data is copied to the clipboard.
 
     If you reimplement this function, note that the ownership of the returned
     QMimeData object is passed to the caller. The selection can be retrieved
@@ -2018,7 +2053,7 @@ QMimeData *QTextEdit::createMimeDataFromSelection() const
 }
 
 /*!
-    This function returns true if the contents of the MIME data object, specified
+    This function returns \c true if the contents of the MIME data object, specified
     by \a source, can be decoded and inserted into the document. It is called
     for example when during a drag operation the mouse enters this widget and it
     is necessary to determine whether it is possible to accept the drag and drop
@@ -2078,6 +2113,8 @@ void QTextEdit::setReadOnly(bool ro)
     }
     d->control->setTextInteractionFlags(flags);
     setAttribute(Qt::WA_InputMethodEnabled, shouldEnableInputMethod(this));
+    QEvent event(QEvent::ReadOnlyChange);
+    QApplication::sendEvent(this, &event);
 }
 
 /*!
@@ -2230,12 +2267,7 @@ void QTextEdit::scrollToAnchor(const QString &name)
 */
 void QTextEdit::zoomIn(int range)
 {
-    QFont f = font();
-    const int newSize = f.pointSize() + range;
-    if (newSize <= 0)
-        return;
-    f.setPointSize(newSize);
-    setFont(f);
+    zoomInF(range);
 }
 
 /*!
@@ -2251,7 +2283,22 @@ void QTextEdit::zoomIn(int range)
 */
 void QTextEdit::zoomOut(int range)
 {
-    zoomIn(-range);
+    zoomInF(-range);
+}
+
+/*!
+    \internal
+*/
+void QTextEdit::zoomInF(float range)
+{
+    if (range == 0.f)
+        return;
+    QFont f = font();
+    const float newSize = f.pointSizeF() + range;
+    if (newSize <= 0)
+        return;
+    f.setPointSizeF(newSize);
+    setFont(f);
 }
 
 /*!
@@ -2409,14 +2456,35 @@ void QTextEdit::setWordWrapMode(QTextOption::WrapMode mode)
 
 /*!
     Finds the next occurrence of the string, \a exp, using the given
-    \a options. Returns true if \a exp was found and changes the
-    cursor to select the match; otherwise returns false.
+    \a options. Returns \c true if \a exp was found and changes the
+    cursor to select the match; otherwise returns \c false.
 */
 bool QTextEdit::find(const QString &exp, QTextDocument::FindFlags options)
 {
     Q_D(QTextEdit);
     return d->control->find(exp, options);
 }
+
+/*!
+    \fn bool QTextEdit::find(const QRegExp &exp, QTextDocument::FindFlags options)
+
+    \since 5.3
+    \overload
+
+    Finds the next occurrence, matching the regular expression, \a exp, using the given
+    \a options. The QTextDocument::FindCaseSensitively option is ignored for this overload,
+    use QRegExp::caseSensitivity instead.
+
+    Returns \c true if a match was found and changes the cursor to select the match;
+    otherwise returns \c false.
+*/
+#ifndef QT_NO_REGEXP
+bool QTextEdit::find(const QRegExp &exp, QTextDocument::FindFlags options)
+{
+    Q_D(QTextEdit);
+    return d->control->find(exp, options);
+}
+#endif
 
 /*!
     \fn void QTextEdit::copyAvailable(bool yes)
