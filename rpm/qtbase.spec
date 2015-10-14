@@ -16,7 +16,7 @@
 
 Name:       qt5
 Summary:    Cross-platform application and UI framework
-Version:    5.1.0
+Version:    5.5.1
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
@@ -596,7 +596,6 @@ MAKEFLAGS=%{?_smp_mflags} \
     -I/usr/include/freetype2 \
     -nomake tests \
     -nomake examples \
-    -nomake demos \
 %if %{with X11}
     -xcb \
 %else
